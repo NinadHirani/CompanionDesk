@@ -10,6 +10,17 @@
  * export is desktop-only in this milestone (MOBILE.md). */
 
 (function () {
+  if (typeof Promise.withResolvers !== 'function') {
+    Promise.withResolvers = function () {
+      let resolve, reject;
+      const promise = new Promise((res, rej) => {
+        resolve = res;
+        reject = rej;
+      });
+      return { promise, resolve, reject };
+    };
+  }
+
   const GEMINI_KEY_STORAGE = 'companiondesk.geminiKey';
   const SYSTEM_VOICE = [
     "You are CompanionDesk, a student's chief of staff. Short, direct, lead with the answer.",

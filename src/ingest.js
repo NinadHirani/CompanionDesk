@@ -9,6 +9,18 @@ const fs = require('fs');
 const path = require('path');
 const vault = require('./vault');
 const { parseModelJson, validateExtraction, validIsoDate } = require('./extraction-core');
+// Polyfill Promise.withResolvers for Node.js < 22 (required by pdfjs-dist v6+)
+if (typeof Promise.withResolvers !== 'function') {
+  Promise.withResolvers = function () {
+    let resolve, reject;
+    const promise = new Promise((res, rej) => {
+      resolve = res;
+      reject = rej;
+    });
+    return { promise, resolve, reject };
+  };
+}
+
 // Modern pdf.js, pure JS (no native canvas needed for text extraction).
 // Loaded via dynamic import because the legacy build ships as ESM while this
 // codebase stays CommonJS.
