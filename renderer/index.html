@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>CompanionDesk</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header>
+    <h1>CompanionDesk</h1>
+    <span id="ai-status" class="status">Checking local model...</span>
+    <button id="import-btn">Import syllabus</button>
+  </header>
+  <main>
+    <section id="due-section">
+      <h2>Due in the next 7 days</h2>
+      <ul id="due-list"></ul>
+    </section>
+    <section id="courses-section">
+      <h2>Courses</h2>
+      <ul id="course-list"></ul>
+    </section>
+    <section id="import-result"></section>
+  </main>
+  <script src="app.js"></script>
+</body>
+</html>

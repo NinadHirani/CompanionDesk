@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>CompanionDesk</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header>
+    <h1>CompanionDesk</h1>
+    <span id="ai-status" class="status">Checking local model...</span>
+    <button id="import-btn">Import syllabus</button>
+  </header>
+  <main>
+    <section id="due-section">
+      <h2>Due in the next 7 days</h2>
+      <ul id="due-list"></ul>
+    </section>
+    <section id="courses-section">
+      <h2>Courses</h2>
+      <ul id="course-list"></ul>
+    </section>
+    <section id="import-result"></section>
+  </main>
+  <!-- Same DOM as the desktop renderer; the bridge supplies the API. -->
+  <script src="vendor/sql-wasm.js"></script>
+  <script src="core/extraction-core.js"></script>
+  <script src="core/import-errors.js"></script>
+  <script src="core/ai.js"></script>
+  <script src="core/db.js"></script>
+  <script src="bridge.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
