@@ -1,6 +1,6 @@
 # CompanionDesk
 
-A free-first, local-models student assistant: drop in your syllabi, get a
+A free-first, local-models desktop AI companion, general-purpose by default. Student features (syllabus import, deadlines) are an optional module: drop in your syllabi, get a
 local AI that tracks every deadline and briefs you. A NŪS-style assistant
 that keeps everything on your machine.
 

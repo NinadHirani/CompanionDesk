@@ -1,7 +1,7 @@
 {
   "name": "companiondesk",
   "version": "0.1.0",
-  "description": "CompanionDesk: free-first, local-models student assistant + desktop companion (NUS-style). No billing, no accounts, no cloud requirement.",
+  "description": "CompanionDesk: free-first, local-first desktop AI companion (general-purpose by default; student features are an optional module). No billing, no accounts, no cloud requirement.",
   "main": "src/main.js",
   "private": true,
   "license": "MIT",
@@ -12,8 +12,8 @@
     "start": "electron .",
     "smoke": "electron . --smoke",
     "test": "node --test tests/*.test.js",
-    "build:web": "bash scripts/build-web.sh",
-    "dist:mac": "electron-builder --mac --publish never"
+    "dist:mac": "electron-builder --mac --publish never",
+    "build:web": "bash scripts/build-web.sh"
   },
   "dependencies": {
     "pdfjs-dist": "^6.4.299",
