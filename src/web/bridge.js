@@ -20,13 +20,25 @@
       return { promise, resolve, reject };
     };
   }
-
   const GEMINI_KEY_STORAGE = 'companiondesk.geminiKey';
-  const SYSTEM_VOICE = [
-    "You are CompanionDesk, a student's chief of staff. Short, direct, lead with the answer.",
+  // General-purpose default voice; the student framing is appended only when
+  // student data exists. Mirrors src/skills.js (the web build does not bundle
+  // the desktop skill registry yet; see docs/SKILLS.md).
+  const GENERAL_VOICE = [
+    'You are CompanionDesk, a general-purpose local AI companion and desktop assistant.',
+    'Short, direct, lead with the answer.',
     'Dates are always explicit (e.g. "Wed Nov 5"), never vague ("next week").',
-    'If the context does not contain the answer, say so. NEVER invent a deadline.',
+    'If the context does not contain the answer, say so plainly.',
   ].join(' ');
+  const STUDENT_VOICE = [
+    'When student context is present, act as a chief of staff for it.',
+    'NEVER invent a deadline or a course.',
+  ].join(' ');
+  function composeVoice() {
+    let student = false;
+    try { student = Boolean(db && db.listCourses && db.listCourses().length); } catch { student = false; }
+    return student ? GENERAL_VOICE + ' ' + STUDENT_VOICE : GENERAL_VOICE;
+  }
 
   let readyResolve = null;
   let readyReject = null;
@@ -88,7 +100,7 @@
   function loadPdfjs() {
     if (!pdfModulePromise) {
       pdfModulePromise = import('./vendor/pdf.min.mjs').then((pdfjs) => {
-        pdfjs.GlobalWorkerOptions.workerSrc = './vendor/pdf.worker.min.mjs';
+        pdfjs.GlobalWorkerOptions.workerSrc = new URL('vendor/pdf.worker.min.mjs', location.href).href;
         return pdfjs;
       });
     }
@@ -133,14 +145,16 @@
 
   function buildContextPack() {
     const today = todayIso();
-    const due = db.listDue(today, addDaysIso(today, 7));
-    const courses = db.listCourses();
-    const lines = [
-      `Context pack (today: ${today}). This is everything the app knows; do not go beyond it.`,
-      `Courses: ${courses.length ? courses.map((c) => `${c.name}${c.code ? ` (${c.code})` : ''}`).join('; ') : 'none imported yet.'}`,
-      due.length ? 'Due in the next 7 days:' : 'Nothing dated due in the next 7 days.',
-      ...due.map((a) => `- ${a.due_date} ${a.title} (${a.course_name}${a.date_confidence !== 'extracted' ? ', date flagged' : ''})`),
-    ];
+    const lines = [`Context pack (today: ${today}). This is everything the app knows; do not go beyond it.`];
+    let student = false;
+    try { student = Boolean(db.listCourses && db.listCourses().length); } catch { student = false; }
+    if (student) {
+      const due = db.listDue(today, addDaysIso(today, 7));
+      const courses = db.listCourses();
+      lines.push(`Courses: ${courses.map((c) => `${c.name}${c.code ? ` (${c.code})` : ''}`).join('; ')}`);
+      lines.push(due.length ? 'Due in the next 7 days:' : 'Nothing dated due in the next 7 days.');
+      due.forEach((a) => lines.push(`- ${a.due_date} ${a.title} (${a.course_name}${a.date_confidence !== 'extracted' ? ', date flagged' : ''})`));
+    }
     return lines.join('\n');
   }
 
@@ -215,7 +229,7 @@
     const prompt = payload && typeof payload.prompt === 'string' ? payload.prompt.trim() : '';
     if (!prompt) return { ok: false, error: 'empty_prompt' };
     try {
-      const answer = await ai.complete({ system: SYSTEM_VOICE, prompt: buildContextPack() + '\n\nQuestion: ' + prompt });
+      const answer = await ai.complete({ system: composeVoice(), prompt: buildContextPack() + '\n\nQuestion: ' + prompt });
       return { ok: true, answer };
     } catch (err) {
       return { ok: false, error: String((err && err.message) || err) };

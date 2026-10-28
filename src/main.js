@@ -15,15 +15,15 @@ const { humanizeImportError } = require('./import-errors');
 
 const SMOKE = process.argv.includes('--smoke');
 
-// Nūs's chief-of-staff voice, ported from potlakai/nus CLAUDE.md (MIT).
-const SYSTEM_VOICE = [
-  'You are CompanionDesk, a student\'s chief of staff. Short, direct, lead with the answer.',
-  'Dates are always explicit (e.g. "Wed Nov 5"), never vague ("next week").',
-  'If the context does not contain the answer, say so. NEVER invent a deadline.',
-].join(' ');
+// Companion voice comes from the skill registry (src/skills.js). The general
+// companion is the default; the optional student module appends its own lines
+// only when student data exists. Companion ideas credited to potlakai/nus-desktop (MIT),
+// generalized for non-student use.
+const { createSkills } = require('./skills');
 
 let db = null;
 let ai = null;
+let skills = null;
 let win = null;
 
 function todayIso() {
@@ -45,6 +45,7 @@ async function init() {
   const dataDir = path.join(app.getPath('userData'), 'data');
   db = await LocalDb.open({ file: path.join(dataDir, 'companiondesk.db') });
   ai = createAi();
+  skills = createSkills();
 }
 
 function createWindow() {
@@ -63,14 +64,9 @@ function createWindow() {
 }
 
 function buildContextPack() {
-  const today = todayIso();
-  const due = db.listDue(today, addDaysIso(today, 7));
-  const courses = db.listCourses();
   const lines = [
-    `Context pack (today: ${today}). This is everything the app knows; do not go beyond it.`,
-    `Courses: ${courses.length ? courses.map((c) => `${c.name}${c.code ? ` (${c.code})` : ''}`).join('; ') : 'none imported yet.'}`,
-    due.length ? 'Due in the next 7 days:' : 'Nothing dated due in the next 7 days.',
-    ...due.map((a) => `- ${a.due_date} ${a.title} (${a.course_name}${a.date_confidence !== 'extracted' ? ', date flagged' : ''})`),
+    `Context pack (today: ${todayIso()}). This is everything the app knows; do not go beyond it.`,
+    ...skills.context(db, { todayIso, addDaysIso }),
   ];
   return lines.join('\n');
 }
@@ -113,7 +109,7 @@ function registerIpc() {
     const prompt = payload && typeof payload.prompt === 'string' ? payload.prompt.trim() : '';
     if (!prompt) return { ok: false, error: 'empty_prompt' };
     try {
-      const answer = await ai.complete({ system: SYSTEM_VOICE, prompt: buildContextPack() + '\n\nQuestion: ' + prompt });
+      const answer = await ai.complete({ system: skills.system(db), prompt: buildContextPack() + '\n\nQuestion: ' + prompt });
       return { ok: true, answer };
     } catch (err) {
       return { ok: false, error: String((err && err.message) || err) };
