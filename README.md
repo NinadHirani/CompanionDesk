@@ -17,6 +17,17 @@ how you work. Everything stays on your machine.
 - **Your data is yours.** One SQLite file plus a markdown vault you can open
   in any editor. Delete the folder and it is gone.
 
+## Download and install
+
+Installers live on [GitHub Releases](https://github.com/NinadHirani/CompanionDesk/releases/latest):
+a DMG for macOS Apple Silicon, a Windows installer, and a Linux AppImage.
+The app checks for updates itself and never installs one without your
+click. On macOS the build is currently unsigned, so updates arrive as a
+download rather than an in-place upgrade; see
+[docs/DISTRIBUTION.md](docs/DISTRIBUTION.md) for the full story, including
+what signing changes. Test builds from every commit land on the
+[continuous prerelease](https://github.com/NinadHirani/CompanionDesk/releases/tag/continuous).
+
 ## Made to fit one person
 
 Two people using CompanionDesk get two different assistants.

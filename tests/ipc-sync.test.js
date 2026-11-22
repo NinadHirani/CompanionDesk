@@ -19,7 +19,12 @@ function preloadChannels() {
 }
 
 function handledChannels() {
-  return [...read('main.js').matchAll(/ipcMain\.handle\(\s*'([^']+)'/g)].map((x) => x[1]);
+  // Update handlers are registered by the controller in src/updater.js,
+  // which registers update:status in both the disabled and the active path.
+  return [...new Set([
+    ...read('main.js').matchAll(/ipcMain\.handle\(\s*'([^']+)'/g),
+    ...read('updater.js').matchAll(/ipc\.handle\(\s*'([^']+)'/g),
+  ].map((x) => x[1]))];
 }
 
 test('channel names are unique and shaped like area:action', () => {

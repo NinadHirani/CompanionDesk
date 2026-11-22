@@ -202,7 +202,18 @@
     docsLoaded = true;
   }
 
+  // Version + manual update check, only when an updater exists (desktop).
+  async function refreshVersion() {
+    if (typeof api.update_status !== 'function') return;
+    const st = await api.update_status().catch(() => null);
+    if (!st) return;
+    const line = document.getElementById('about-version');
+    if (!line) return;
+    line.textContent = `CompanionDesk ${st.appVersion} · ${st.channel} channel`;
+  }
+
   async function refresh() {
+    refreshVersion();
     loadHealth();
     loadDocs();
     api.overlay_status().then((s) => {

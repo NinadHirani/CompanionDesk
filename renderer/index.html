@@ -20,6 +20,11 @@
     <button id="import-btn" class="primary">Import syllabus</button>
   </header>
 
+  <div id="update-bar" class="update-bar" hidden role="status">
+    <span id="update-text"></span>
+    <span id="update-actions" class="update-actions"></span>
+  </div>
+
   <div id="undo-bar" class="undo-bar" hidden role="status">
     <span id="undo-text"></span>
     <button id="undo-btn">Undo</button>
@@ -111,6 +116,7 @@
       <p id="health-summary"></p>
       <div id="health-body"></div>
       <button id="health-refresh">Check again</button>
+      <p id="about-version" class="meta"></p>
     </section>
 
     <div id="about-proposals"></div>
@@ -195,6 +201,7 @@
   <script src="about.js"></script>
   <script src="grades.js"></script>
   <script src="onboarding.js"></script>
+  <script src="update.js"></script>
   <script src="boot.js"></script>
 </body>
 </html>

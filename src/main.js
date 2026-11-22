@@ -28,6 +28,8 @@ const G = require('./gradebook');
 const CAL = require('./calendar');
 const fs = require('fs');
 const { todayIso, localNowIso, addDaysIso } = require('./dates');
+const { createUpdateController } = require('./updater');
+const policy = require('./update-policy');
 
 const SMOKE = process.argv.includes('--smoke');
 
@@ -95,6 +97,33 @@ function createWindow() {
     // closing the dashboard quits.
     if (process.platform !== 'darwin') app.quit();
   });
+}
+
+function registerUpdates() {
+  // Signed-or-not decides what macOS can do; the policy keeps that honest.
+  const identity = require('../package.json').build && require('../package.json').build.mac
+    ? require('../package.json').build.mac.identity
+    : null;
+  try {
+    const { autoUpdater } = require('electron-updater');
+    createUpdateController({
+      autoUpdater,
+      app,
+      settings: { update_channel: db.getSetting('update_channel', 'stable') },
+      broadcast: (state) => {
+        for (const w of BrowserWindow.getAllWindows()) {
+          if (!w.isDestroyed()) w.webContents.send('update:state', state);
+        }
+      },
+      openExternal: (url) => require('electron').shell.openExternal(url),
+      platform: process.platform,
+      appVersion: app.getVersion(),
+      isPackaged: app.isPackaged,
+      macSigning: policy.macSigningFromBuildConfig(identity),
+    });
+  } catch (err) {
+    console.warn('updates unavailable:', err && err.message);
+  }
 }
 
 function registerIpc() {
@@ -224,6 +253,7 @@ app.whenReady().then(async () => {
   });
   lockDownPermissions();
   registerIpc();
+  registerUpdates();
   overlay.ensure();
   overlay.register(savedHotkey());
   createWindow();
