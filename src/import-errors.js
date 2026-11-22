@@ -1,5 +1,12 @@
 'use strict';
 
+// Dual-mode: require() in Node/Electron, window.CompanionImportErrors in the
+// web/mobile build (the bridge calls CompanionImportErrors.humanizeImportError).
+(function (root, factory) {
+  if (typeof module === 'object' && module.exports) module.exports = factory();
+  else root.CompanionImportErrors = factory();
+})(typeof self !== 'undefined' ? self : this, function () {
+
 // Maps ingestion failure codes to short, actionable messages for the person
 // importing. The rule underneath every message: a failed import writes
 // NOTHING to the database or vault, so nothing ever needs undoing.
@@ -31,5 +38,5 @@ function humanizeImportError(err) {
   if (code && MESSAGES[code]) return MESSAGES[code];
   return 'Import failed: ' + (raw || 'unknown error') + ' Nothing was saved.';
 }
-
-module.exports = { humanizeImportError };
+  return { humanizeImportError };
+});

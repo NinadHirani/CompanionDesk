@@ -1,8 +1,10 @@
 'use strict';
 
 /* Web/mobile bridge for CompanionDesk.
- * Exposes the exact window.companiondesk API the Electron preload exposes
- * (state_get, syllabus_import, ai_ask), so renderer/app.js runs unchanged.
+ * Exposes the same window.companiondesk API the Electron preload exposes, so
+ * the renderer modules run unchanged. Everything the local database and the
+ * local model can serve works here; Electron-only features (overlay, voice,
+ * screen) answer with the clean desktop_only error the UI shows as a hint.
  * Storage is IndexedDB via the pluggable LocalDb saver; PDF parsing is
  * pdfjs-dist in the browser; the model is local Ollama when reachable, with
  * the user's opt-in Gemini key as the fallback (free-first: the app boots,
@@ -166,6 +168,10 @@
       courses: db.listCourses(),
       due: db.listDue(today, addDaysIso(today, 7)),
       counts: db.counts(),
+      student: (() => {
+        const s = CompanionSettings.normalizeSettings(db.allSettings());
+        return { enabled: CompanionSkills.studentEnabled(s), active: CompanionSkills.studentActive(db, s) };
+      })(),
       ai: await ai.status(),
     };
   }
@@ -236,6 +242,168 @@
     }
   }
 
+  function localNowIso() {
+    return new Date().toISOString();
+  }
+
+  // Features that live in the Electron main process (the overlay, voice
+  // transcription, screen questions, the desktop docs reader and the
+  // file-based about-me memory) answer with this clean error; the renderer
+  // shows the shared desktop_only wording from errors.js. Nothing is faked.
+  const DESKTOP_ONLY = 'This feature needs the CompanionDesk desktop app. Everything else works here.';
+  function desktopOnly() {
+    return { ok: false, error: 'desktop_only', message: DESKTOP_ONLY };
+  }
+
+  // ---- settings (mirrors personal.getSettings/saveSettings) -----------------
+
+  function settings_get() {
+    return { ok: true, settings: CompanionSettings.normalizeSettings(db.allSettings()) };
+  }
+
+  function settings_save(payload) {
+    const r = CompanionSettings.validatePatch(payload);
+    if (!r.ok) return { ok: false, error: 'invalid_settings', details: r.errors };
+    for (const [key, value] of Object.entries(r.clean)) db.setSetting(key, value);
+    return { ok: true, settings: CompanionSettings.normalizeSettings(db.allSettings()) };
+  }
+
+  // ---- today: the brief and done-marking (mirrors services.js) --------------
+
+  function brief_today() {
+    return CompanionServices.getBrief(db, todayIso());
+  }
+
+  function assignment_setDone(payload) {
+    return CompanionServices.setDone(db, payload, localNowIso());
+  }
+
+  // ---- grades (mirrors gradebook.js) -----------------------------------------
+
+  function grades_get() {
+    return CompanionGradebook.getGrades(db);
+  }
+
+  function grades_setScore(payload) {
+    return CompanionGradebook.setScore(db, payload, localNowIso());
+  }
+
+  function grades_setTarget(payload) {
+    return CompanionGradebook.setTarget(db, payload);
+  }
+
+  // ---- activity patterns (mirrors personal.getPatterns/clearActivity) --------
+
+  function patterns_get() {
+    const p = CompanionPatterns.computePatterns(db.listEvents('assignment_done'));
+    return {
+      ok: true,
+      learning: CompanionSettings.normalizeSettings(db.allSettings()).learn_from_activity,
+      ...p,
+      summary: CompanionPatterns.describePatterns(p),
+    };
+  }
+
+  function activity_clear() {
+    db.clearEvents();
+    return { ok: true };
+  }
+
+  // ---- deadlines the user types in (mirrors personal.addDeadline) -------------
+
+  function deadline_add(payload) {
+    if (!payload || typeof payload.title !== 'string' || typeof payload.date !== 'string') return { ok: false, error: 'bad_request' };
+    if (payload.isExam !== undefined && typeof payload.isExam !== 'boolean') return { ok: false, error: 'bad_request' };
+    const title = CompanionSettings.cleanLine(payload.title, 120);
+    if (!title) return { ok: false, error: 'empty_title' };
+    if (!CompanionCore.validIsoDate(payload.date)) return { ok: false, error: 'invalid_date' };
+    if (payload.date < todayIso()) return { ok: false, error: 'date_in_past' };
+    const same = db.all(
+      "SELECT id FROM assignments WHERE date_confidence = 'manual' AND due_date = ? AND lower(title) = lower(?)",
+      [payload.date, title]
+    );
+    if (same.length) return { ok: false, error: 'duplicate' };
+    const course = db.upsertCourse({ name: CompanionSkills.PERSONAL_COURSE });
+    const id = db.addAssignment(course, {
+      title, due_date: payload.date, category: payload.isExam ? 'Exam' : null, date_confidence: 'manual',
+    });
+    return { ok: true, id };
+  }
+
+  function deadline_remove(payload) {
+    if (!payload || !Number.isInteger(payload.id)) return { ok: false, error: 'bad_request' };
+    return db.removeManualAssignment(payload.id) ? { ok: true } : { ok: false, error: 'not_found' };
+  }
+
+  // ---- calendars (mirrors calendar.js; the .ics file comes from the browser) --
+
+  function pickIcsFile() {
+    return new Promise((resolve) => {
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = '.ics,text/calendar';
+      input.style.display = 'none';
+      document.body.appendChild(input);
+      input.addEventListener('change', () => {
+        const files = Array.from(input.files || []);
+        input.remove();
+        resolve(files[0] || null);
+      });
+      input.click();
+    });
+  }
+
+  async function calendar_import() {
+    await readyPromise;
+    const file = await pickIcsFile();
+    if (!file) return { ok: false, canceled: true };
+    const text = await file.text();
+    return CompanionCalendar.importCalendar(db, { name: file.name, text }, localNowIso());
+  }
+
+  function calendar_upcoming(payload) {
+    return CompanionCalendar.upcoming(db, payload, todayIso());
+  }
+
+  function calendar_remove(payload) {
+    return CompanionCalendar.removeCalendar(db, payload);
+  }
+
+  // ---- the setup check, web edition -------------------------------------------
+  // Same shape the About view renders (ready + items), with the desktop-only
+  // features listed as one optional item instead of fake facts.
+
+  async function health_check() {
+    await readyPromise;
+    const status = await ai.status();
+    const items = [];
+    items.push(status.ollama
+      ? { id: 'ollama', label: 'Ollama', status: 'ok', detail: 'Running.', fix: null }
+      : { id: 'ollama', label: 'Ollama', status: 'needed', detail: 'Not detected, so there is no local model to answer with.', fix: { text: 'Install Ollama from ollama.com and open it. It runs in the background.' } });
+    if (!status.ollama) {
+      items.push({ id: 'model', label: `Model ${status.model}`, status: 'needed', detail: 'Waiting for Ollama.', fix: null });
+    } else if (status.modelLoaded) {
+      items.push({ id: 'model', label: `Model ${status.model}`, status: 'ok', detail: 'Installed.', fix: null });
+    } else {
+      items.push({ id: 'model', label: `Model ${status.model}`, status: 'needed', detail: 'Ollama is running but this model is not downloaded yet.', fix: { text: 'Download it once (a few GB):', command: `ollama pull ${status.model}` } });
+    }
+    items.push({
+      id: 'storage',
+      label: 'Local storage',
+      status: 'ok',
+      detail: 'Your database lives in this browser (IndexedDB); nothing leaves this device.',
+      fix: null,
+    });
+    items.push({
+      id: 'desktop',
+      label: 'Overlay, voice and screen questions',
+      status: 'optional',
+      detail: 'Desktop-app features; the web build answers with a hint instead.',
+      fix: null,
+    });
+    return { ok: true, ready: items.every((i) => i.status !== 'needed'), items };
+  }
+
   async function init() {
     db = await CompanionDb.open({ storage: idbStorage('sqlite') });
     const key = (typeof localStorage !== 'undefined' && localStorage.getItem(GEMINI_KEY_STORAGE)) || null;
@@ -243,6 +411,26 @@
     readyResolve();
   }
 
-  window.companiondesk = { state_get, syllabus_import, ai_ask };
+  window.companiondesk = {
+    state_get, syllabus_import, ai_ask,
+    brief_today, assignment_setDone,
+    settings_get, settings_save,
+    grades_get, grades_setScore, grades_setTarget,
+    patterns_get, activity_clear,
+    deadline_add, deadline_remove,
+    calendar_import, calendar_upcoming, calendar_remove,
+    health_check,
+    onboarding_get: desktopOnly, onboarding_answer: desktopOnly, onboarding_complete: desktopOnly,
+    memory_list: desktopOnly, memory_add: desktopOnly, memory_forget: desktopOnly,
+    memory_suggest: desktopOnly, memory_decide: desktopOnly,
+    app_docs: desktopOnly,
+    overlay_status: desktopOnly, overlay_show: desktopOnly, overlay_hide: desktopOnly,
+    overlay_setHotkey: desktopOnly, overlay_ask: desktopOnly,
+    voice_status: desktopOnly, voice_transcribe: desktopOnly,
+    screen_status: desktopOnly, screen_windows: desktopOnly, screen_ask: desktopOnly,
+    // Main may push overlay events to the desktop window; the web build has no
+    // push channel, so listening is a no-op that returns its own unlistener.
+    on: () => () => {},
+  };
   init().catch((err) => readyReject(err));
 })();
