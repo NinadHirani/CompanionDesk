@@ -30,6 +30,7 @@
     no_events: 'No events were found in that file.',
     file_too_large: 'That file is too large (5 MB is the limit).',
     read_failed: 'That file could not be read.',
+    desktop_only: 'That one needs the desktop app; the rest works here.',
   };
 
   function friendlyError(code, detail) {

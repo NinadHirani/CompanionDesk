@@ -113,7 +113,9 @@ CREATE TABLE IF NOT EXISTS memory_proposals (
     static async open({ file = null, storage = null } = {}) {
       const initSqlJs = initSqlJsNode || (typeof globalThis.initSqlJs === 'function' ? globalThis.initSqlJs : null);
       if (!initSqlJs) throw new Error('sql.js unavailable: load dist/sql-wasm.js before opening the database');
-      const SQL = await initSqlJs();
+      const SQL = await initSqlJs(initSqlJsNode ? {} : {
+        locateFile: (f) => (typeof location !== 'undefined' ? new URL('vendor/' + f, location.href).href : f),
+      });
       let initial = null;
       let saver = null;
       if (storage) {

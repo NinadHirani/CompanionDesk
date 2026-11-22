@@ -9,6 +9,9 @@ const fs = require('fs');
 const path = require('path');
 const vault = require('./vault');
 const { parseModelJson, validateExtraction, validIsoDate } = require('./extraction-core');
+// pdf.js calls Uint8Array.prototype.toHex on some paths; make sure it exists
+// on Node versions without the ES2025 method.
+require('./uint8-hex');
 // Modern pdf.js, pure JS (no native canvas needed for text extraction).
 // Loaded via dynamic import because the legacy build ships as ESM while this
 // codebase stays CommonJS.
