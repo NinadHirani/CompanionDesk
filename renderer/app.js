@@ -221,6 +221,7 @@
     renderDue(brief);
     renderCourses(state.courses);
     document.getElementById('dl-date').min = state.today;
+    renderOllamaSetup(state.ai);
     return state;
   }
 
@@ -268,8 +269,175 @@
   async function refreshStatus() {
     const state = await api.state_get();
     renderStatus(state.ai);
+    renderOllamaSetup(state.ai);
   }
   window.addEventListener('focus', refreshStatus);
+
+  // ---- Ollama one-click setup card --------------------------------------
+  // Every step needs a click: nothing is installed or downloaded silently.
+  const OSU = window.CompanionOllamaSetup || null;
+  const isWebBuild = api && api.bridgeMode === 'web';
+  let pullRunning = false;
+
+  function fmtBytes(b) {
+    const gb = b / (1024 * 1024 * 1024);
+    if (gb >= 1) return `${gb.toFixed(1)} GB`;
+    return `${Math.round(b / (1024 * 1024))} MB`;
+  }
+
+  function renderPullProgress(rec) {
+    const bar = document.getElementById('oll-progress');
+    const label = document.getElementById('oll-progress-label');
+    if (!bar || !label) return;
+    bar.hidden = false;
+    if (rec && rec.pct !== null && rec.pct !== undefined) {
+      bar.firstElementChild.style.width = `${rec.pct}%`;
+      label.textContent = `${rec.pct}%`;
+    } else if (rec && rec.status) {
+      label.textContent = rec.status;
+    }
+  }
+
+  function openInstallButton(btnLabel) {
+    const btn = el('button', btnLabel, 'primary');
+    btn.addEventListener('click', async () => {
+      btn.disabled = true;
+      try { await api.ollama_openInstall(); } catch { /* the page stays reachable */ }
+      btn.disabled = false;
+    });
+    return btn;
+  }
+
+  function stepList(steps) {
+    const list = el('ul', null);
+    for (const step of steps || []) list.appendChild(el('li', step));
+    return list;
+  }
+
+  async function renderOllamaSetup(aiState) {
+    const card = document.getElementById('oll-setup');
+    const body = document.getElementById('oll-body');
+    if (!card || !body) return;
+    if (!OSU) { card.hidden = true; return; }
+
+    const ollamaRunning = Boolean(aiState && aiState.ollama);
+    const modelPresent = Boolean(aiState && aiState.modelLoaded);
+    const model = (aiState && aiState.model) || OSU.RECOMMENDED_MODEL;
+
+    if (ollamaRunning && modelPresent) { card.hidden = true; return; }
+
+    // Web/Android build: the page cannot install software or download models
+    // on its own. Say what works and what the honest routes are.
+    if (isWebBuild) {
+      card.hidden = false;
+      body.textContent = '';
+      body.appendChild(el('p', ollamaRunning
+        ? `Ollama is reachable, but ${model} is not downloaded yet. Pull it in a terminal on the machine running Ollama:`
+        : 'This web or Android build cannot install software for you, so a local model is not set up here.'));
+      if (ollamaRunning) {
+        body.appendChild(el('code', `ollama pull ${model}`, 'oll-cmd'));
+        body.appendChild(el('p', 'Reload or come back to this view after the download finishes.', 'setup-note'));
+      } else {
+        body.appendChild(el('p', 'For a fully local model use the CompanionDesk desktop app: it walks you through Ollama in one click, and nothing is installed or downloaded without your click. If Ollama is already running on this machine at port 11434, reload this page and it will be found.'));
+        body.appendChild(el('p', 'AI answers in this build come only from the opt-in cloud fallback: if you add your own Gemini key, requests go to Google; otherwise nothing leaves this device. Everything except AI answers works fully here.', 'setup-note'));
+      }
+      return;
+    }
+
+    // Desktop build: guided setup through the official Ollama channels.
+    let plan = null;
+    try {
+      const planRes = await api.ollama_setupPlan();
+      if (planRes && planRes.ok) plan = planRes.plan;
+    } catch { plan = null; }
+
+    if (!ollamaRunning) {
+      card.hidden = false;
+      body.textContent = '';
+      body.appendChild(el('p', 'CompanionDesk answers with a model that runs entirely on this computer. It needs Ollama installed once.'));
+      body.appendChild(el('p', 'CompanionDesk never installs software itself and never downloads a model without your click. The button opens the official Ollama download page; you install and open it, and this card finishes on its own.', 'setup-note'));
+      if (plan && plan.kind === 'guided') {
+        body.appendChild(openInstallButton('Open the official Ollama installer'));
+        const list = stepList(plan.steps);
+        if (list.firstChild) body.appendChild(list);
+      } else if (plan && plan.kind === 'command') {
+        body.appendChild(el('p', 'Official install command. Review the script at ollama.com/download/linux, then run it yourself in a terminal:'));
+        body.appendChild(el('code', plan.command, 'oll-cmd'));
+        body.appendChild(openInstallButton('Open the official download page'));
+        const list = stepList(plan.steps);
+        if (list.firstChild) body.appendChild(list);
+      } else {
+        body.appendChild(el('p', 'Download Ollama from ollama.com/download and open it.'));
+      }
+      return;
+    }
+
+    // Ollama runs; the model needs downloading.
+    const st = OSU.setupState({ ollamaRunning: true, modelPresent, model });
+    if (st.stage !== 'pull') { card.hidden = true; return; }
+    card.hidden = false;
+    body.textContent = '';
+    body.appendChild(el('p', `One download left: ${st.model} (${st.size.label}). It stays on this machine; nothing is sent anywhere.`));
+    let enough = true;
+    if (st.size.bytes) {
+      try {
+        const disk = await api.ollama_diskCheck({ neededBytes: st.size.bytes });
+        if (disk && disk.ok) {
+          enough = Boolean(disk.enough);
+          body.appendChild(el('p', enough
+            ? `Free space on disk: ${fmtBytes(disk.freeBytes)}. Enough for the download plus headroom.`
+            : `Free space on disk: ${fmtBytes(disk.freeBytes)}, but the download needs about ${fmtBytes(disk.neededBytes)} with headroom. Free some space first.`, 'setup-note'));
+        }
+      } catch { /* disk check is best-effort */ }
+    }
+    const bar = el('div', null, 'setup-progress');
+    bar.id = 'oll-progress';
+    bar.hidden = true;
+    bar.appendChild(el('div'));
+    const label = el('span', null);
+    label.id = 'oll-progress-label';
+    const btn = el('button', `Download ${st.model} (${st.size.label})`, 'primary');
+    btn.disabled = pullRunning || !enough;
+    const cancel = el('button', 'Cancel');
+    cancel.hidden = !pullRunning;
+    btn.addEventListener('click', async () => {
+      if (pullRunning) return;
+      pullRunning = true;
+      btn.hidden = true;
+      cancel.hidden = false;
+      label.textContent = 'Starting download...';
+      try {
+        const res = await api.ollama_pullStart({ model: st.model });
+        if (res && res.ok) {
+          label.textContent = 'Downloaded.';
+        } else {
+          label.textContent = res && res.error === 'cancelled'
+            ? 'Download cancelled. Nothing was kept.'
+            : `Download failed: ${(res && res.error) || 'unknown error'}. You can retry below.`;
+          bar.firstElementChild.style.width = '0%';
+          const retry = el('button', 'Retry download', 'primary');
+          retry.addEventListener('click', () => { retry.remove(); btn.click(); });
+          body.appendChild(retry);
+        }
+      } catch (err) {
+        label.textContent = `Download failed: ${String((err && err.message) || err)}. You can retry below.`;
+      } finally {
+        pullRunning = false;
+        cancel.hidden = true;
+        await refreshStatus();
+      }
+    });
+    cancel.addEventListener('click', async () => {
+      try { await api.ollama_pullCancel(); } catch { /* the pull resolves on abort */ }
+    });
+    body.appendChild(btn);
+    body.appendChild(cancel);
+    body.appendChild(bar);
+    body.appendChild(label);
+  }
+
+  // Progress is pushed from the main process during a user-started download.
+  try { api.on('ollama:pullProgress', renderPullProgress); } catch { /* no push channel here */ }
 
   UI.today = { refresh, refreshStatus };
   UI.onShow('today', () => { refresh(); });

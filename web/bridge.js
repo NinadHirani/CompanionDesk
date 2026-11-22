@@ -255,6 +255,25 @@
     return { ok: false, error: 'desktop_only', message: DESKTOP_ONLY };
   }
 
+  // Ollama detection works for real in the web build: the page may talk to
+  // 127.0.0.1:11434 (the CSP allowlists it). Everything that installs or
+  // downloads stays desktop-only, so the web build can never do either.
+  async function ollama_detect() {
+    try {
+      const res = await fetch('http://127.0.0.1:11434/api/tags', { signal: AbortSignal.timeout(1500) });
+      if (!res.ok) return { ok: true, running: false, version: null, models: [] };
+      const data = await res.json();
+      return {
+        ok: true,
+        running: true,
+        version: null,
+        models: (data.models || []).map((m) => String((m && m.name) || '')).filter(Boolean),
+      };
+    } catch {
+      return { ok: true, running: false, version: null, models: [] };
+    }
+  }
+
   // ---- settings (mirrors personal.getSettings/saveSettings) -----------------
 
   function settings_get() {
@@ -412,6 +431,7 @@
   }
 
   window.companiondesk = {
+    bridgeMode: 'web',
     state_get, syllabus_import, ai_ask,
     brief_today, assignment_setDone,
     settings_get, settings_save,
@@ -423,6 +443,9 @@
     onboarding_get: desktopOnly, onboarding_answer: desktopOnly, onboarding_complete: desktopOnly,
     memory_list: desktopOnly, memory_add: desktopOnly, memory_forget: desktopOnly,
     memory_suggest: desktopOnly, memory_decide: desktopOnly,
+    ollama_detect,
+    ollama_setupPlan: desktopOnly, ollama_openInstall: desktopOnly,
+    ollama_diskCheck: desktopOnly, ollama_pullStart: desktopOnly, ollama_pullCancel: desktopOnly,
     app_docs: desktopOnly,
     overlay_status: desktopOnly, overlay_show: desktopOnly, overlay_hide: desktopOnly,
     overlay_setHotkey: desktopOnly, overlay_ask: desktopOnly,

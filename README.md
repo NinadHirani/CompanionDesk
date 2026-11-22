@@ -28,6 +28,12 @@ install and update caveats. Desktop Ollama does not run on Android: AI answers
 there need the opt-in Gemini fallback you configure yourself, or a companion
 desktop. Everything else (deadlines, syllabus import, calendar) is local.
 
+**Desktop one-click local AI setup:** the app walks you through Ollama in one click
+(see [docs/OLLAMA_SETUP.md](docs/OLLAMA_SETUP.md)). It opens the official installer
+for *you* to run, then downloads the recommended model in-app with a progress bar,
+a disk-space check and cancel. It never installs software or downloads a model in
+the background, and never sends anything to the cloud unless you add a key.
+
 Desktop builds (macOS / Windows / Linux) remain **GitHub Actions artifacts, not
 GitHub Releases**: desktop release publishing is still switched off, so the
 [Releases page](https://github.com/NinadHirani/CompanionDesk/releases) holds

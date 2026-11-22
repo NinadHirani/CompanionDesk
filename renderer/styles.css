@@ -205,3 +205,9 @@ details summary { cursor: pointer; margin: 6px 0; }
 .update-bar.error { background: var(--warn-bg); }
 .update-bar .update-actions { display: flex; gap: 8px; margin-left: auto; }
 .update-bar[hidden] { display: none; }
+
+/* Ollama setup card */
+.setup-progress { height: 8px; background: var(--tag-bg); border-radius: 4px; overflow: hidden; margin: 8px 0 4px; }
+.setup-progress > div { height: 100%; width: 0; background: var(--accent); transition: width .3s ease; }
+.oll-cmd { font-family: ui-monospace, Menlo, monospace; background: var(--tag-bg); padding: 6px 8px; border-radius: 6px; word-break: break-all; display: block; }
+.setup-note { color: var(--muted); }

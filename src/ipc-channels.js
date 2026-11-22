@@ -48,11 +48,17 @@ const IPC_CHANNELS = Object.freeze([
   'update:download',
   'update:install',
   'update:openReleases',
+  'ollama:detect',
+  'ollama:setupPlan',
+  'ollama:openInstall',
+  'ollama:diskCheck',
+  'ollama:pullStart',
+  'ollama:pullCancel',
 ]);
 
 // Messages main may PUSH to a window (streaming tokens and the like). The
 // renderer can only listen to these; the preload mirrors this list inline.
-const IPC_EVENTS = Object.freeze(['overlay:token', 'overlay:reset', 'update:state']);
+const IPC_EVENTS = Object.freeze(['overlay:token', 'overlay:reset', 'update:state', 'ollama:pullProgress']);
 
 function isAllowed(channel) {
   return IPC_CHANNELS.includes(channel);

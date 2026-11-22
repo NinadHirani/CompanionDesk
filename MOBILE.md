@@ -19,7 +19,11 @@ still needed before anything can be published to Google Play or the App Store.
   so `renderer/app.js` runs unchanged in a browser or WebView. File picking is
   a native `<input type=file>`; PDF text extraction is pdfjs-dist in the
   browser; storage is IndexedDB; the model layer is the same provider chain
-  (local Ollama first, opt-in Gemini key as fallback).
+  (local Ollama first, opt-in Gemini key as fallback). The web/Android build cannot install software or download models on its own: if
+  Ollama is missing, the Local AI setup card says so plainly and points to the
+  desktop app (see docs/OLLAMA_SETUP.md); if Ollama is already reachable at
+  127.0.0.1:11434, the web build detects it and tells you to run
+  `ollama pull <model>` yourself.
 - **Build script.** `bash scripts/build-web.sh` assembles the self-contained
   bundle in `web/` (the Capacitor `webDir`).
 - **`capacitor.config.json`.** appId `app.companiondesk.assistant`, appName
