@@ -13,7 +13,8 @@
     "smoke": "electron . --smoke",
     "test": "node --test tests/*.test.js",
     "dist:mac": "electron-builder --mac --publish never",
-    "pack": "electron-builder --dir --publish never"
+    "pack": "electron-builder --dir --publish never",
+    "build:web": "bash scripts/build-web.sh"
   },
   "dependencies": {
     "pdfjs-dist": "^6.4.299",
