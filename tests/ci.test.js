@@ -18,8 +18,9 @@ test('the workflow has its own file name, so it cannot overwrite another CI file
 });
 
 test('it tests on macOS Apple Silicon and Linux, with the Node the app targets', () => {
-  // macos-latest maps to an Apple Silicon runner; macos-14 pinned it explicitly.
-  assert.match(yml, /macos-(14|latest)/);
+  // macos-latest is a macOS (Apple Silicon) GitHub-hosted runner; the macos-14
+  // label never schedules on this account's plan.
+  assert.match(yml, /macos-latest/);
   assert.match(yml, /ubuntu-24\.04/);
   assert.match(yml, /node-version: 22/);
 });
