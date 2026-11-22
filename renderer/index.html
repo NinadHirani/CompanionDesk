@@ -2,27 +2,199 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'none'" />
   <title>CompanionDesk</title>
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <header>
+  <header class="topbar">
     <h1>CompanionDesk</h1>
-    <p class="tagline">General-purpose local AI companion. The student module is optional.</p>
-    <span id="ai-status" class="status">Checking local model...</span>
-    <button id="import-btn">Import syllabus</button>
+    <nav class="tabs" id="tabs" aria-label="Sections">
+      <button data-view="today" class="active">Today</button>
+      <button data-view="ask">Ask</button>
+      <button data-view="grades">Grades</button>
+      <button data-view="about">About me</button>
+    </nav>
+    <span id="ai-status" class="status">Checking local model</span>
+    <span class="spacer"></span>
+    <button id="import-btn" class="primary">Import syllabus</button>
   </header>
-  <main>
-    <section id="due-section">
-      <h2>Due in the next 7 days</h2>
-      <ul id="due-list"></ul>
-    </section>
-    <section id="courses-section">
-      <h2>Courses</h2>
-      <ul id="course-list"></ul>
-    </section>
-    <section id="import-result"></section>
+
+  <div id="undo-bar" class="undo-bar" hidden role="status">
+    <span id="undo-text"></span>
+    <button id="undo-btn">Undo</button>
+  </div>
+
+  <!-- Today -->
+  <main id="view-today" class="layout view">
+    <div class="col-main">
+      <section id="brief-card" class="card" aria-labelledby="brief-h">
+        <h2 id="brief-h">Next up</h2>
+        <div id="brief-body"></div>
+      </section>
+
+      <section id="due-section" class="card" aria-labelledby="due-h">
+        <div class="card-head">
+          <h2 id="due-h">All upcoming</h2>
+          <div class="controls">
+            <label>Show
+              <select id="f-window">
+                <option value="7">next 7 days</option>
+                <option value="14">next 14 days</option>
+                <option value="30">next 30 days</option>
+                <option value="0">everything</option>
+              </select>
+            </label>
+            <label>Course
+              <select id="f-course"><option value="all">all courses</option></select>
+            </label>
+            <label>Sort by
+              <select id="f-sort">
+                <option value="date">date</option>
+                <option value="course">course</option>
+                <option value="worth">worth</option>
+              </select>
+            </label>
+          </div>
+        </div>
+        <ul id="due-list" class="rows"></ul>
+      </section>
+    </div>
+
+    <aside class="col-side">
+      <section class="card" aria-labelledby="add-h">
+        <h2 id="add-h">Add a deadline</h2>
+        <p class="hint">For anything not on a syllabus: an application, a hackathon, an exam you registered for.</p>
+        <div class="field"><label for="dl-title">What</label><input id="dl-title" type="text" maxlength="120" /></div>
+        <div class="field"><label for="dl-date">Due</label><input id="dl-date" type="date" /></div>
+        <label class="check"><input id="dl-exam" type="checkbox" /> This is an exam</label>
+        <button id="dl-add" class="primary">Add</button>
+        <p id="dl-msg" class="hint" role="status"></p>
+      </section>
+      <section class="card" aria-labelledby="cal-h">
+        <h2 id="cal-h">Calendar, next 7 days</h2>
+        <div id="cal-body"></div>
+        <div class="actions"><button id="cal-import">Import .ics</button></div>
+        <p id="cal-msg" class="hint" role="status"></p>
+      </section>
+      <section id="courses-card" class="card" aria-labelledby="courses-h">
+        <h2 id="courses-h">Courses</h2>
+        <ul id="course-list" class="plain"></ul>
+      </section>
+      <section id="import-result" aria-live="polite"></section>
+    </aside>
   </main>
+
+  <!-- Ask -->
+  <main id="view-ask" class="narrow view" hidden>
+    <section class="card">
+      <h2>Ask</h2>
+      <div class="field"><label for="ask-input">Your question</label>
+        <textarea id="ask-input" rows="3" maxlength="2000" placeholder="What is due this week? How should I plan Thursday?"></textarea>
+      </div>
+      <button id="ask-btn" class="primary">Ask</button>
+      <p class="hint">Answers come from your schedule and the notes you have shared. If it does not know, it says so.</p>
+    </section>
+    <div id="ask-proposals"></div>
+    <div id="ask-log"></div>
+  </main>
+
+  <!-- Grades -->
+  <main id="view-grades" class="narrow view" hidden>
+    <div id="grades-body"></div>
+  </main>
+
+  <!-- About me -->
+  <main id="view-about" class="narrow view" hidden>
+    <section class="card">
+      <h2>Setup check</h2>
+      <p id="health-summary"></p>
+      <div id="health-body"></div>
+      <button id="health-refresh">Check again</button>
+    </section>
+
+    <div id="about-proposals"></div>
+
+    <section class="card">
+      <h2>What I know about you</h2>
+      <p class="hint" id="about-file"></p>
+      <div id="about-items"></div>
+      <div class="field inline">
+        <select id="mem-section" aria-label="Section"></select>
+        <input id="mem-text" type="text" maxlength="200" aria-label="Something to remember" placeholder="Something you want me to keep in mind" />
+        <button id="mem-add">Add</button>
+      </div>
+      <p id="mem-msg" class="hint" role="status"></p>
+    </section>
+
+    <section class="card">
+      <h2>What I have noticed</h2>
+      <p id="patterns-text"></p>
+      <button id="activity-clear">Forget my activity</button>
+    </section>
+
+    <section class="card">
+      <h2>Quick overlay</h2>
+      <p class="hint">A small window you can summon from anywhere, even with this window closed on a Mac.</p>
+      <div class="field"><label for="ov-hotkey">Shortcut</label><input id="ov-hotkey" type="text" maxlength="60" /></div>
+      <div class="actions">
+        <button id="ov-save" class="primary">Save shortcut</button>
+        <button id="ov-open">Open it now</button>
+      </div>
+      <p id="ov-msg" class="hint" role="status"></p>
+    </section>
+
+    <section class="card">
+      <h2>How I talk to you</h2>
+      <div class="field"><label for="s-user">Your name</label><input id="s-user" type="text" maxlength="40" /></div>
+      <div class="field"><label for="s-assistant">What to call me</label><input id="s-assistant" type="text" maxlength="40" /></div>
+      <div class="field"><label for="s-student">Student tools</label>
+        <select id="s-student"><option value="auto">Automatic (appear once I import a syllabus)</option><option value="off">Off</option></select></div>
+      <div class="field"><label for="s-tone">Tone</label>
+        <select id="s-tone"><option value="direct">Direct</option><option value="warm">Warm</option><option value="formal">Formal</option></select></div>
+      <div class="field"><label for="s-brevity">Length</label>
+        <select id="s-brevity"><option value="short">Short</option><option value="normal">Normal</option><option value="detailed">Detailed</option></select></div>
+      <div class="field"><label for="s-language">Language</label><input id="s-language" type="text" maxlength="30" /></div>
+      <label class="check"><input id="s-learn" type="checkbox" /> Learn from what I mark done (kept on this computer)</label>
+      <label class="check"><input id="s-suggest" type="checkbox" /> Offer to remember things I mention</label>
+      <label class="check"><input id="s-cloud" type="checkbox" /> Share my notes and habits with the cloud model if my local one is unavailable</label>
+      <p class="hint">The last option is off by default and only matters if you added a Gemini key. Without it, the cloud only ever sees your deadlines and your question.</p>
+      <button id="settings-save" class="primary">Save</button>
+      <p id="settings-msg" class="hint" role="status"></p>
+    </section>
+
+    <section class="card">
+      <h2>About this app</h2>
+      <p id="app-version" class="hint"></p>
+      <details><summary>Privacy policy</summary><pre id="doc-privacy" class="doc"></pre></details>
+      <details><summary>Terms of use</summary><pre id="doc-terms" class="doc"></pre></details>
+    </section>
+  </main>
+
+  <!-- First run -->
+  <main id="view-onboarding" class="narrow view" hidden>
+    <section class="card">
+      <p class="hint" id="ob-progress"></p>
+      <h2 id="ob-prompt"></h2>
+      <div id="ob-input"></div>
+      <p id="ob-msg" class="error" role="alert"></p>
+      <div class="actions">
+        <button id="ob-next" class="primary">Next</button>
+        <button id="ob-skip">Skip</button>
+        <span class="spacer"></span>
+        <button id="ob-finish">Skip the rest</button>
+      </div>
+    </section>
+  </main>
+
+  <script src="format.js"></script>
+  <script src="errors.js"></script>
+  <script src="dom.js"></script>
   <script src="app.js"></script>
+  <script src="ask.js"></script>
+  <script src="about.js"></script>
+  <script src="grades.js"></script>
+  <script src="onboarding.js"></script>
+  <script src="boot.js"></script>
 </body>
 </html>

@@ -9,10 +9,48 @@ const IPC_CHANNELS = Object.freeze([
   'state:get',
   'syllabus:import',
   'ai:ask',
+  'brief:today',
+  'assignment:setDone',
+  'settings:get',
+  'settings:save',
+  'memory:list',
+  'memory:add',
+  'memory:forget',
+  'memory:suggest',
+  'memory:decide',
+  'patterns:get',
+  'activity:clear',
+  'onboarding:get',
+  'onboarding:answer',
+  'onboarding:complete',
+  'deadline:add',
+  'deadline:remove',
+  'grades:get',
+  'grades:setScore',
+  'grades:setTarget',
+  'calendar:import',
+  'calendar:upcoming',
+  'calendar:remove',
+  'overlay:ask',
+  'overlay:show',
+  'overlay:hide',
+  'overlay:setHotkey',
+  'overlay:status',
+  'voice:status',
+  'voice:transcribe',
+  'screen:status',
+  'screen:windows',
+  'screen:ask',
+  'app:docs',
+  'health:check',
 ]);
+
+// Messages main may PUSH to a window (streaming tokens and the like). The
+// renderer can only listen to these; the preload mirrors this list inline.
+const IPC_EVENTS = Object.freeze(['overlay:token', 'overlay:reset']);
 
 function isAllowed(channel) {
   return IPC_CHANNELS.includes(channel);
 }
 
-module.exports = { IPC_CHANNELS, isAllowed };
+module.exports = { IPC_CHANNELS, IPC_EVENTS, isAllowed };

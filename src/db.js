@@ -60,6 +60,35 @@ CREATE TABLE IF NOT EXISTS tasks (
   notes TEXT,
   created_at TEXT DEFAULT (datetime('now'))
 );
+CREATE TABLE IF NOT EXISTS settings (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS events (
+  id INTEGER PRIMARY KEY,
+  kind TEXT NOT NULL,
+  assignment_id INTEGER,
+  course_id INTEGER,
+  due_date TEXT,
+  at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS scores (
+  assignment_id INTEGER PRIMARY KEY,
+  score_pct REAL NOT NULL,
+  recorded_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS calendars (
+  name TEXT PRIMARY KEY,
+  imported_at TEXT NOT NULL,
+  events_json TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS memory_proposals (
+  id INTEGER PRIMARY KEY,
+  section TEXT NOT NULL,
+  text TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pending',
+  created_at TEXT NOT NULL
+);
 `;
 
   // Filesystem saver: the desktop default. Writes only on flush, never on
@@ -95,7 +124,14 @@ CREATE TABLE IF NOT EXISTS tasks (
         saver = fsSaver(file);
       }
       const db = new LocalDb(SQL, saver);
-      if (initial && initial.length) db.db = new SQL.Database(new Uint8Array(initial));
+      if (initial && initial.length) {
+        db.db = new SQL.Database(new Uint8Array(initial));
+        // The constructor only prepared a throwaway empty database. Apply the
+        // schema to the loaded one as well so tables added in a newer app
+        // version exist for people who already have a saved database. Every
+        // statement is CREATE TABLE IF NOT EXISTS, so existing data is untouched.
+        db.db.exec(SCHEMA);
+      }
       return db;
     }
 
@@ -168,6 +204,7 @@ CREATE TABLE IF NOT EXISTS tasks (
     }
 
     clearAssignments(courseId) {
+      this.run('DELETE FROM scores WHERE assignment_id IN (SELECT id FROM assignments WHERE course_id = ?)', [courseId]);
       this.run('DELETE FROM assignments WHERE course_id = ?', [courseId]);
       this.persist();
     }
@@ -179,6 +216,16 @@ CREATE TABLE IF NOT EXISTS tasks (
       );
       this.persist();
       return this.lastId();
+    }
+
+    // Only deadlines the user added by hand can be removed this way; anything
+    // extracted from a syllabus is left alone. Returns true when a row was removed.
+    removeManualAssignment(id) {
+      const rows = this.all("SELECT id FROM assignments WHERE id = ? AND date_confidence = 'manual'", [id]);
+      if (!rows.length) return false;
+      this.run('DELETE FROM assignments WHERE id = ?', [id]);
+      this.persist();
+      return true;
     }
 
     listAssignments(courseId) {
@@ -194,6 +241,7 @@ CREATE TABLE IF NOT EXISTS tasks (
         `SELECT a.id, a.title, a.due_date, a.date_confidence, a.category, c.name AS course_name
          FROM assignments a JOIN courses c ON c.id = a.course_id
          WHERE a.due_date IS NOT NULL AND a.due_date >= ? AND a.due_date <= ?
+           AND IFNULL(a.status, 'pending') != 'done'
          ORDER BY a.due_date, c.name`,
         [todayIso, horizonEndIso]
       );
@@ -201,6 +249,158 @@ CREATE TABLE IF NOT EXISTS tasks (
 
     listCourses() {
       return this.all('SELECT * FROM courses ORDER BY name');
+    }
+
+    // Every unfinished assignment with its course, dated or not, for the daily
+    // brief. The brief itself decides which rows are trustworthy.
+    listBriefRows() {
+      // weight_pct is only filled when the assignment's category exactly matches
+      // (ignoring case) a grading category from the syllabus. No fuzzy matching:
+      // a missing weight stays null rather than being guessed.
+      return this.all(
+        `SELECT a.id, a.course_id, a.title, a.due_date, a.date_confidence, a.category, a.status,
+                c.name AS course_name,
+                (SELECT g.weight_pct FROM grade_weights g
+                  WHERE g.course_id = a.course_id AND a.category IS NOT NULL
+                    AND lower(trim(g.category)) = lower(trim(a.category)) LIMIT 1) AS weight_pct
+         FROM assignments a JOIN courses c ON c.id = a.course_id
+         WHERE IFNULL(a.status, 'pending') != 'done'
+         ORDER BY CASE WHEN a.due_date IS NULL THEN 1 ELSE 0 END, a.due_date, c.name, a.title`
+      );
+    }
+
+    getAssignment(id) {
+      const rows = this.all(
+        `SELECT a.id, a.course_id, a.title, a.due_date, a.date_confidence, a.category, a.status,
+                c.name AS course_name
+         FROM assignments a JOIN courses c ON c.id = a.course_id WHERE a.id = ?`,
+        [id]
+      );
+      return rows[0] || null;
+    }
+
+    // Returns the updated row, or null when the id does not exist.
+    setAssignmentStatus(id, status) {
+      if (status !== 'pending' && status !== 'done') throw new Error('invalid_status');
+      if (!this.getAssignment(id)) return null;
+      this.run('UPDATE assignments SET status = ? WHERE id = ?', [status, id]);
+      this.persist();
+      return this.getAssignment(id);
+    }
+
+    // ---- scores the user has entered for graded work ----------------------
+    setScore(assignmentId, scorePct, recordedAt) {
+      this.run(
+        'INSERT INTO scores (assignment_id, score_pct, recorded_at) VALUES (?, ?, ?) ON CONFLICT(assignment_id) DO UPDATE SET score_pct = excluded.score_pct, recorded_at = excluded.recorded_at',
+        [assignmentId, scorePct, recordedAt]
+      );
+      this.persist();
+    }
+
+    clearScore(assignmentId) {
+      this.run('DELETE FROM scores WHERE assignment_id = ?', [assignmentId]);
+      this.persist();
+    }
+
+    // { [assignmentId]: percent } for one course.
+    scoresForCourse(courseId) {
+      const out = {};
+      for (const r of this.all(
+        'SELECT s.assignment_id, s.score_pct FROM scores s JOIN assignments a ON a.id = s.assignment_id WHERE a.course_id = ?',
+        [courseId]
+      )) out[r.assignment_id] = r.score_pct;
+      return out;
+    }
+
+    // ---- imported calendars (.ics), stored as parsed JSON -------------------
+    saveCalendar(name, importedAt, events) {
+      this.run(
+        'INSERT INTO calendars (name, imported_at, events_json) VALUES (?, ?, ?) ON CONFLICT(name) DO UPDATE SET imported_at = excluded.imported_at, events_json = excluded.events_json',
+        [name, importedAt, JSON.stringify(events)]
+      );
+      this.persist();
+    }
+
+    listCalendars() {
+      return this.all('SELECT name, imported_at, events_json FROM calendars ORDER BY name').map((r) => ({
+        name: r.name, imported_at: r.imported_at, events: JSON.parse(r.events_json),
+      }));
+    }
+
+    removeCalendar(name) {
+      const had = this.all('SELECT name FROM calendars WHERE name = ?', [name]).length > 0;
+      this.run('DELETE FROM calendars WHERE name = ?', [name]);
+      this.persist();
+      return had;
+    }
+
+    // ---- settings: small key/value strings --------------------------------
+    getSetting(key, fallback = null) {
+      const rows = this.all('SELECT value FROM settings WHERE key = ?', [key]);
+      return rows.length ? rows[0].value : fallback;
+    }
+
+    setSetting(key, value) {
+      this.run('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value', [
+        key, String(value),
+      ]);
+      this.persist();
+    }
+
+    allSettings() {
+      const out = {};
+      for (const r of this.all('SELECT key, value FROM settings')) out[r.key] = r.value;
+      return out;
+    }
+
+    // ---- activity log: what the user did, used only for local patterns ----
+    addEvent({ kind, assignment_id = null, course_id = null, due_date = null, at }) {
+      this.run('INSERT INTO events (kind, assignment_id, course_id, due_date, at) VALUES (?, ?, ?, ?, ?)', [
+        kind, assignment_id, course_id, due_date, at,
+      ]);
+      this.persist();
+      return this.lastId();
+    }
+
+    listEvents(kind = null) {
+      return kind
+        ? this.all('SELECT * FROM events WHERE kind = ? ORDER BY id', [kind])
+        : this.all('SELECT * FROM events ORDER BY id');
+    }
+
+    clearEvents() {
+      this.run('DELETE FROM events');
+      this.persist();
+    }
+
+    // Withdraw one kind of event for one assignment (e.g. when a finished item
+    // is un-marked, so it no longer counts toward patterns).
+    removeEvents(kind, assignmentId) {
+      this.run('DELETE FROM events WHERE kind = ? AND assignment_id = ?', [kind, assignmentId]);
+      this.persist();
+    }
+
+    // ---- memory proposals: suggestions that need the user's approval -------
+    addProposal({ section, text, created_at }) {
+      this.run('INSERT INTO memory_proposals (section, text, created_at) VALUES (?, ?, ?)', [section, text, created_at]);
+      this.persist();
+      return this.lastId();
+    }
+
+    listProposals(status = 'pending') {
+      return this.all('SELECT * FROM memory_proposals WHERE status = ? ORDER BY id', [status]);
+    }
+
+    getProposal(id) {
+      const rows = this.all('SELECT * FROM memory_proposals WHERE id = ?', [id]);
+      return rows[0] || null;
+    }
+
+    decideProposal(id, status) {
+      if (status !== 'approved' && status !== 'rejected') throw new Error('invalid_status');
+      this.run("UPDATE memory_proposals SET status = ? WHERE id = ? AND status = 'pending'", [status, id]);
+      this.persist();
+      return this.getProposal(id);
     }
 
     counts() {

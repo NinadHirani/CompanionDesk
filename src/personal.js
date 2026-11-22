@@ -1,0 +1,177 @@
+'use strict';
+
+// Service layer for everything personal: settings, the about-me file, memory
+// suggestions, the onboarding interview, activity patterns, hand-added
+// deadlines, and the personalized answer itself. main.js exposes these over
+// IPC; they take the database, file path and AI as arguments so tests can run
+// them with no Electron and no network.
+
+const memory = require('./memory');
+const { normalizeSettings, validatePatch, cleanLine } = require('./settings');
+const { computePatterns, describePatterns } = require('./patterns');
+const { buildPersona, renderContextPack, renderCalendarBlock } = require('./persona');
+const calendar = require('./calendar');
+const proposals = require('./proposals');
+const onboarding = require('./onboarding');
+const { addDaysIso } = require('./dates');
+const { validIsoDate } = require('./extraction-core');
+const { PERSONAL_COURSE, activeSkills } = require('./skills');
+
+
+// ---- settings ---------------------------------------------------------------
+
+function getSettings(db) {
+  return normalizeSettings(db.allSettings());
+}
+
+function saveSettings(db, patch) {
+  const r = validatePatch(patch);
+  if (!r.ok) return { ok: false, error: 'invalid_settings', details: r.errors };
+  for (const [key, value] of Object.entries(r.clean)) db.setSetting(key, value);
+  return { ok: true, settings: getSettings(db) };
+}
+
+// ---- about-me memory ----------------------------------------------------------
+
+function listMemory({ db, meFile }) {
+  return { ok: true, file: meFile, sections: memory.SECTIONS, items: memory.listMemories(meFile), proposals: db.listProposals() };
+}
+
+function addMemory({ meFile }, payload) {
+  if (!payload || typeof payload.section !== 'string' || typeof payload.text !== 'string') return { ok: false, error: 'bad_request' };
+  return memory.addMemory(meFile, payload.section, payload.text);
+}
+
+function forgetMemory({ meFile }, payload) {
+  if (!payload || typeof payload.section !== 'string' || typeof payload.text !== 'string') return { ok: false, error: 'bad_request' };
+  return memory.forgetMemory(meFile, payload.section, payload.text);
+}
+
+// Ask the local model whether the student's message holds anything worth
+// remembering. Results wait in the proposals table for a yes or no.
+async function suggest({ db, ai, meFile }, payload, nowIso) {
+  if (!payload || typeof payload.message !== 'string') return { ok: false, error: 'bad_request' };
+  if (!getSettings(db).suggest_memories) return { ok: true, proposals: db.listProposals() };
+  const existing = [...memory.listMemories(meFile).map((m) => m.text), ...db.listProposals().map((p) => p.text)];
+  const found = await proposals.suggest({ ai, message: payload.message, existing });
+  for (const p of found) db.addProposal({ section: p.section, text: p.text, created_at: nowIso });
+  return { ok: true, proposals: db.listProposals() };
+}
+
+function decide({ db, meFile }, payload) {
+  if (!payload || !Number.isInteger(payload.id) || typeof payload.approve !== 'boolean') return { ok: false, error: 'bad_request' };
+  const p = db.getProposal(payload.id);
+  if (!p) return { ok: false, error: 'not_found' };
+  if (p.status !== 'pending') return { ok: false, error: 'already_decided' };
+  if (payload.approve) {
+    const r = memory.addMemory(meFile, p.section, p.text);
+    if (!r.ok && r.error !== 'duplicate') return { ok: false, error: r.error };
+  }
+  db.decideProposal(p.id, payload.approve ? 'approved' : 'rejected');
+  return { ok: true, proposals: db.listProposals() };
+}
+
+// ---- activity patterns --------------------------------------------------------
+
+function getPatterns(db) {
+  const p = computePatterns(db.listEvents('assignment_done'));
+  return { ok: true, learning: getSettings(db).learn_from_activity, ...p, summary: describePatterns(p) };
+}
+
+function clearActivity(db) {
+  db.clearEvents();
+  return { ok: true };
+}
+
+// ---- onboarding -----------------------------------------------------------------
+
+function getOnboarding(db) {
+  return { ok: true, done: getSettings(db).onboarding_done, questions: onboarding.QUESTIONS };
+}
+
+function answerOnboarding({ db, meFile }, payload) {
+  if (!payload || typeof payload.id !== 'string') return { ok: false, error: 'bad_request' };
+  const r = onboarding.interpretAnswer(payload.id, payload.answer);
+  if (!r.ok) return r;
+  if (r.skipped) return { ok: true, applied: 'skipped' };
+  if (r.memory) {
+    const m = memory.addMemory(meFile, r.memory.section, r.memory.text);
+    if (!m.ok && m.error !== 'duplicate') return { ok: false, error: m.error };
+    return { ok: true, applied: 'memory' };
+  }
+  const s = saveSettings(db, r.settings);
+  return s.ok ? { ok: true, applied: 'settings' } : { ok: false, error: s.error };
+}
+
+function completeOnboarding(db) {
+  db.setSetting('onboarding_done', 'true');
+  return { ok: true };
+}
+
+// ---- deadlines the user adds themselves ---------------------------------------------
+
+// payload: { title, date: 'YYYY-MM-DD', isExam?: boolean }. Typed dates are
+// marked 'manual'; isExam lets the user say outright that it is an exam.
+function addDeadline({ db }, payload, todayIso) {
+  if (!payload || typeof payload.title !== 'string' || typeof payload.date !== 'string') return { ok: false, error: 'bad_request' };
+  if (payload.isExam !== undefined && typeof payload.isExam !== 'boolean') return { ok: false, error: 'bad_request' };
+  const title = cleanLine(payload.title, 120);
+  if (!title) return { ok: false, error: 'empty_title' };
+  if (!validIsoDate(payload.date)) return { ok: false, error: 'invalid_date' };
+  if (payload.date < todayIso) return { ok: false, error: 'date_in_past' };
+  const same = db.all(
+    "SELECT id FROM assignments WHERE date_confidence = 'manual' AND due_date = ? AND lower(title) = lower(?)",
+    [payload.date, title]
+  );
+  if (same.length) return { ok: false, error: 'duplicate' };
+  const course = db.upsertCourse({ name: PERSONAL_COURSE });
+  const id = db.addAssignment(course, {
+    title, due_date: payload.date, category: payload.isExam ? 'Exam' : null, date_confidence: 'manual',
+  });
+  return { ok: true, id };
+}
+
+function removeDeadline({ db }, payload) {
+  if (!payload || !Number.isInteger(payload.id)) return { ok: false, error: 'bad_request' };
+  return db.removeManualAssignment(payload.id) ? { ok: true } : { ok: false, error: 'not_found' };
+}
+
+// ---- the personalized answer -----------------------------------------------------------
+
+async function ask({ db, ai, meFile }, payload, todayIso, { onToken } = {}) {
+  const question = payload && typeof payload.prompt === 'string' ? payload.prompt.trim() : '';
+  if (!question) return { ok: false, error: 'empty_prompt' };
+  const settings = getSettings(db);
+  const skills = activeSkills(db, settings);
+  const contextPack = renderContextPack({
+    today: todayIso,
+    courses: db.listCourses(),
+    due: db.listDue(todayIso, addDaysIso(todayIso, 7)),
+    student: skills.includes('student'),
+  });
+  const persona = buildPersona({
+    settings,
+    skills,
+    memories: memory.listMemories(meFile),
+    patterns: computePatterns(db.listEvents('assignment_done')),
+    contextPack,
+    calendarBlock: renderCalendarBlock(calendar.upcoming(db, { days: 7 }, todayIso).occurrences),
+    question,
+  });
+  try {
+    const answer = await ai.complete({ system: persona.system, prompt: persona.prompt, cloudArgs: persona.cloud || undefined, onToken });
+    return { ok: true, answer };
+  } catch (err) {
+    return { ok: false, error: String((err && err.message) || err) };
+  }
+}
+
+module.exports = {
+  PERSONAL_COURSE,
+  getSettings, saveSettings,
+  listMemory, addMemory, forgetMemory, suggest, decide,
+  getPatterns, clearActivity,
+  getOnboarding, answerOnboarding, completeOnboarding,
+  addDeadline, removeDeadline,
+  ask,
+};

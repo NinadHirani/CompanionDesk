@@ -89,5 +89,11 @@
     return { course, grade_weights, assignments, warnings };
   }
 
-  return { fail, validIsoDate, parseModelJson, validateExtraction };
+  // A date is trustworthy when it was read cleanly from a syllabus ('extracted')
+  // or typed in by the user ('manual'). Everything else needs checking.
+  function isConfirmedDate(confidence) {
+    return confidence === 'extracted' || confidence === 'manual';
+  }
+
+  return { fail, validIsoDate, parseModelJson, validateExtraction, isConfirmedDate };
 });
