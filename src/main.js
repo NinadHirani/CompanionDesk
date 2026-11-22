@@ -6,7 +6,7 @@
 // Handler logic lives in services.js and personal.js so it can be tested
 // without Electron; this file only wires channels to those functions.
 
-const { app, BrowserWindow, ipcMain, dialog, session, desktopCapturer, systemPreferences } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, session, desktopCapturer, systemPreferences, shell } = require('electron');
 const { createOverlayController } = require('./overlay');
 const hotkey = require('./hotkey');
 const voice = require('./voice');
@@ -20,6 +20,7 @@ const { collectHealth } = require('./health');
 const path = require('path');
 const LocalDb = require('./db');
 const { createAi } = require('./ai');
+const OllamaSetup = require('./ollama-setup');
 const { ingestSyllabus } = require('./ingest');
 const { humanizeImportError } = require('./import-errors');
 const { getBrief, setDone } = require('./services');
@@ -242,6 +243,67 @@ function registerIpc() {
   ipcMain.handle('app:docs', async () => readDocs(path.join(__dirname, '..')));
 
   ipcMain.handle('deadline:remove', async (_e, payload) => P.removeDeadline(ctx(), payload));
+
+  // Ollama onboarding. The main process detects, reports the official install
+  // route, opens ONLY the allowlisted official URLs, checks disk space, and
+  // streams a user-initiated model pull. It never runs an installer and never
+  // starts a download on its own; every pull begins with a renderer click.
+  let pullAbort = null;
+  ipcMain.handle('ollama:detect', async () => OllamaSetup.detectOllama({ ollamaUrl: OllamaSetup.defaultOllamaUrl() }));
+
+  ipcMain.handle('ollama:setupPlan', async () => ({
+    ok: true,
+    platform: process.platform,
+    plan: OllamaSetup.installPlan(process.platform),
+  }));
+
+  ipcMain.handle('ollama:openInstall', async () => {
+    const plan = OllamaSetup.installPlan(process.platform);
+    if (!plan || !plan.url || !OllamaSetup.isOpenableUrl(plan.url)) return { ok: false, error: 'no_plan' };
+    await shell.openExternal(plan.url);
+    return { ok: true, url: plan.url, kind: plan.kind };
+  });
+
+  ipcMain.handle('ollama:diskCheck', async (_e, payload) => {
+    const neededBytes = Math.max(1, Number(payload && payload.neededBytes) || 1);
+    const dir = app.getPath('home');
+    try {
+      const st = await fs.promises.statfs(dir);
+      return OllamaSetup.diskVerdict({ freeBytes: Number(st.bavail) * Number(st.bsize), neededBytes });
+    } catch (err) {
+      return { ok: false, error: 'statfs_failed', message: String((err && err.message) || err) };
+    }
+  });
+
+  ipcMain.handle('ollama:pullStart', async (e, payload) => {
+    if (pullAbort) return { ok: false, error: 'pull_in_progress' };
+    const model = payload && typeof payload.model === 'string' && payload.model.trim()
+      ? payload.model.trim()
+      : OllamaSetup.RECOMMENDED_MODEL;
+    pullAbort = new AbortController();
+    const sender = e.sender;
+    try {
+      const res = await OllamaSetup.pullModel({
+        ollamaUrl: OllamaSetup.defaultOllamaUrl(),
+        model,
+        signal: pullAbort.signal,
+        onProgress: (p) => {
+          if (!sender.isDestroyed()) sender.send('ollama:pullProgress', p);
+        },
+      });
+      return { ok: true, ...res };
+    } catch (err) {
+      const aborted = pullAbort.signal.aborted;
+      return { ok: false, error: aborted ? 'cancelled' : String((err && err.message) || err) };
+    } finally {
+      pullAbort = null;
+    }
+  });
+
+  ipcMain.handle('ollama:pullCancel', async () => {
+    if (pullAbort) pullAbort.abort();
+    return { ok: true };
+  });
 }
 
 app.whenReady().then(async () => {

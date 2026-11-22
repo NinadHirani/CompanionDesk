@@ -50,10 +50,16 @@ const IPC_CHANNELS = [
   'update:download',
   'update:install',
   'update:openReleases',
+  'ollama:detect',
+  'ollama:setupPlan',
+  'ollama:openInstall',
+  'ollama:diskCheck',
+  'ollama:pullStart',
+  'ollama:pullCancel',
 ];
 
 // Messages main may push to this window. Mirrors IPC_EVENTS in ipc-channels.js.
-const IPC_EVENTS = ['overlay:token', 'overlay:reset', 'update:state'];
+const IPC_EVENTS = ['overlay:token', 'overlay:reset', 'update:state', 'ollama:pullProgress'];
 
 const api = {};
 for (const channel of IPC_CHANNELS) {
