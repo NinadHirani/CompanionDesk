@@ -19,14 +19,43 @@ how you work. Everything stays on your machine.
 
 ## Download and install
 
-Installers live on [GitHub Releases](https://github.com/NinadHirani/CompanionDesk/releases/latest):
-a DMG for macOS Apple Silicon, a Windows installer, and a Linux AppImage.
+**Downloads are not live yet.** The repository is private and release
+publishing is still switched off, so the links below have nothing behind
+them until publishing is enabled and approved; see
+[docs/DISTRIBUTION.md](docs/DISTRIBUTION.md) for exactly how that works.
+Once it is on, installers live on the
+[GitHub Releases page](https://github.com/NinadHirani/CompanionDesk/releases):
+
+- **macOS, Apple Silicon (M1 and later):** `CompanionDesk-<version>-arm64.dmg`
+- **macOS, Intel:** `CompanionDesk-<version>-x64.dmg`
+- **Windows:** `CompanionDesk-Setup-<version>.exe`
+- **Linux:** `CompanionDesk-<version>.AppImage` - `chmod +x` it, then run it
+
+Two channels share that page:
+
+- **Continuous prerelease** (tag `continuous`): a fresh build for every
+  approved push to the `distribution` branch. Versions look like
+  `0.1.0-ci.N`. Newest features, least testing; marked "Pre-release".
+- **Stable releases** (tags `v*`): built from tagged commits and held as a
+  draft for a person to review before they are published.
+
 The app checks for updates itself and never installs one without your
-click. On macOS the build is currently unsigned, so updates arrive as a
-download rather than an in-place upgrade; see
-[docs/DISTRIBUTION.md](docs/DISTRIBUTION.md) for the full story, including
-what signing changes. Test builds from every commit land on the
-[continuous prerelease](https://github.com/NinadHirani/CompanionDesk/releases/tag/continuous).
+click. Per platform:
+
+- **macOS:** the build is currently unsigned, so Gatekeeper stops the
+  first launch. Control-click the app and choose Open, or approve it under
+  System Settings > Privacy & Security ("Open Anyway"). Updates stay
+  manual on macOS too: an unsigned build cannot be replaced in place, so
+  "Check for updates" tells you a new version is out and you download it
+  from the Releases page. Real automatic updates on macOS need Developer
+  ID signing plus notarization, which requires a paid Apple Developer
+  account; that setup is documented in
+  [docs/DISTRIBUTION.md](docs/DISTRIBUTION.md).
+- **Windows:** the installer is unsigned, so SmartScreen may show a
+  warning; choose "More info" then "Run anyway". In-app updates work
+  normally once installed.
+- **Linux:** AppImage updates are checked and applied in-app after your
+  confirmation, same as the flow above.
 
 ## Made to fit one person
 
