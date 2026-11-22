@@ -1,79 +1,85 @@
-name: Stable release (draft)
+# Stable tagged releases. Pushing a tag v* builds the installers and puts a
+# DRAFT GitHub release up with the update feed files. Nothing becomes public
+# automatically: a person reviews the draft and clicks Publish. Installed
+# apps on the stable channel then see the release through its update feed.
+#
+# Requires the tag's version to match package.json (checked in CI).
 
-# A stable release is always a DRAFT: nothing becomes publicly visible until
-# a person opens the draft release and publishes it. Publishing only runs
-# when DISTRIBUTION_PUBLISH is set to "always"; otherwise it is a dry run.
+name: Stable release (tagged, drafted for review)
 
 on:
   push:
     tags:
-      - "v*.*.*"
-  workflow_dispatch:
-    inputs:
-      tag:
-        description: "Existing tag to build (vX.Y.Z)"
-        required: true
-
-defaults:
-  run:
-    shell: bash
+      - 'v*'
 
 permissions:
   contents: write
 
+concurrency:
+  group: stable-release
+  cancel-in-progress: false
+
 jobs:
   build:
+    name: Build & draft release (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
         include:
-          - os: ubuntu-24.04
-            script: "--linux"
-            name: linux
           - os: macos-latest
-            script: "--mac"
-            name: macos
-    runs-on: ${{ matrix.os }}
+            args: --mac
+          - os: ubuntu-24.04
+            args: --linux
+          - os: windows-latest
+            args: --win
+
+    env:
+      DISTRIBUTION_PUBLISH: always
+      DISTRIBUTION_CHANNEL: stable
+      STABLE_TAG: ${{ github.ref_name }}
+
     steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ inputs.tag || github.ref }}
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-      - run: npm ci
-      - run: npm test
-      - name: Resolve publish gate
-        id: gate
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Check the tag matches package.json
+        shell: bash
         run: |
-          if [ "${{ vars.DISTRIBUTION_PUBLISH }}" = "always" ]; then
-            echo "publish=always" >> "$GITHUB_OUTPUT"
-          else
-            echo "publish=never" >> "$GITHUB_OUTPUT"
+          TAG="${GITHUB_REF_NAME#v}"
+          PKG=$(node -p "require('./package.json').version.replace(/-.*$/, '')")
+          if [ "$TAG" != "$PKG" ]; then
+            echo "Tag v$TAG does not match package.json version $PKG. Fix one of them and re-tag."; exit 1
           fi
-      - name: Build
+
+      - name: Use Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build and draft the release
         env:
-          DISTRIBUTION_PUBLISH: ${{ steps.gate.outputs.publish }}
-          DISTRIBUTION_CHANNEL: stable
-          STABLE_TAG: ${{ inputs.tag || github.ref_name }}
-        run: node scripts/build-dist.js ${{ matrix.script }}
-      - name: Upload artifacts (drafted stable release is filled by a person)
-        if: steps.gate.outputs.publish == 'always'
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: node scripts/build-dist.js ${{ matrix.args }}
+
+      - name: Upload artifacts (build log)
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: CompanionDesk-${{ matrix.name }}
+          name: dist-${{ matrix.os }}
           path: |
-            dist/CompanionDesk-*.AppImage
-            dist/CompanionDesk-*.dmg
-            dist/latest-*.yml
-          retention-days: 30
-      - name: Upload build for dry-run inspection
-        if: steps.gate.outputs.publish != 'always'
-        uses: actions/upload-artifact@v4
-        with:
-          name: CompanionDesk-dryrun-${{ matrix.name }}
-          path: |
-            dist/CompanionDesk-*.AppImage
-            dist/CompanionDesk-*.dmg
-            dist/latest-*.yml
+            dist/*.dmg
+            dist/*.exe
+            dist/*.AppImage
+            dist/*.yml
+          if-no-files-found: ignore
           retention-days: 7
