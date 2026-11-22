@@ -26,8 +26,26 @@
     cloudModel = DEFAULT_CLOUD_MODEL,
     geminiKey = null,
   } = {}) {
-    function messagesFor({ system, prompt }) {
-      return system ? [{ role: 'system', content: system }, { role: 'user', content: prompt }] : [{ role: 'user', content: prompt }];
+    // images: optional array of base64 strings attached to the user message (vision models).
+    function messagesFor({ system, prompt, images }) {
+      const user = images && images.length ? { role: 'user', content: prompt, images } : { role: 'user', content: prompt };
+      return system ? [{ role: 'system', content: system }, user] : [user];
+    }
+
+    // Is a model with this name (ignoring the :tag) installed in Ollama right now?
+    async function hasModel(name) {
+      try {
+        const res = await fetchImpl(`${ollamaUrl}/api/tags`, { signal: AbortSignal.timeout(STATUS_TIMEOUT_MS) });
+        if (!res.ok) return false;
+        const family = String(name).split(':')[0];
+        const wantsTag = String(name).includes(':');
+        return ((await res.json()).models || []).some((m) => {
+          const n = String(m.name || '');
+          return wantsTag ? n === name : n.split(':')[0] === family;
+        });
+      } catch {
+        return false;
+      }
     }
 
     async function status() {
@@ -45,7 +63,7 @@
       }
     }
 
-    async function chatOllama({ system, prompt, model, temperature = 0.1, onToken } = {}) {
+    async function chatOllama({ system, prompt, model, temperature = 0.1, onToken, images } = {}) {
       const res = await fetchImpl(`${ollamaUrl}/api/chat`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
@@ -53,7 +71,7 @@
           model: model || localModel,
           stream: true,
           options: { temperature },
-          messages: messagesFor({ system, prompt }),
+          messages: messagesFor({ system, prompt, images }),
         }),
       });
       if (!res.ok) throw new Error(`ollama_http_${res.status}`);
@@ -117,16 +135,23 @@
     }
 
     // Local first; cloud only when a key exists and the local call failed.
+    // args.cloudArgs, when given, REPLACES system/prompt for the cloud call
+    // only. Callers that put personal context in the local prompt use it to
+    // send a minimal prompt to the cloud instead. Without it the cloud gets
+    // exactly what the local model got (unchanged behavior).
     async function complete(args) {
       try {
         return await chatOllama(args);
       } catch (err) {
-        if (geminiKey) return chatGemini(args);
+        if (geminiKey) {
+          const { cloudArgs, ...rest } = args || {};
+          return chatGemini(cloudArgs ? { ...rest, ...cloudArgs } : rest);
+        }
         throw err;
       }
     }
 
-    return { status, chat: chatOllama, chatGemini, complete };
+    return { status, hasModel, chat: chatOllama, chatGemini, complete };
   }
 
   return createAi;

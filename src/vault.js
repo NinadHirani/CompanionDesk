@@ -6,6 +6,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const { isConfirmedDate } = require('./extraction-core');
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
@@ -43,7 +44,7 @@ function writeClassFile(vaultDir, { course, grade_weights, assignments, warnings
     return a.due_date < b.due_date ? -1 : a.due_date > b.due_date ? 1 : 0;
   });
   for (const a of sorted) {
-    const conf = a.date_confidence === 'extracted' ? 'ok' : `flagged (${a.date_confidence}; verify in LMS)`;
+    const conf = a.date_confidence === 'manual' ? 'ok (added by you)' : isConfirmedDate(a.date_confidence) ? 'ok' : `flagged (${a.date_confidence}; verify in LMS)`;
     lines.push(`| ${fmtDate(a.due_date) || 'TBA'} | ${a.title} | ${a.category || ''} | ${conf} |`);
   }
   if (warnings && warnings.length) {

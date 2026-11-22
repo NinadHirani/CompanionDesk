@@ -6,6 +6,10 @@ on:
   pull_request:
     branches: [ main ]
 
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   test:
     name: Test on ${{ matrix.os }} (Node ${{ matrix.node-version }})
@@ -14,7 +18,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [macos-latest, ubuntu-latest]
-        node-version: [20.x, 22.x]
+        node-version: [22.x]
 
     steps:
       - name: Checkout repository

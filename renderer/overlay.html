@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'none'" />
+  <title>CompanionDesk overlay</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body class="overlay">
+  <div class="ov-top">
+    <input id="ov-input" type="text" maxlength="2000" autocomplete="off" aria-label="Ask CompanionDesk" placeholder="Ask about your week" />
+    <button id="ov-screen" aria-label="Ask about my screen">Screen</button>
+    <button id="ov-mic" aria-label="Speak your question">Speak</button>
+    <button id="ov-close" aria-label="Close overlay">Esc</button>
+  </div>
+  <div id="ov-picker" class="ov-picker" hidden></div>
+  <div id="ov-preview" class="ov-preview" hidden role="status"><img alt="" /><span></span></div>
+  <div id="ov-answer" class="ov-answer" aria-live="polite"></div>
+  <p id="ov-hint" class="hint">Enter to ask. Esc to close.</p>
+  <script src="errors.js"></script>
+  <script src="pcm.js"></script>
+  <script src="recorder.js"></script>
+  <script src="overlay.js"></script>
+</body>
+</html>
