@@ -20,8 +20,8 @@ how you work. Everything stays on your machine.
 ## Download / Install
 
 Installable builds exist today, but they are **GitHub Actions artifacts, not
-GitHub Releases**. The repository is private and release publishing is still
-switched off, so the [Releases page](https://github.com/NinadHirani/CompanionDesk/releases)
+GitHub Releases**. Release publishing is still switched off, so the
+[Releases page](https://github.com/NinadHirani/CompanionDesk/releases)
 has nothing behind it yet; see "GitHub Releases (once publishing is enabled)"
 below for what that page will hold. No public download links exist.
 
@@ -31,10 +31,13 @@ below for what that page will hold. No public download links exist.
    - **Android APK:** [Actions · Android APK](https://github.com/NinadHirani/CompanionDesk/actions/workflows/android-apk.yml)
    - **macOS / Windows / Linux desktop builds:** [Actions · Continuous releases](https://github.com/NinadHirani/CompanionDesk/actions/workflows/release-continuous.yml)
 2. Click the latest green run, expand the **Artifacts** section, and download
-   the artifact for your platform. You must be **signed in to GitHub**, since
-   the repository is private. The download is a **ZIP**: unzip it to get the
-   installer/APK inside.
-3. Artifacts are kept for **7 days**, so grab one from a recent run.
+   the artifact for your platform. GitHub requires you to be **signed in to
+   GitHub** to download artifacts, even on a public repository. The download is
+   a **ZIP**: unzip it to get the installer/APK inside.
+3. Artifact retention varies by workflow: the desktop builds are kept for
+   **7 days** (that workflow sets it explicitly), while the Android APK artifact
+   uses GitHub's default **90-day** retention (the current one expires
+   20 Feb 2027). Either way, grab one from a recent run.
 
 **Artifacts and their filenames:**
 
