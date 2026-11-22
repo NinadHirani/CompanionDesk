@@ -19,13 +19,20 @@ how you work. Everything stays on your machine.
 
 ## Download / Install
 
-Installable builds exist today, but they are **GitHub Actions artifacts, not
-GitHub Releases**. Release publishing is still switched off, so the
-[Releases page](https://github.com/NinadHirani/CompanionDesk/releases)
-has nothing behind it yet; see "GitHub Releases (once publishing is enabled)"
-below for what that page will hold. No public download links exist.
+**Android, direct download (no sign-in needed):** [Download app-debug.apk](https://github.com/NinadHirani/CompanionDesk/releases/download/v0.1.0-android-preview.1/app-debug.apk)
+from release [v0.1.0-android-preview.1](https://github.com/NinadHirani/CompanionDesk/releases/tag/v0.1.0-android-preview.1).
+It is a **debug-signed preview for testing only** (not Play-Store-ready; sha256
+`d99d267a56416b0d021ee39040be4fcb4003a3b7b8263352301ee3866f8e0830`), and
+install/run on real hardware is not yet verified — read the release notes for
+install and update caveats. Desktop Ollama does not run on Android: AI answers
+there need the opt-in Gemini fallback you configure yourself, or a companion
+desktop. Everything else (deadlines, syllabus import, calendar) is local.
 
-**How to get a build now:**
+Desktop builds (macOS / Windows / Linux) remain **GitHub Actions artifacts, not
+GitHub Releases**: desktop release publishing is still switched off, so the
+[Releases page](https://github.com/NinadHirani/CompanionDesk/releases) holds
+the Android preview only. To get a desktop build (or a newer Android build
+than the pinned preview):
 
 1. Open the workflow's Actions page (stable link, latest runs on top):
    - **Android APK:** [Actions · Android APK](https://github.com/NinadHirani/CompanionDesk/actions/workflows/android-apk.yml)
