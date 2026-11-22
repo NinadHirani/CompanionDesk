@@ -45,10 +45,15 @@ const IPC_CHANNELS = [
   'screen:ask',
   'app:docs',
   'health:check',
+  'update:status',
+  'update:check',
+  'update:download',
+  'update:install',
+  'update:openReleases',
 ];
 
 // Messages main may push to this window. Mirrors IPC_EVENTS in ipc-channels.js.
-const IPC_EVENTS = ['overlay:token', 'overlay:reset'];
+const IPC_EVENTS = ['overlay:token', 'overlay:reset', 'update:state'];
 
 const api = {};
 for (const channel of IPC_CHANNELS) {

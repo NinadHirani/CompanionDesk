@@ -1,0 +1,90 @@
+# Continuous distribution builds. Every push to the "distribution" branch
+# rebuilds installable artifacts and (once enabled) publishes them to the
+# "continuous" prerelease, which installed apps on the continuous channel
+# follow. Commits never masquerade as stable releases: the release is a
+# prerelease tagged "continuous", and its version carries a -ci.N suffix.
+#
+# Publishing is gated on the repository variable ENABLE_CONTINUOUS_RELEASES
+# being "true", so the pipeline can be wired up and tested dry-run first.
+
+name: Continuous releases (distribution branch)
+
+on:
+  push:
+    branches: [ distribution ]
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Build artifacts without publishing'
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+
+concurrency:
+  group: continuous-release
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build & publish (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            args: --mac
+          - os: ubuntu-24.04
+            args: --linux
+          - os: windows-latest
+            args: --win
+
+    env:
+      # Publish only when the repository variable turns the channel on and
+      # this is not a dry run; otherwise artifacts are built and kept in CI.
+      DISTRIBUTION_PUBLISH: ${{ (vars.ENABLE_CONTINUOUS_RELEASES == 'true' && inputs.dry_run != true) && 'always' || 'never' }}
+      DISTRIBUTION_CHANNEL: continuous
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Use Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Set continuous version (ci.${{ github.run_number }})
+        run: node scripts/set-ci-version.js ${{ github.run_number }}
+
+      - name: Build and publish
+        env:
+          # The built-in token is enough to publish to this same repository.
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Optional macOS signing + notarization. When unset, the DMG is
+          # built unsigned and auto-update stays manual on macOS by design.
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: node scripts/build-dist.js ${{ matrix.args }}
+
+      - name: Upload artifacts (build log)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist-${{ matrix.os }}
+          path: |
+            dist/*.dmg
+            dist/*.exe
+            dist/*.AppImage
+            dist/*.yml
+          if-no-files-found: ignore
+          retention-days: 7

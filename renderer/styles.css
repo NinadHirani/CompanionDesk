@@ -199,3 +199,9 @@ details summary { cursor: pointer; margin: 6px 0; }
 .badge-needed { background: var(--bad); color: var(--accent-ink); }
 .cmd { display: flex; align-items: center; gap: 8px; margin-top: 4px; }
 .cmd code { flex: 1; overflow-x: auto; white-space: nowrap; background: var(--bg); padding: 6px 8px; border-radius: 4px; font-size: 12px; }
+
+/* Update banner: one line, one action, user-controlled. */
+.update-bar { display: flex; align-items: center; gap: 12px; padding: 8px 16px; background: var(--tag-bg); border-bottom: 1px solid var(--line, #ddd); font-size: 13px; }
+.update-bar.error { background: var(--warn-bg); }
+.update-bar .update-actions { display: flex; gap: 8px; margin-left: auto; }
+.update-bar[hidden] { display: none; }

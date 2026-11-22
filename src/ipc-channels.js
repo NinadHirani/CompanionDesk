@@ -43,11 +43,16 @@ const IPC_CHANNELS = Object.freeze([
   'screen:ask',
   'app:docs',
   'health:check',
+  'update:status',
+  'update:check',
+  'update:download',
+  'update:install',
+  'update:openReleases',
 ]);
 
 // Messages main may PUSH to a window (streaming tokens and the like). The
 // renderer can only listen to these; the preload mirrors this list inline.
-const IPC_EVENTS = Object.freeze(['overlay:token', 'overlay:reset']);
+const IPC_EVENTS = Object.freeze(['overlay:token', 'overlay:reset', 'update:state']);
 
 function isAllowed(channel) {
   return IPC_CHANNELS.includes(channel);
