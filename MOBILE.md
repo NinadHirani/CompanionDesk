@@ -40,20 +40,34 @@ extraction uses the opt-in Gemini free-tier key — exactly the fallback the
 desktop app already supports. The markdown vault export is desktop-only in
 this milestone.
 
-## Verified vs not verified (as of Oct 23, 2026)
+## Verified vs not verified (as of Nov 22, 2026)
 
-- Verified locally: `npm test` 19/19 green (Node 22); the web bundle
-  assembles and every script parses; the server serves it (HTTP 200).
-- Not verified: the web UI has not been exercised in a real browser session or
-  on a device yet, and no APK/IPA has been built (see below).
+- Verified locally: `npm test` green on Node 22 (full suite); the web bundle
+  assembles and every script parses; the server serves it (HTTP 200). On
+  Oct 23, 2026 the web UI was additionally exercised headlessly in Chromium
+  (dashboard renders, IndexedDB-backed sql.js opens, correct no-Ollama
+  status) and a Capacitor Android debug APK was built once and
+  signature-verified locally.
+- Verified in CI: since Nov 22, 2026, `npx cap sync android` plus
+  `gradlew assembleDebug` runs on every main push that touches mobile files
+  (and on manual dispatch); the resulting debug APK is uploaded as a
+  workflow artifact named `companiondesk-android-debug-apk`.
+- Not verified: installing or running the APK on a real Android device;
+  release signing (the artifact is debug-signed, and each CI run signs with
+  a fresh debug key, so installing an update over a previous install needs
+  an uninstall first); store accounts, fees, and store assets (see below).
 
 ## Android (Google Play) — what remains
 
-1. `npm install @capacitor/core @capacitor/cli @capacitor/android`
-   (needs the owner's OK: node package downloads).
-2. `npx cap add android` then `npx cap sync`, then a Gradle build
-   (JDK 17 + Android SDK; roughly 2-3 GB of tooling downloads — needs the
-   owner's OK before it happens on any machine).
+1. DONE (Nov 22, 2026): `@capacitor/core`, `@capacitor/cli` and
+   `@capacitor/android` are pinned dev dependencies, and the generated
+   `android/` Capacitor project is committed at
+   `app.companiondesk.assistant` (min SDK 22, target/compile SDK 34,
+   INTERNET only).
+2. DONE (Nov 22, 2026) for CI: `.github/workflows/android-apk.yml` builds a
+   debug APK on GitHub Actions (no local Android tooling needed) and uploads
+   it as the `companiondesk-android-debug-apk` workflow artifact. A local
+   Gradle build still needs JDK 17 + the Android SDK on your own machine.
 3. A generated upload keystore and signing config (kept out of git).
 4. A Google Play developer account (one-time USD 25 fee) — the owner's.
 5. Store listing assets, Data safety form, content rating, and a privacy
