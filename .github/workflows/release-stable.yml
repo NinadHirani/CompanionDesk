@@ -1,0 +1,79 @@
+name: Stable release (draft)
+
+# A stable release is always a DRAFT: nothing becomes publicly visible until
+# a person opens the draft release and publishes it. Publishing only runs
+# when DISTRIBUTION_PUBLISH is set to "always"; otherwise it is a dry run.
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing tag to build (vX.Y.Z)"
+        required: true
+
+defaults:
+  run:
+    shell: bash
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            script: "--linux"
+            name: linux
+          - os: macos-latest
+            script: "--mac"
+            name: macos
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - name: Resolve publish gate
+        id: gate
+        run: |
+          if [ "${{ vars.DISTRIBUTION_PUBLISH }}" = "always" ]; then
+            echo "publish=always" >> "$GITHUB_OUTPUT"
+          else
+            echo "publish=never" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Build
+        env:
+          DISTRIBUTION_PUBLISH: ${{ steps.gate.outputs.publish }}
+          DISTRIBUTION_CHANNEL: stable
+          STABLE_TAG: ${{ inputs.tag || github.ref_name }}
+        run: node scripts/build-dist.js ${{ matrix.script }}
+      - name: Upload artifacts (drafted stable release is filled by a person)
+        if: steps.gate.outputs.publish == 'always'
+        uses: actions/upload-artifact@v4
+        with:
+          name: CompanionDesk-${{ matrix.name }}
+          path: |
+            dist/CompanionDesk-*.AppImage
+            dist/CompanionDesk-*.dmg
+            dist/latest-*.yml
+          retention-days: 30
+      - name: Upload build for dry-run inspection
+        if: steps.gate.outputs.publish != 'always'
+        uses: actions/upload-artifact@v4
+        with:
+          name: CompanionDesk-dryrun-${{ matrix.name }}
+          path: |
+            dist/CompanionDesk-*.AppImage
+            dist/CompanionDesk-*.dmg
+            dist/latest-*.yml
+          retention-days: 7

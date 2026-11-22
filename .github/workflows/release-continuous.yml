@@ -1,0 +1,104 @@
+name: Continuous distribution releases
+
+# Builds installable artifacts for every commit pushed to the distribution
+# branch and publishes them as a PRERELEASE tagged "continuous" so they can
+# never be mistaken for stable releases. Publishing only happens when the
+# DISTRIBUTION_PUBLISH variable is set to "always"; without it the workflow
+# runs in dry-run (build + upload as workflow artifacts, no release touch).
+
+on:
+  push:
+    branches: [distribution]
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Build but do not publish"
+        type: boolean
+        default: true
+
+concurrency:
+  group: release-continuous-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  linux:
+    runs-on: ubuntu-24.04
+    outputs:
+      publish: ${{ steps.gate.outputs.publish }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - name: Resolve publish gate
+        id: gate
+        run: |
+          if [ "${{ vars.DISTRIBUTION_PUBLISH }}" = "always" ] && [ "${{ inputs.dry_run }}" != "true" ]; then
+            echo "publish=always" >> "$GITHUB_OUTPUT"
+          else
+            echo "publish=never" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Build AppImage (x64)
+        env:
+          DISTRIBUTION_PUBLISH: ${{ steps.gate.outputs.publish }}
+          DISTRIBUTION_CHANNEL: continuous
+        run: node scripts/build-dist.js --linux
+      - name: Publish continuous prerelease
+        if: steps.gate.outputs.publish == 'always'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload continuous dist/CompanionDesk-*.AppImage dist/latest-linux.yml --clobber
+      - name: Upload build for dry-run inspection
+        if: steps.gate.outputs.publish != 'always'
+        uses: actions/upload-artifact@v4
+        with:
+          name: CompanionDesk-linux
+          path: |
+            dist/CompanionDesk-*.AppImage
+            dist/latest-linux.yml
+          retention-days: 7
+
+  macos:
+    runs-on: macos-latest
+    needs: linux
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - name: Resolve publish gate
+        id: gate
+        run: |
+          if [ "${{ vars.DISTRIBUTION_PUBLISH }}" = "always" ] && [ "${{ inputs.dry_run }}" != "true" ]; then
+            echo "publish=always" >> "$GITHUB_OUTPUT"
+          else
+            echo "publish=never" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Build DMG (arm64)
+        env:
+          DISTRIBUTION_PUBLISH: ${{ steps.gate.outputs.publish }}
+          DISTRIBUTION_CHANNEL: continuous
+        run: node scripts/build-dist.js --mac
+      - name: Publish continuous prerelease
+        if: steps.gate.outputs.publish == 'always'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload continuous dist/CompanionDesk-*.dmg dist/latest-mac.yml --clobber
+      - name: Upload build for dry-run inspection
+        if: steps.gate.outputs.publish != 'always'
+        uses: actions/upload-artifact@v4
+        with:
+          name: CompanionDesk-macos
+          path: |
+            dist/CompanionDesk-*.dmg
+            dist/latest-mac.yml
+          retention-days: 7
