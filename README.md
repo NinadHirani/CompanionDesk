@@ -17,14 +17,62 @@ how you work. Everything stays on your machine.
 - **Your data is yours.** One SQLite file plus a markdown vault you can open
   in any editor. Delete the folder and it is gone.
 
-## Download and install
+## Download / Install
 
-**Downloads are not live yet.** The repository is private and release
-publishing is still switched off, so the links below have nothing behind
-them until publishing is enabled and approved; see
-[docs/DISTRIBUTION.md](docs/DISTRIBUTION.md) for exactly how that works.
-Once it is on, installers live on the
-[GitHub Releases page](https://github.com/NinadHirani/CompanionDesk/releases):
+Installable builds exist today, but they are **GitHub Actions artifacts, not
+GitHub Releases**. The repository is private and release publishing is still
+switched off, so the [Releases page](https://github.com/NinadHirani/CompanionDesk/releases)
+has nothing behind it yet; see "GitHub Releases (once publishing is enabled)"
+below for what that page will hold. No public download links exist.
+
+**How to get a build now:**
+
+1. Open the workflow's Actions page (stable link, latest runs on top):
+   - **Android APK:** [Actions · Android APK](https://github.com/NinadHirani/CompanionDesk/actions/workflows/android-apk.yml)
+   - **macOS / Windows / Linux desktop builds:** [Actions · Continuous releases](https://github.com/NinadHirani/CompanionDesk/actions/workflows/release-continuous.yml)
+2. Click the latest green run, expand the **Artifacts** section, and download
+   the artifact for your platform. You must be **signed in to GitHub**, since
+   the repository is private. The download is a **ZIP**: unzip it to get the
+   installer/APK inside.
+3. Artifacts are kept for **7 days**, so grab one from a recent run.
+
+**Artifacts and their filenames:**
+
+| Artifact (workflow) | Contains | For |
+| --- | --- | --- |
+| `companiondesk-android-debug-apk` (Android APK) | `app-debug.apk` | Android phones |
+| `dist-macos-latest` (Continuous releases) | `CompanionDesk-<version>-arm64.dmg`, `CompanionDesk-<version>-x64.dmg` | macOS Apple Silicon (M1 and later) / Intel |
+| `dist-windows-latest` (Continuous releases) | `CompanionDesk-Setup-<version>.exe` | Windows |
+| `dist-ubuntu-24.04` (Continuous releases) | `CompanionDesk-<version>.AppImage` | Linux (`chmod +x`, then run) |
+
+The version is `0.1.0-ci.N`, where N is the run number, so filenames differ
+per run.
+
+**Recent verified runs (examples; each link expires with its artifacts):**
+
+- Android APK: [run 45011456647](https://github.com/NinadHirani/CompanionDesk/actions/runs/45011456647),
+  artifact `companiondesk-android-debug-apk` (4.4 MB, sha256
+  `d99d267a56416b0d021ee39040be4fcb4003a3b7b8263352301ee3866f8e0830`).
+  Debug-signed only: every run signs with a fresh debug key, so installing a
+  newer APK over an installed one requires uninstalling first. Install/run on
+  a real device is not yet verified.
+- macOS: [run 45012671571](https://github.com/NinadHirani/CompanionDesk/actions/runs/45012671571),
+  artifact `dist-macos-latest` (about 303 MB) containing
+  `CompanionDesk-0.1.0-ci.3-arm64.dmg` (Apple Silicon) and
+  `CompanionDesk-0.1.0-ci.3-x64.dmg` (Intel).
+
+**Limitations:** the macOS/Windows/Linux builds are **unsigned** (see the
+Gatekeeper and SmartScreen notes under "GitHub Releases (once publishing is enabled)" below); the
+Android APK is **debug-signed** and untested on a device. Nothing is signed
+with a Developer ID / release key yet, and no GitHub Release exists.
+
+## GitHub Releases (once publishing is enabled)
+
+**Nothing has been published here yet.** Release publishing stays switched
+off until it is approved (see [docs/DISTRIBUTION.md](docs/DISTRIBUTION.md)
+for exactly how that works). Once it is on, installers live on the
+[GitHub Releases page](https://github.com/NinadHirani/CompanionDesk/releases);
+until then, the builds described above are the only installable artifacts:
 
 - **macOS, Apple Silicon (M1 and later):** `CompanionDesk-<version>-arm64.dmg`
 - **macOS, Intel:** `CompanionDesk-<version>-x64.dmg`
