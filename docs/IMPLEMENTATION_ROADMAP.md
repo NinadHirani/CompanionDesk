@@ -1,8 +1,8 @@
 # CompanionDesk Implementation Roadmap
 
 Status: M0 and M1 are COMPLETE on main (verified 23 Nov 2026; current
-baseline `6e7a975`, 411 passing tests, three green main-branch CI workflows:
-CI 45215671429, CI macOS + Linux 45215671479, Android APK 45216119154 — the
+baseline `bccfa75`, 411 passing tests, three green main-branch CI workflows:
+CI 45224283832, CI macOS + Linux 45224283878, Android APK 45224409304 — the
 APK run was a manual dispatch because its path filter does not trigger on
 docs- and src-only changes). Supersedes `docs/COMPANIONDESK_ROADMAP.md` and
 `docs/FEATURE_GAP.md` once approved; those files stay until then. Phases
@@ -165,9 +165,10 @@ Review fix (23 Nov 2026): fault details are strictly whitelisted (a
 3-digit HTTP status or an errno-style network code, at most 32 characters;
 anything else drops the detail) and every fault crossing the status view is
 normalized through that sanitizer, fail closed.
-M1 is COMPLETE (23 Nov 2026, main `6e7a975`): final suite 411 passing
-tests, three green main-branch CI workflows (CI 45215671429, CI macOS +
-Linux 45215671479, Android APK 45216119154, the APK manually dispatched).
+M1 is COMPLETE (23 Nov 2026, final head `bccfa75`): final suite 411 passing
+tests, three green main-branch CI workflows on that head (CI
+45224283832, CI macOS + Linux 45224283878, Android APK 45224409304, the
+APK manually dispatched).
 Acceptance verified: routing decisions unit-tested; no hardcoded model
 constants in `src/ai.js` (defaults come from the provider registry);
 contract tests per provider (scripted fake servers for Ollama
@@ -176,6 +177,12 @@ sanitization review fix is merged (d36dc01) with adversarial tests, and
 docs were reconciled to this state.
 
 ## GATE 1 - Android intelligence (3-4 wks, device time)
+
+Prepared (23 Nov 2026, repo-only): the offline benchmark scaffold lives in
+experiments/android-inference-benchmark/ — collection scripts, a results
+schema, a license-verification matrix (llama.cpp MIT, MLC Apache-2.0, Qwen
+2.5-0.5B / SmolLM2 / TinyLlama Apache-2.0) and a self-test wired into
+`npm test`. Nothing has run on a device; all numbers remain pending.
 
 Work: Capacitor plugin wrapping llama.cpp via JNI with one quantized sub-1B
 model; measure tokens/s, RAM, battery, thermals on the OnePlus 12R. Separately

@@ -1,14 +1,14 @@
 # CompanionDesk Product Blueprint
 
 Status: **proposed** in direction; M0 and M1 are COMPLETE on main, verified
-23 Nov 2026. The current verified baseline is main `6e7a975` with 411
-passing tests and three green main-branch CI workflows (CI 45215671429, CI
-macOS + Linux 45215671479, Android APK 45216119154; the APK run was a
+23 Nov 2026. The current verified baseline is main `bccfa75` with 411
+passing tests and three green main-branch CI workflows (CI 45224283832,
+CI macOS + Linux 45224283878, Android APK 45224409304; the APK run was a
 manual dispatch because its path filter does not trigger on docs- and
 src-only changes). This document states the agreed product vision and the
 verified current state. No decision here is accepted until Ninad approves
 it. Every feature is marked **implemented** (verified against main
-`6e7a975`) or **planned** (not built; do not assume otherwise).
+`bccfa75`) or **planned** (not built; do not assume otherwise).
 
 ## 1. What CompanionDesk is
 
