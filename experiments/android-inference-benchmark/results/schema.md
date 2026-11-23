@@ -32,11 +32,13 @@ never omitted, never estimated.
 | prompt_tokens_per_s | number | llama-bench pp, or app-reported |
 | prompt_eval_ms | number/null | as reported |
 | gen_tokens_per_s | number | llama-bench tg, or app-reported |
-| peak_rss_kb | number/null | /proc/<pid>/status VmHWM (CLI runs) |
+| peak_rss_kb | number/null | /proc/<pid>/status VmHWM, live-sampled while the benchmark ran (CLI runs); null only if sampling never observed the process, explained in notes |
 | peak_pss_kb | number/null | dumpsys meminfo peak sample (app runs) |
-| thermal_before_c | number | max zone temp before the run block |
-| thermal_after_c | number | max zone temp after the run block |
-| thermal_source | string | zones used |
+| thermal_before_c | number/null | max zone temperature in CELSIUS before the run block; null when no zone is readable |
+| thermal_after_c | number/null | max zone temperature in CELSIUS after the run block; null when no zone is readable |
+| thermal_units | string | how the Celsius value was derived (converted from millidegrees raw/1000, or as-read) |
+| thermal_raw_max | number/null | the raw max zone value as read |
+| thermal_source_zone | string/null | path and type of the zone the max came from |
 | battery_before_pct | number | dumpsys battery level |
 | battery_after_pct | number | dumpsys battery level |
 | battery_charge_counter_before | number/null | dumpsys battery ChargeCounter (uAh) |

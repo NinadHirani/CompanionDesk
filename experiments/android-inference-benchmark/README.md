@@ -58,11 +58,11 @@ roadmap, no Android AI architecture is committed until these numbers exist.
 | warm start | subsequent runs' `t_load` |
 | time-to-first-token | NOT measured by llama-bench; recorded as `null` for CLI runs. Precise TTFT is an optional Phase B app measurement. Never fill it with an estimate. |
 | prompt tokens/s, generation tokens/s | llama-bench `pp` / `tg` columns directly |
-| peak RSS | `/proc/<pid>/status` VmHWM of the benchmark process (adb) |
+| peak RSS | `/proc/<pid>/status` VmHWM, live-sampled while the benchmark runs in the background on the device (review-fixed 23 Nov 2026: the first draft sampled after exit, which was always null). `null` only when sampling never observed the process, noted in `notes` |
 | peak PSS | `dumpsys meminfo` sampling while an app runtime runs (null for CLI runs) |
-| thermal before/after | `/sys/class/thermal/thermal_zone*/temp` max + `dumpsys thermalservice`, recorded before and after each run block |
+| thermal before/after | max zone temperature in Celsius, recorded before and after each run block. A zone value >= 1000 is treated as millidegrees and converted (the `thermal_units` field records the conversion); the raw value and source zone are always recorded too; `null` when no zone is readable |
 | battery before/after | `dumpsys battery` level + charge counter, before and after each run block; screen state and brightness fixed |
-| crashes | process exit code + `adb logcat -b crash -d` excerpt for the run window |
+| crashes | process exit code + a timestamp-windowed `adb logcat -d -b crash -T <start>` excerpt. Scripts never clear device-wide logs (`logcat -c` is not used anywhere) |
 | device / API / ABI / SoC | `getprop` via `scripts/collect_device_info.sh` |
 
 ## Acceptance criteria (Gate 1 data is valid only when ALL hold)
@@ -158,6 +158,18 @@ results (small files only) and any comparison-matrix updates.
 **Phase 6 - decide.** Write the Gate 1 decision summary (medians, anomalies,
 crashes, thermal behavior) into `results/RESULTS.md`, then the roadmap Gate 1
 section cites it. No architecture commitment happens before that.
+
+## Limitations (read before trusting anything here)
+
+- These scripts are verified ONLY by the mocked-adb self-test
+  (`scripts/selftest.sh`, wired into the macOS + Linux CI workflows) and
+  syntax checks. That proves the capture and parsing logic, not that any
+  real device produced real numbers.
+- shellcheck runs only when it is installed; it was not available at
+  scaffold time, which the self-test records as a skipped step.
+- No device run has happened. Every output this scaffold will ever produce
+  is UNVERIFIED until the owner executes the runbook on the OnePlus 12R and
+  commits the recorded results.
 
 ## Out of scope for this scaffold
 
