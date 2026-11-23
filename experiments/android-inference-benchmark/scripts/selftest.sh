@@ -319,8 +319,8 @@ if [ "$asm_rc" -eq 0 ] && python3 "$TMP/checkasm.py" "$SAND/results/comparison.a
 else
   bad "comparison assembler"; cat "$TMP/asm2.out" 2>/dev/null; python3 "$TMP/checkasm.py" "$SAND/results/comparison.auto.md" 2>&1 | head -3
 fi
-"$S/assemble_comparison.py" --results "$TMP/empty-results" --out "$TMP/empty-cmp.md" >/dev/null 2>&1
-if [ $? -eq 0 ] && grep -q "No run outputs found yet" "$TMP/empty-cmp.md"; then
+if "$S/assemble_comparison.py" --results "$TMP/empty-results" --out "$TMP/empty-cmp.md" >/dev/null 2>&1 \
+   && grep -q "No run outputs found yet" "$TMP/empty-cmp.md"; then
   ok "comparison assembler: empty results render the no-runs note"
 else
   bad "comparison assembler empty case"
