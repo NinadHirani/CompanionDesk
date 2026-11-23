@@ -58,11 +58,27 @@ capability; a saved key alone routes nothing; uninstalled models are never
 auto-downloaded. `src/ai.js` now carries the explicit
 `cloudEnabled` gate (default false): the cloud fallback runs only when
 enabled AND a key exists, replacing the implicit key-presence fallback.
-Still planned in M1: deeper per-ask routing integration, hardware probe and
-lightweight/balanced/powerful profiles (`src/hardware.js`), health checks,
-timeout/retry/cancel formalization. Acceptance: routing decisions
-unit-tested; no hardcoded model constants in `src/ai.js`; contract tests per
-provider.
+SECOND SLICE DONE 23 Nov 2026: deeper per-ask routing integration. The ask
+and screen paths now route through the router with LIVE facts gathered per
+request, under bounded timeouts (`src/ai.js` `completeRouted`/`routeTask`):
+Ollama health and the installed-model list from one `/api/tags` probe, vision
+capabilities from `/api/show`, the cloud model's capability from the
+registry. The screen path forces privacy mode `local_only`, so a screenshot
+can never reach the cloud. When the local call fails and the router says the
+cloud may serve the ask, the UI shows a per-request confirmation naming what
+Google would receive (the current prompt and system context only, never
+history or screenshots, with rate limits and possible charges); nothing is
+sent until the user confirms, a decline leaves the question local and is
+reported as the local failure, and nothing retries after a decline. Chat,
+cloud and probe calls are cancellable (per-request abort reaches the network
+and the streaming reader, `ai:cancel` IPC channel) and bounded (probe 1.5 s,
+local chat 120 s, cloud 30 s by default); there are no retries anywhere.
+The web/mobile bridge routes its asks through the same router and fails
+closed: no key exists there, so the cloud can never arm.
+Still planned in M1: hardware probe and lightweight/balanced/powerful
+profiles (`src/hardware.js`), provider health checks surfaced in the status
+UI. Acceptance: routing decisions unit-tested; no hardcoded model constants
+in `src/ai.js`; contract tests per provider.
 
 ## GATE 1 - Android intelligence (3-4 wks, device time)
 

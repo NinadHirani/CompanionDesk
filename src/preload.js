@@ -11,6 +11,7 @@ const IPC_CHANNELS = [
   'state:get',
   'syllabus:import',
   'ai:ask',
+  'ai:cancel',
   'ai:models',
   'chat:list',
   'chat:messages',

@@ -1,0 +1,269 @@
+'use strict';
+
+// M1 slice 2: per-ask routing integration. Every test here pins one rule the
+// shipped privacy posture depends on: the router decides, probes are live and
+// bounded, the cloud is never touched without consent FOR THAT request, and
+// vision never leaves the device.
+
+const test = require('node:test');
+const assert = require('node:assert');
+const { createAi } = require('../src/ai');
+
+// A tiny routing mock: each route is [match, handler(opts)]; match is a URL
+// substring or a function(url, opts). Every call is recorded for assertions
+// about what was (and was never) sent.
+function mockFetch(routes) {
+  const calls = [];
+  const fetch = async (url, opts) => {
+    calls.push({ url: String(url), opts: opts || {} });
+    for (const [match, handler] of routes) {
+      const hit = typeof match === 'string' ? String(url).includes(match) : match(url, opts);
+      if (hit) return handler(opts || {});
+    }
+    throw new Error('unrouted: ' + url);
+  };
+  fetch.calls = calls;
+  return fetch;
+}
+
+const OLLAMA_UP = ['/api/tags', () => ({
+  ok: true,
+  json: async () => ({ models: [{ name: 'llama3.2:latest' }] }),
+})];
+
+const CLOUD_OK = ['generativelanguage.googleapis.com', (opts) => {
+  if (String(opts.url || '').endsWith('/models')) return { ok: true, json: async () => ({ models: [] }) };
+  return { ok: true, json: async () => ({ candidates: [{ content: { parts: [{ text: 'cloud answer' }] } }] }) };
+}];
+
+function baseAi(fetch, extra = {}) {
+  return createAi({
+    fetchImpl: fetch,
+    geminiKey: () => 'k-test',
+    cloudEnabled: true,
+    ...extra,
+  });
+}
+
+test('a failed health probe with the cloud armed offers consent and sends nothing', async () => {
+  const fetch = mockFetch([['/api/tags', () => ({ ok: false, status: 500 })]]);
+  const ai = baseAi(fetch);
+  const res = await ai.completeRouted({ system: 's', prompt: 'p' });
+  assert.equal(res.needsCloudConsent, true);
+  assert.equal(res.localError, 'ollama_down');
+  assert.equal(fetch.calls.filter((c) => c.url.includes('googleapis')).length, 0);
+});
+
+test('a failed health probe with the cloud DISABLED refuses with the local reason', async () => {
+  const fetch = mockFetch([['/api/tags', () => ({ ok: false, status: 500 })]]);
+  const ai = createAi({ fetchImpl: fetch, geminiKey: () => 'k', cloudEnabled: false });
+  await assert.rejects(
+    () => ai.completeRouted({ system: 's', prompt: 'p' }),
+    (err) => err.reason === 'ollama_down'
+  );
+  assert.equal(fetch.calls.filter((c) => c.url.includes('googleapis')).length, 0);
+});
+
+test('a hanging health probe is bounded by the probe timeout, not forever', async () => {
+  const fetch = mockFetch([['/api/tags', (opts) => new Promise((_, reject) => {
+    const stall = setTimeout(() => reject(new Error('test stall')), 5000); // keeps the loop alive
+    if (opts.signal && opts.signal.aborted) { clearTimeout(stall); reject(new Error('timed out')); return; }
+    if (opts.signal) opts.signal.addEventListener('abort', () => { clearTimeout(stall); reject(new Error('timed out')); });
+  })]]);
+  const ai = createAi({ fetchImpl: fetch, probeTimeoutMs: 20 });
+  const t0 = Date.now();
+  await assert.rejects(() => ai.completeRouted({ system: 's', prompt: 'p' }), (err) => err.reason === 'ollama_down');
+  assert.ok(Date.now() - t0 < 2000, 'probe resolved within its bound');
+});
+
+test('a saved key with cloud disabled never sends anything anywhere', async () => {
+  // Local model present and healthy: local answers, no cloud probe at all.
+  const fetch = mockFetch([
+    OLLAMA_UP,
+    ['/api/chat', () => ({ ok: true, text: async () => JSON.stringify({ message: { content: 'local' } }) })],
+  ]);
+  const ai = createAi({ fetchImpl: fetch, geminiKey: () => 'k-test', cloudEnabled: false });
+  const answer = await ai.completeRouted({ system: 's', prompt: 'p' });
+  assert.equal(answer, 'local');
+  assert.equal(fetch.calls.filter((c) => c.url.includes('googleapis')).length, 0);
+});
+
+test('local failure with cloud armed but unconsented offers confirmation and sends nothing', async () => {
+  const fetch = mockFetch([
+    OLLAMA_UP,
+    ['/api/chat', () => ({ ok: false, status: 404, text: async () => '' })], // installed model vanished
+  ]);
+  const ai = baseAi(fetch);
+  const res = await ai.completeRouted({ system: 's', prompt: 'p', history: [{ role: 'user', content: 'earlier turn' }] });
+  assert.equal(res.needsCloudConsent, true);
+  assert.equal(res.cloud.provider, 'gemini');
+  assert.equal(res.cloud.receives.conversation_history, false);
+  assert.equal(res.cloud.receives.screenshots_or_images, false);
+  assert.equal(res.localError, 'ollama_http_404');
+  // Not one byte went to Google, not even a health check.
+  assert.equal(fetch.calls.filter((c) => c.url.includes('googleapis')).length, 0);
+});
+
+test('after a decline, a retry without consent sends nothing to the cloud', async () => {
+  const fetch = mockFetch([
+    OLLAMA_UP,
+    ['/api/chat', () => ({ ok: false, status: 500, text: async () => '' })],
+  ]);
+  const ai = baseAi(fetch);
+  const once = await ai.completeRouted({ system: 's', prompt: 'p' });
+  assert.equal(once.needsCloudConsent, true);
+  const twice = await ai.completeRouted({ system: 's', prompt: 'p' });
+  assert.equal(twice.needsCloudConsent, true);
+  assert.equal(fetch.calls.filter((c) => c.url.includes('googleapis')).length, 0);
+});
+
+test('explicit consent for THIS request routes the cloud, with history stripped', async () => {
+  const fetch = mockFetch([
+    OLLAMA_UP,
+    ['/api/chat', () => ({ ok: false, status: 500, text: async () => '' })],
+    CLOUD_OK,
+  ]);
+  const ai = baseAi(fetch);
+  const answer = await ai.completeRouted({
+    system: 'sys text', prompt: 'the question',
+    history: [{ role: 'user', content: 'never sent' }],
+    cloudArgs: { system: 'min sys', prompt: 'min prompt' },
+    cloudConsent: true,
+  });
+  assert.equal(answer, 'cloud answer');
+  const cloudCalls = fetch.calls.filter((c) => c.url.includes('googleapis'));
+  assert.equal(cloudCalls.length, 2); // health probe, then the generate call
+  const body = JSON.parse(cloudCalls[1].opts.body);
+  const text = body.contents[0].parts[0].text;
+  assert.ok(text.includes('min prompt'), 'cloudArgs replace the personal prompt');
+  assert.ok(!text.includes('the question'), 'the personal prompt is not sent');
+  assert.ok(!text.includes('never sent'), 'conversation history never reaches the cloud');
+  assert.ok(!text.includes('sys text'), 'the personal system text is not sent');
+});
+
+test('an unhealthy cloud provider refuses even with consent', async () => {
+  const fetch = mockFetch([
+    OLLAMA_UP,
+    ['/api/chat', () => ({ ok: false, status: 500, text: async () => '' })],
+    ['/v1beta/models', () => ({ ok: false, status: 403 })],
+  ]);
+  const ai = baseAi(fetch);
+  await assert.rejects(
+    () => ai.completeRouted({ system: 's', prompt: 'p', cloudConsent: true }),
+    (err) => err.reason === 'cloud_provider_down'
+  );
+});
+
+test('vision is local-only: every gate open and consented still routes local', async () => {
+  const fetch = mockFetch([
+    ['/api/tags', () => ({ ok: true, json: async () => ({ models: [{ name: 'gemma3:4b' }] }) })],
+    ['/api/show', () => ({ ok: true, json: async () => ({ capabilities: ['vision'] }) })],
+    ['/api/chat', () => ({ ok: true, text: async () => JSON.stringify({ message: { content: 'seen locally' } }) })],
+    CLOUD_OK,
+  ]);
+  const ai = baseAi(fetch);
+  const answer = await ai.completeRouted({
+    system: 's', prompt: 'what is on screen',
+    task: 'vision', visionModel: 'gemma3:4b', cloudConsent: true,
+    images: ['aGVsbG8='],
+  });
+  assert.equal(answer, 'seen locally');
+  assert.equal(fetch.calls.filter((c) => c.url.includes('googleapis')).length, 0);
+});
+
+test('vision without a vision-capable local model refuses instead of falling back', async () => {
+  const fetch = mockFetch([
+    ['/api/tags', () => ({ ok: true, json: async () => ({ models: [{ name: 'llama3.2:latest' }] }) })],
+    ['/api/show', () => ({ ok: true, json: async () => ({ capabilities: ['chat'] }) })],
+    CLOUD_OK,
+  ]);
+  const ai = baseAi(fetch);
+  await assert.rejects(
+    () => ai.completeRouted({ system: 's', prompt: 'p', task: 'vision', visionModel: 'gemma3:4b', cloudConsent: true }),
+    (err) => err.reason === 'no_vision_model_local'
+  );
+  assert.equal(fetch.calls.filter((c) => c.url.includes('googleapis')).length, 0);
+});
+
+test('a cancel aborts the local call and the cloud is never tried', async () => {
+  const controller = new AbortController();
+  const fetch = mockFetch([
+    OLLAMA_UP,
+    ['/api/chat', (opts) => new Promise((_, reject) => {
+      if (opts.signal.aborted) { reject(new Error('The operation was aborted')); return; }
+      opts.signal.addEventListener('abort', () => reject(new Error('The operation was aborted')));
+      // pending until aborted
+    })],
+    CLOUD_OK,
+  ]);
+  const ai = baseAi(fetch);
+  const pending = ai.completeRouted({ system: 's', prompt: 'p', signal: controller.signal });
+  controller.abort();
+  await assert.rejects(() => pending, (err) => err.name === 'AbortError' || /abort/i.test(String(err.message)));
+  assert.equal(fetch.calls.filter((c) => c.url.includes('googleapis')).length, 0);
+});
+
+test('a cancel mid-stream stops the reader where it is', async () => {
+  const controller = new AbortController();
+  const seen = [];
+  const fetch = mockFetch([
+    OLLAMA_UP,
+    ['/api/chat', (opts) => ({
+      ok: true,
+      body: {
+        getReader() {
+          return {
+            async read() {
+              if (controller.signal.aborted) { const e = new Error('aborted'); e.name = 'AbortError'; throw e; }
+              if (seen.length === 0) {
+                seen.push(1);
+                // arm the abort one tick after the first chunk is delivered
+                Promise.resolve().then(() => controller.abort());
+                return { done: false, value: new TextEncoder().encode(JSON.stringify({ message: { content: 'partial' } }) + '\n') };
+              }
+              return { done: true, value: undefined };
+            },
+          };
+        },
+      },
+    })],
+    CLOUD_OK,
+  ]);
+  const ai = baseAi(fetch);
+  const tokens = [];
+  await assert.rejects(
+    () => ai.completeRouted({ system: 's', prompt: 'p', signal: controller.signal, onToken: (t) => tokens.push(t) }),
+    (err) => err.name === 'AbortError'
+  );
+  assert.deepEqual(tokens, ['partial']);
+  assert.equal(fetch.calls.filter((c) => c.url.includes('googleapis')).length, 0);
+});
+
+test('a bounded chat timeout aborts a hung local model without cloud fallback', async () => {
+  const fetch = mockFetch([
+    OLLAMA_UP,
+    ['/api/chat', (opts) => new Promise((_, reject) => {
+      const stall = setTimeout(() => reject(new Error('test stall')), 5000); // keeps the loop alive
+      if (opts.signal && opts.signal.aborted) { clearTimeout(stall); reject(new Error('timed out')); return; }
+      if (opts.signal) opts.signal.addEventListener('abort', () => { clearTimeout(stall); reject(new Error('timed out')); });
+    })],
+    CLOUD_OK,
+  ]);
+  const ai = createAi({ fetchImpl: fetch, geminiKey: () => 'k', cloudEnabled: false, chatTimeoutMs: 30 });
+  await assert.rejects(() => ai.completeRouted({ system: 's', prompt: 'p' }), /timed out/);
+  assert.equal(fetch.calls.filter((c) => c.url.includes('googleapis')).length, 0);
+});
+
+test('routeTask exposes the router decision for the screen path, local-only enforced', async () => {
+  const fetch = mockFetch([
+    ['/api/tags', () => ({ ok: true, json: async () => ({ models: [{ name: 'gemma3:4b' }] }) })],
+    ['/api/show', () => ({ ok: true, json: async () => ({ capabilities: ['vision'] }) })],
+    CLOUD_OK,
+  ]);
+  const ai = baseAi(fetch);
+  const { decision } = await ai.routeTask('vision', { privacyMode: 'local_only', visionModel: 'gemma3:4b' });
+  assert.equal(decision.ok, true);
+  assert.equal(decision.provider, 'ollama');
+  assert.equal(decision.model, 'gemma3:4b');
+  assert.equal(fetch.calls.filter((c) => c.url.includes('googleapis')).length, 0);
+});

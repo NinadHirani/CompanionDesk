@@ -39,6 +39,10 @@ const SMOKE = process.argv.includes('--smoke');
 
 let db = null;
 let ai = null;
+// In-flight ask abort controllers, keyed by request id (M1 slice 2): the
+// renderer cancels through ai:cancel, the abort reaches the network call and
+// the streaming reader, and no retry follows.
+const askControllers = new Map();
 let secureStore = null;
 let win = null;
 let overlay = null;
@@ -187,9 +191,28 @@ function registerIpc() {
 
   ipcMain.handle('brief:today', async () => getBrief(db, todayIso()));
   ipcMain.handle('assignment:setDone', async (_e, payload) => setDone(db, payload, localNowIso()));
+  // One AbortController per ask, keyed by the renderer's request id, so a
+  // cancel aborts the network call and the streaming reader, and nothing
+  // retries afterwards. The controllers map sits above the handlers.
   ipcMain.handle('ai:ask', async (_e, payload) => {
     const sel = await modelSelection();
-    return P.ask(ctx(), payload, todayIso(), { model: sel.chat.model });
+    const requestId = payload && typeof payload.request_id === 'string' ? payload.request_id : `ask_${Date.now()}`;
+    const controller = new AbortController();
+    askControllers.set(requestId, controller);
+    try {
+      return await P.ask(ctx(), payload, todayIso(), {
+        model: sel.chat.model,
+        signal: controller.signal,
+      });
+    } finally {
+      askControllers.delete(requestId);
+    }
+  });
+  ipcMain.handle('ai:cancel', (_e, payload) => {
+    const id = payload && payload.request_id;
+    const controller = id ? askControllers.get(id) : null;
+    if (controller) controller.abort();
+    return { ok: true, canceled: Boolean(controller) };
   });
 
   // Conversation history: local only, created when the ask view asks for
@@ -257,7 +280,18 @@ function registerIpc() {
 
   ipcMain.handle('overlay:ask', async (_e, payload) => {
     const sel = await modelSelection();
-    return P.ask(ctx(), payload, todayIso(), { model: sel.chat.model, onToken: (t) => overlay.send('overlay:token', t) });
+    const requestId = payload && typeof payload.request_id === 'string' ? `overlay_${payload.request_id}` : `overlay_${Date.now()}`;
+    const controller = new AbortController();
+    askControllers.set(requestId, controller);
+    try {
+      return await P.ask(ctx(), payload, todayIso(), {
+        model: sel.chat.model,
+        onToken: (t) => overlay.send('overlay:token', t),
+        signal: controller.signal,
+      });
+    } finally {
+      askControllers.delete(requestId);
+    }
   });
   ipcMain.handle('overlay:show', async () => { overlay.show(); return { ok: true }; });
   ipcMain.handle('overlay:hide', async () => { overlay.hide(); return { ok: true }; });
@@ -280,12 +314,21 @@ function registerIpc() {
     return { ok: true, model: sel.vision.model, available: await ai.hasModel(sel.vision.model) };
   });
   ipcMain.handle('screen:windows', async () => listWindows({ desktopCapturer, systemPreferences }));
-  ipcMain.handle('screen:ask', async (_e, payload) =>
-    askAboutScreen(ctx(), payload, todayIso(), {
-      visionModel: (await modelSelection()).vision.model,
-      capture: (windowId) => captureWindow({ desktopCapturer, systemPreferences, windowId }),
-      onToken: (t) => overlay.send('overlay:token', t),
-    }));
+  ipcMain.handle('screen:ask', async (_e, payload) => {
+    const requestId = payload && typeof payload.request_id === 'string' ? `screen_${payload.request_id}` : `screen_${Date.now()}`;
+    const controller = new AbortController();
+    askControllers.set(requestId, controller);
+    try {
+      return await askAboutScreen(ctx(), payload, todayIso(), {
+        visionModel: (await modelSelection()).vision.model,
+        capture: (windowId) => captureWindow({ desktopCapturer, systemPreferences, windowId }),
+        onToken: (t) => overlay.send('overlay:token', t),
+        signal: controller.signal,
+      });
+    } finally {
+      askControllers.delete(requestId);
+    }
+  });
 
   ipcMain.handle('health:check', async () =>
     collectHealth({

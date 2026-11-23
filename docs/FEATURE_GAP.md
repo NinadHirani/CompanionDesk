@@ -69,7 +69,14 @@ docs/IMPLEMENTATION_ROADMAP.md.
    cost; src/task-router.js decides deterministically: local-first, vision
    local-only, cloud only with cloud_enabled + consent + key + a provider
    known healthy; unknown health and an unverified cloud capability refuse).
-   Deeper per-ask routing integration remains PLANNED (M1).
+   Deeper per-ask routing integration DONE 23 Nov 2026: the ask and screen
+   paths gather live provider facts per request under bounded timeouts and
+   route through the router; the screen path is forced local-only; a failed
+   local chat with the cloud armed surfaces a per-request confirmation
+   (disclosing that Google receives the current prompt and system context
+   only, never history or screenshots); a decline is reported as the local
+   failure and nothing retries; asks are cancellable and every network call
+   is bounded; the web bridge routes the same way and fails closed.
 5. Reusable step workflows - ABSENT (planned with the workspace UI, M8).
 6. Safe computer assistance (propose-then-confirm OS actions) - PLANNED as
    the Gate 2 agent foundation: typed tool registry, external policy engine,

@@ -229,10 +229,16 @@
     return { ok: true, summaries };
   }
 
+  // In-flight asks, keyed by request id, for cancel (M1 slice 2). The abort
+  // reaches the fetch and the streaming reader; no retry follows.
+  const askControllers = new Map();
   async function ai_ask(payload) {
     await readyPromise;
     const prompt = payload && typeof payload.prompt === 'string' ? payload.prompt.trim() : '';
     if (!prompt) return { ok: false, error: 'empty_prompt' };
+    const requestId = payload && typeof payload.request_id === 'string' ? payload.request_id : `web_${Date.now()}`;
+    const controller = new AbortController();
+    askControllers.set(requestId, controller);
     try {
       const settings = CompanionSettings.normalizeSettings(db.allSettings());
       const installed = await ai.listModels();
@@ -240,7 +246,7 @@
         ? CompanionModelSelection.resolveChatModel({ configured: settings.ai_model_local, fallback: ai.localModel, installed: installed.map((m) => m.name) })
         : { model: ai.localModel };
       // Conversation history is local-only; the cloud fallback never sees it
-      // (ai.complete strips the history argument before any cloud call).
+      // (the routed path sends history to the local model only).
       const conversationId = payload && Number.isInteger(payload.conversation_id) ? payload.conversation_id : null;
       let history;
       if (conversationId) {
@@ -248,12 +254,25 @@
         if (got.ok) history = CompanionChatHistory.contextTurns(got.messages);
         else return { ok: false, error: 'not_found' };
       }
-      const answer = await ai.complete({
+      // Routed ask (M1 slice 2). Fail-closed by construction: the web build
+      // holds no key, so the cloud can never arm here, and consent is never
+      // granted from the bridge. If the router ever offers a cloud
+      // confirmation, the bridge reports the local failure instead of
+      // pretending a send is possible.
+      const answer = await ai.completeRouted({
         system: composeVoice(),
         prompt: buildContextPack() + '\n\nQuestion: ' + prompt,
         model: chat.model,
         history: history && history.length ? history : undefined,
+        task: 'chat',
+        privacyMode: 'standard',
+        cloudEnabled: settings.cloud_enabled === true,
+        cloudConsent: false,
+        signal: controller.signal,
       });
+      if (answer && answer.needsCloudConsent) {
+        return { ok: false, error: 'local_ask_failed', detail: answer.localError };
+      }
       if (conversationId) {
         const now = localNowIso();
         CompanionChatHistory.addMessage(db, conversationId, 'user', prompt, now);
@@ -261,8 +280,19 @@
       }
       return conversationId ? { ok: true, answer, conversation_id: conversationId } : { ok: true, answer };
     } catch (err) {
+      if (err && (err.name === 'AbortError' || err.name === 'TimeoutError' || err.code === 'ABORT_ERR')) {
+        return { ok: false, error: 'canceled' };
+      }
       return { ok: false, error: String((err && err.message) || err) };
+    } finally {
+      askControllers.delete(requestId);
     }
+  }
+  function ai_cancel(payload) {
+    const id = payload && payload.request_id;
+    const controller = id ? askControllers.get(id) : null;
+    if (controller) controller.abort();
+    return { ok: true, canceled: Boolean(controller) };
   }
 
   // Conversation history handlers, local storage only (the same sql.js
@@ -477,7 +507,7 @@
 
   window.companiondesk = {
     bridgeMode: 'web',
-    state_get, syllabus_import, ai_ask, ai_models,
+    state_get, syllabus_import, ai_ask, ai_cancel, ai_models,
     chat_new, chat_list, chat_messages, chat_rename, chat_delete,
     // Optional cloud key setup needs an OS credential vault. The web build
     // has none, so status reports unsupported and every change is refused;

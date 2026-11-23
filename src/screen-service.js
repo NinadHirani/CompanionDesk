@@ -23,8 +23,23 @@ async function askAboutScreen({ db, ai, meFile }, payload, todayIso, deps) {
   const windowId = payload && typeof payload.windowId === 'string' ? payload.windowId : '';
   if (!windowId) return { ok: false, error: 'bad_request' };
 
-  // Cheap checks first, so nothing is captured when the answer cannot be given.
-  if (!(await ai.hasModel(deps.visionModel))) return { ok: false, error: 'vision_unavailable', detail: deps.visionModel };
+  // Cheap checks first, so nothing is captured when the answer cannot be
+  // given. The ROUTER decides from live facts; the vision task is
+  // local-only, so no setting, key or consent can ever change that.
+  let visionModel = deps.visionModel;
+  if (typeof ai.routeTask === 'function') {
+    const { decision } = await ai.routeTask('vision', {
+      privacyMode: 'local_only',
+      visionModel: deps.visionModel,
+      signal: deps.signal || null,
+    });
+    if (!decision.ok || decision.provider !== 'ollama') {
+      return { ok: false, error: 'vision_unavailable', detail: decision.reason || 'vision_unavailable' };
+    }
+    visionModel = decision.model;
+  } else if (!(await ai.hasModel(deps.visionModel))) {
+    return { ok: false, error: 'vision_unavailable', detail: deps.visionModel };
+  }
 
   const shot = await deps.capture(windowId);
   if (!shot.ok) return shot;
@@ -46,12 +61,16 @@ async function askAboutScreen({ db, ai, meFile }, payload, todayIso, deps) {
     const answer = await ai.chat({
       system: `${persona.system} ${SCREEN_NOTE} The screenshot shows the window titled "${title}".`,
       prompt: persona.prompt,
-      model: deps.visionModel,
+      model: visionModel,
       images: [shot.jpegBase64],
       onToken: deps.onToken,
+      signal: deps.signal || null,
     });
     return { ok: true, answer, title };
   } catch (err) {
+    if (err && (err.name === 'AbortError' || err.name === 'TimeoutError' || err.code === 'ABORT_ERR')) {
+      return { ok: false, error: 'canceled' };
+    }
     return { ok: false, error: 'vision_failed', detail: String((err && err.message) || err) };
   } finally {
     shot.jpegBase64 = null; // the screenshot is not kept

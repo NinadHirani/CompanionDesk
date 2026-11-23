@@ -139,7 +139,7 @@ function removeDeadline({ db }, payload) {
 
 // ---- the personalized answer -----------------------------------------------------------
 
-async function ask({ db, ai, meFile }, payload, todayIso, { onToken, model } = {}) {
+async function ask({ db, ai, meFile }, payload, todayIso, { onToken, model, signal } = {}) {
   const question = payload && typeof payload.prompt === 'string' ? payload.prompt.trim() : '';
   if (!question) return { ok: false, error: 'empty_prompt' };
   // Conversation history is opt-in per call: the desktop ask view passes a
@@ -169,14 +169,33 @@ async function ask({ db, ai, meFile }, payload, todayIso, { onToken, model } = {
     calendarBlock: renderCalendarBlock(calendar.upcoming(db, { days: 7 }, todayIso).occurrences),
     question,
   });
+  // M1 slice 2: the ask flow routes through the task router with live
+  // facts. cloudEnabled is read per request (settings can change between
+  // asks), and cloudConsent must be true FOR THIS REQUEST: a saved key or
+  // the settings flag alone never sends anything anywhere.
+  const routedArgs = {
+    system: persona.system,
+    prompt: persona.prompt,
+    cloudArgs: persona.cloud || undefined,
+    onToken, model,
+    history: history && history.length ? history : undefined,
+    task: 'chat',
+    privacyMode: 'standard',
+    cloudEnabled: settings.cloud_enabled === true,
+    cloudConsent: Boolean(payload && payload.cloud_consent === true),
+    signal: signal || null,
+  };
   try {
-    const answer = await ai.complete({
-      system: persona.system,
-      prompt: persona.prompt,
-      cloudArgs: persona.cloud || undefined,
-      onToken, model,
-      history: history && history.length ? history : undefined,
-    });
+    const answer = (typeof ai.completeRouted === 'function')
+      ? await ai.completeRouted(routedArgs)
+      : await ai.complete(routedArgs);
+    if (answer && answer.needsCloudConsent) {
+      // Per-request cloud gate. Nothing has been sent anywhere yet; the
+      // renderer shows what Google would receive. A decline simply never
+      // calls again with consent, so no cloud request can happen by
+      // accident and nothing retries on its own.
+      return { ok: false, needs_cloud_consent: true, local_error: answer.localError, cloud: answer.cloud };
+    }
     if (conversationId) {
       const now = new Date().toISOString();
       chatHistory.addMessage(db, conversationId, 'user', question, now);
@@ -185,6 +204,9 @@ async function ask({ db, ai, meFile }, payload, todayIso, { onToken, model } = {
     return conversationId ? { ok: true, answer, conversation_id: conversationId } : { ok: true, answer };
   } catch (err) {
     if (conversationId) chatHistory.addMessage(db, conversationId, 'user', question, new Date().toISOString());
+    if (err && (err.name === 'AbortError' || err.name === 'TimeoutError' || err.code === 'ABORT_ERR')) {
+      return { ok: false, error: 'canceled' };
+    }
     return { ok: false, error: String((err && err.message) || err) };
   }
 }

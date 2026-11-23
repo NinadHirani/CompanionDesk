@@ -63,7 +63,18 @@
     log.prepend(entry);
     input.value = '';
 
-    const res = await api.ai_ask({ prompt: question, conversation_id: currentId });
+    const requestId = (typeof crypto !== 'undefined' && crypto.randomUUID)
+      ? crypto.randomUUID()
+      : `ask_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+    // A cancel aborts the network call and the streaming reader; nothing
+    // retries afterwards.
+    const cancelBtn = el('button', 'Cancel', 'link');
+    cancelBtn.type = 'button';
+    cancelBtn.addEventListener('click', () => api.ai_cancel({ request_id: requestId }));
+    pending.appendChild(document.createTextNode(' '));
+    pending.appendChild(cancelBtn);
+
+    const res = await api.ai_ask({ prompt: question, conversation_id: currentId, request_id: requestId });
     pending.remove();
     if (res.ok) {
       entry.appendChild(el('p', res.answer, 'answer'));
@@ -71,10 +82,62 @@
         currentId = res.conversation_id;
         await refreshList(currentId);
       }
+      btn.disabled = false;
+    } else if (res.needs_cloud_consent) {
+      // Per-request cloud gate: the LOCAL model could not answer, and the
+      // router says the cloud may serve this one. Nothing has been sent
+      // anywhere yet. The user decides, per ask; a decline means the
+      // question is never sent, and nothing retries on its own.
+      btn.disabled = false;
+      entry.appendChild(el('p', `The local model could not answer this one (${res.local_error || 'local failure'}). Send it to Google ${res.cloud && res.cloud.provider === 'gemini' ? 'Gemini' : 'Gemini'}?`, 'hint'));
+      entry.appendChild(el('p', 'Google receives the question and the assistant instructions only. Your conversation history and any screenshots are never sent. Rate limits and possible charges may apply.', 'hint'));
+      const row = el('div', null, 'row');
+      const sendBtn = el('button', 'Send to Google', 'primary');
+      const stayBtn = el('button', 'No, stay local', '');
+      sendBtn.type = 'button';
+      stayBtn.type = 'button';
+      row.appendChild(sendBtn);
+      row.appendChild(stayBtn);
+      entry.appendChild(row);
+      sendBtn.addEventListener('click', async () => {
+        sendBtn.disabled = true;
+        stayBtn.disabled = true;
+        row.remove();
+        const waiting = el('p', 'Thinking', 'hint');
+        entry.appendChild(waiting);
+        const consentId = (typeof crypto !== 'undefined' && crypto.randomUUID)
+          ? crypto.randomUUID()
+          : `ask_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+        const cancel2 = el('button', 'Cancel', 'link');
+        cancel2.type = 'button';
+        cancel2.addEventListener('click', () => api.ai_cancel({ request_id: consentId }));
+        waiting.appendChild(document.createTextNode(' '));
+        waiting.appendChild(cancel2);
+        const res2 = await api.ai_ask({ prompt: question, conversation_id: currentId, cloud_consent: true, request_id: consentId });
+        waiting.remove();
+        if (res2.ok) {
+          entry.appendChild(el('p', res2.answer, 'answer'));
+          if (res2.conversation_id) {
+            currentId = res2.conversation_id;
+            await refreshList(currentId);
+          }
+        } else if (res2.needs_cloud_consent) {
+          // Should not happen after consent; treat as the local failure it is.
+          entry.appendChild(el('p', UI.friendlyError(res2.local_error || res2.error), 'error'));
+        } else {
+          entry.appendChild(el('p', UI.friendlyError(res2.error), 'error'));
+        }
+      });
+      stayBtn.addEventListener('click', () => {
+        // Decline: the question stays on this device and the local failure
+        // is what gets reported. No cloud request is ever made for it.
+        row.remove();
+        entry.appendChild(el('p', UI.friendlyError(res.local_error || 'local_model_failed'), 'error'));
+      });
     } else {
       entry.appendChild(el('p', UI.friendlyError(res.error), 'error'));
+      btn.disabled = false;
     }
-    btn.disabled = false;
 
     if (res.ok) {
       // Runs after the answer is on screen; a slow model never delays it.

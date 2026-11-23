@@ -14,6 +14,16 @@
 })(typeof self !== 'undefined' ? self : this, function () {
   const ENV = (typeof process !== 'undefined' && process.env) ? process.env : {};
 
+  // Resolved lazily so script load order never matters in the web bundle.
+  function registry() {
+    if (typeof module === 'object' && module.exports) return require('./provider-registry');
+    return (typeof self !== 'undefined' && self.CompanionProviderRegistry) || null;
+  }
+  function router() {
+    if (typeof module === 'object' && module.exports) return require('./task-router');
+    return (typeof self !== 'undefined' && self.CompanionTaskRouter) || null;
+  }
+
   const DEFAULT_OLLAMA_URL = ENV.OLLAMA_URL || 'http://127.0.0.1:11434';
   const DEFAULT_LOCAL_MODEL = ENV.LOCAL_MODEL || 'llama3.2:latest';
   const DEFAULT_CLOUD_MODEL = ENV.CLOUD_MODEL || 'gemini-2.0-flash';
@@ -29,11 +39,34 @@
     // arms the fallback: cloudEnabled must be true in settings AND a key
     // must exist. Default false, so behavior is unchanged out of the box.
     cloudEnabled = false,
+    // Bounded timeouts (M1 slice 2). Every network call carries one; a call
+    // that exceeds it aborts instead of hanging forever, and there are no
+    // retries anywhere in this file.
+    probeTimeoutMs = 1500,
+    chatTimeoutMs = 120000,
+    cloudTimeoutMs = 30000,
   } = {}) {
     // geminiKey may be a string or, on the desktop app, a getter into the
     // OS-encrypted store, so the key is read only when a cloud call actually
     // happens and the renderer never needs it.
     const keyFor = () => (typeof geminiKey === 'function' ? geminiKey() : geminiKey);
+    // The settings-driven cloud opt-in wired at startup (src/main.js); the
+    // routed path defaults to it, and a per-request argument may override.
+    const cloudArmed = cloudEnabled === true;
+
+    // One signal that honors BOTH the caller's cancellation and the call's
+    // own bounded timeout. AbortSignal.any is available in Node 22, Electron
+    // 43 and current browsers; without it the caller's signal wins and the
+    // bound is dropped rather than overridden.
+    function withTimeouts(signal, ms) {
+      const bound = AbortSignal.timeout(ms);
+      if (signal && typeof AbortSignal.any === 'function') return AbortSignal.any([signal, bound]);
+      if (signal) return signal;
+      return bound;
+    }
+    function isAbort(err) {
+      return Boolean(err && (err.name === 'AbortError' || err.name === 'TimeoutError' || err.code === 'ABORT_ERR'));
+    }
     // images: optional array of base64 strings attached to the user message (vision models).
     function messagesFor({ system, prompt, images, history }) {
       const user = images && images.length ? { role: 'user', content: prompt, images } : { role: 'user', content: prompt };
@@ -80,7 +113,7 @@
       }
     }
 
-    async function chatOllama({ system, prompt, model, temperature = 0.1, onToken, images, history } = {}) {
+    async function chatOllama({ system, prompt, model, temperature = 0.1, onToken, images, history, signal } = {}) {
       const res = await fetchImpl(`${ollamaUrl}/api/chat`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
@@ -90,6 +123,7 @@
           options: { temperature },
           messages: messagesFor({ system, prompt, images, history }),
         }),
+        signal: withTimeouts(signal, chatTimeoutMs),
       });
       if (!res.ok) throw new Error(`ollama_http_${res.status}`);
 
@@ -133,7 +167,7 @@
     }
 
     // Cloud fallback. Plain REST, no SDK, so the dependency tree stays light.
-    async function chatGemini({ system, prompt, model } = {}) {
+    async function chatGemini({ system, prompt, model, signal } = {}) {
       const key = keyFor();
       if (!key) throw new Error('no_cloud_key');
       // The key travels in a header, never a URL: a query parameter would end
@@ -144,6 +178,7 @@
           method: 'POST',
           headers: { 'content-type': 'application/json', 'x-goog-api-key': key },
           body: JSON.stringify({ contents: [{ parts: [{ text: (system ? system + '\n\n' : '') + prompt }] }] }),
+          signal: withTimeouts(signal, cloudTimeoutMs),
         }
       );
       if (!res.ok) throw new Error(`gemini_http_${res.status}`);
@@ -185,13 +220,13 @@
 
     // What a model can do, per Ollama's /api/show. null when unreadable
     // (the model is absent, or Ollama is too old to report capabilities).
-    async function modelCapabilities(name) {
+    async function modelCapabilities(name, signal) {
       try {
         const res = await fetchImpl(`${ollamaUrl}/api/show`, {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({ model: name }),
-          signal: AbortSignal.timeout(STATUS_TIMEOUT_MS),
+          signal: withTimeouts(signal, probeTimeoutMs),
         });
         if (!res.ok) return null;
         const data = await res.json();
@@ -199,6 +234,211 @@
       } catch {
         return null;
       }
+    }
+
+    // ---- M1 slice 2: per-ask routing -----------------------------------
+    // The router (src/task-router.js) owns every routing decision. This
+    // layer only GATHERS the facts it needs, live, with bounded timeouts:
+    // whether Ollama answers right now, which models are installed, and
+    // (for vision tasks) what the candidates can do. It never infers, never
+    // downloads, and never calls the cloud except through the router's
+    // gates, with consent for THIS request.
+
+    // One bounded probe of the local server at request time. Any failure
+    // (non-OK, timeout, network error) is an observation that the local
+    // provider is not answering; healthy stays false and the router
+    // refuses. Models are exact ids as Ollama serves them.
+    async function probeLocal(signal) {
+      try {
+        const res = await fetchImpl(`${ollamaUrl}/api/tags`, { signal: withTimeouts(signal, probeTimeoutMs) });
+        if (!res.ok) return { healthy: false, models: null };
+        const data = await res.json();
+        return { healthy: true, models: (data.models || []).map((m) => String(m.name || '')) };
+      } catch {
+        return { healthy: false, models: null };
+      }
+    }
+
+    // Bounded cloud health probe. Only ever run when the user has ALREADY
+    // consented to this request going to the cloud: a saved key alone must
+    // not even produce a health check.
+    async function probeCloudHealth(signal) {
+      const key = keyFor();
+      if (!key) return false;
+      try {
+        const res = await fetchImpl('https://generativelanguage.googleapis.com/v1beta/models', {
+          headers: { 'x-goog-api-key': key },
+          signal: withTimeouts(signal, cloudTimeoutMs),
+        });
+        return res.ok;
+      } catch {
+        return false;
+      }
+    }
+
+    // What a cloud call would receive, for the per-request confirmation.
+    // Matches exactly what chatGemini sends below.
+    function cloudPreview() {
+      return {
+        provider: 'gemini',
+        model: cloudModel,
+        receives: {
+          system_context: true,
+          current_prompt: true,
+          conversation_history: false,
+          screenshots_or_images: false,
+        },
+        note: 'rate limits and possible charges may apply',
+      };
+    }
+
+    function refusalError(reason) {
+      const e = new Error(reason);
+      e.reason = reason;
+      e.code = reason;
+      return e;
+    }
+
+    // Probe-and-route only, no execution. The screen path uses this so its
+    // decision comes from the same router the chat path uses.
+    async function routeTask(task, {
+      privacyMode = 'standard',
+      cloudEnabled = cloudArmed,
+      cloudConsent = false,
+      model = null,
+      visionModel = null,
+      signal = null,
+      ollamaHealth = null,       // null = probe live; false = "local failed, try cloud"
+      installedModels = null,    // null = probe live
+      geminiHealth = null,       // null = unknown; true/false = a fresh fact
+    } = {}) {
+      const R = router();
+      if (!R || !R.routeTask) return { probe: { healthy: false, models: null }, decision: { ok: false, provider: null, model: null, reason: 'router_unavailable', cloudUsed: false } };
+      const probe = (ollamaHealth === null)
+        ? await probeLocal(signal)
+        : { healthy: ollamaHealth, models: installedModels || [] };
+      const installed = installedModels !== null ? installedModels : (probe.models || []);
+      const capabilities = {};
+      if (probe.healthy && task === 'vision') {
+        for (const name of [model, visionModel, localModel]) {
+          if (name && capabilities[name] === undefined) capabilities[name] = await modelCapabilities(name, signal);
+        }
+      }
+      // The cloud model's capability is a registry fact, verified at
+      // registry time; per-model, never a family assumption.
+      const Reg = registry();
+      const cloudEntry = Reg && Reg.getModel ? Reg.getModel('gemini', cloudModel) : null;
+      if (cloudEntry && Array.isArray(cloudEntry.capabilities)) capabilities[cloudModel] = cloudEntry.capabilities.slice();
+      const decision = R.routeTask({
+        task,
+        capabilities,
+        privacyMode,
+        cloudEnabled,
+        cloudConsent,
+        cloudKeyAvailable: Boolean(keyFor()),
+        providerHealth: { ollama: probe.healthy, gemini: geminiHealth === null ? undefined : geminiHealth },
+        installedModels: installed,
+        requestedModel: model || null,
+        localModel,
+        localVisionModel: visionModel || null,
+        cloudModel,
+      });
+      return { probe, decision };
+    }
+
+    // Local chat failed AFTER the router picked it (model vanished, Ollama
+    // died mid-call). Reconsider the cloud through the same gates, with
+    // local now honestly reported as unable to serve. Never on abort.
+    async function reconsiderCloud({ system, prompt, cloudArgs, task, privacyMode, cloudEnabled, cloudConsent, model, visionModel, signal, localError }) {
+      const { decision } = await routeTask(task, {
+        privacyMode, cloudEnabled, cloudConsent, model, visionModel, signal,
+        ollamaHealth: false, installedModels: [],
+      });
+      if (decision.ok && decision.provider === 'gemini') {
+        const cp = { ...{ system, prompt }, ...(cloudArgs || {}) };
+        return chatGemini({ system: cp.system, prompt: cp.prompt, model: decision.model, signal });
+      }
+      if (!decision.ok && decision.reason === 'gemini_health_unknown' && cloudConsent) {
+        // The user consented to this cloud try; health is the only unknown.
+        // Probe it now (bounded) and let the router decide with the fact.
+        const healthy = await probeCloudHealth(signal);
+        const again = await routeTask(task, {
+          privacyMode, cloudEnabled, cloudConsent, model, visionModel, signal,
+          ollamaHealth: false, installedModels: [], geminiHealth: healthy,
+        });
+        if (again.decision.ok && again.decision.provider === 'gemini') {
+          const cp = { ...{ system, prompt }, ...(cloudArgs || {}) };
+          return chatGemini({ system: cp.system, prompt: cp.prompt, model: again.decision.model, signal });
+        }
+        const refused = refusalError(again.decision.reason || 'cloud_provider_down');
+        refused.localError = String((localError && localError.message) || localError);
+        throw refused;
+      }
+      if (!decision.ok && decision.reason === 'no_cloud_consent' && !cloudConsent
+          && cloudEnabled && keyFor() && privacyMode !== 'local_only') {
+        // Every other gate is open; consent for THIS request is the only
+        // missing human step. Nothing has been sent anywhere.
+        return { needsCloudConsent: true, localError: String((localError && localError.message) || localError), cloud: cloudPreview() };
+      }
+      throw localError; // the honest local failure
+    }
+
+    async function completeRouted(args) {
+      const {
+        system, prompt, cloudArgs, images, history, onToken,
+        task = 'chat',
+        model = null,
+        visionModel = null,
+        privacyMode = 'standard',
+        cloudEnabled = cloudArmed,
+        cloudConsent = false,
+        signal = null,
+      } = args || {};
+
+      const { probe, decision } = await routeTask(task, {
+        privacyMode, cloudEnabled, cloudConsent, model, visionModel, signal,
+      });
+
+      if (decision.ok && decision.provider === 'ollama') {
+        try {
+          return await chatOllama({ system, prompt, images, history, onToken, model: decision.model, signal });
+        } catch (err) {
+          if (isAbort(err) || (signal && signal.aborted)) throw err;
+          return reconsiderCloud({ system, prompt, cloudArgs, task, privacyMode, cloudEnabled, cloudConsent, model, visionModel, signal, localError: err });
+        }
+      }
+      if (decision.ok && decision.provider === 'gemini') {
+        // Only reachable when consent was already true for this request.
+        const cp = { ...{ system, prompt }, ...(cloudArgs || {}) };
+        return chatGemini({ system: cp.system, prompt: cp.prompt, model: decision.model, signal });
+      }
+      // Refused. With consent already given and health merely UNKNOWN,
+      // check cloud health now (bounded) and let the router decide again
+      // with the fresh fact. Everything else is an honest refusal.
+      if (!decision.ok && decision.reason === 'gemini_health_unknown') {
+        const healthy = await probeCloudHealth(signal);
+        const again = await routeTask(task, {
+          privacyMode, cloudEnabled, cloudConsent, model, visionModel, signal,
+          ollamaHealth: probe.healthy, installedModels: probe.models || [],
+          geminiHealth: healthy,
+        });
+        if (again.decision.ok && again.decision.provider === 'gemini') {
+          const cp = { ...{ system, prompt }, ...(cloudArgs || {}) };
+          return chatGemini({ system: cp.system, prompt: cp.prompt, model: again.decision.model, signal });
+        }
+        throw refusalError(again.decision.reason || 'cloud_provider_down');
+      }
+      // Not consented yet: when cloud is armed in every other respect, the
+      // per-request confirmation is the next human step. Nothing has been
+      // sent anywhere, and nothing retries on its own after a decline.
+      if (!decision.ok && decision.reason === 'no_cloud_consent' && !cloudConsent
+          && cloudEnabled && keyFor() && privacyMode !== 'local_only') {
+        const localReason = probe.healthy
+          ? (task === 'vision' ? 'no_vision_model_local' : 'no_local_model')
+          : 'ollama_down';
+        return { needsCloudConsent: true, localError: localReason, cloud: cloudPreview() };
+      }
+      throw refusalError(decision.reason);
     }
 
     // Local first; cloud only when the user explicitly enabled cloud use
@@ -222,7 +462,7 @@
       }
     }
 
-    return { status, hasModel, chat: chatOllama, chatGemini, complete, listModels, modelCapabilities, testGeminiKey, localModel };
+    return { status, hasModel, chat: chatOllama, chatGemini, complete, completeRouted, routeTask, probeLocal, listModels, modelCapabilities, testGeminiKey, localModel };
   }
 
   return createAi;

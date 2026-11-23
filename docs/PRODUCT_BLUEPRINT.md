@@ -100,6 +100,19 @@ claims to literally experience emotions.
   unverified cloud capability refuses, and missing models are never
   auto-downloaded. `src/ai.js` enforces the same gate for its fallback
   (`cloudEnabled`, default false).
+- **Per-ask routing with a human cloud gate (M1 second slice, 23 Nov 2026).**
+  Every ask and screen question is routed through the task router using
+  facts gathered live under bounded timeouts: one probe for Ollama health
+  and the installed models, capability queries for vision candidates, the
+  cloud model's capability from the registry. The screen path forces
+  local-only mode, so screenshots never leave the device. When the local
+  call fails and the router finds the cloud eligible, the app asks once,
+  per request, and states exactly what Google would receive (the current
+  prompt and system context, never history or screenshots) before anything
+  is sent; a decline keeps the question local and is reported as the local
+  failure, and nothing retries. Asks are cancellable and every network call
+  has a bounded timeout; the web/mobile bridge routes identically and fails
+  closed (it holds no key, so the cloud cannot arm there).
 - Local conversation history in the ask view: conversations with rename and
   confirmed delete, stored only in the device database, never synced and
   never sent to the cloud; the local model sees the last ten turns of the
@@ -126,16 +139,14 @@ claims to literally experience emotions.
 - Update policy that never auto-installs unsigned builds; update modes
   disabled/auto/manual-download (`src/update-policy.js`, `src/updater.js`).
 - Health check and onboarding interview (`src/health.js`, `src/onboarding.js`).
-- 331 passing unit/integration tests (258 baseline; model selection +18, conversation history +17, optional key storage +13, M1 provider registry/task router/cloud gate +25); three main-branch CI workflows green
+- 345 passing unit/integration tests (258 baseline; model selection +18, conversation history +17, optional key storage +13, M1 provider registry/task router/cloud gate +25, M1 per-ask routing integration +14); three main-branch CI workflows green
   (CI, CI macOS + Linux, Android APK; verified this session: only these
   three have ever run on main);
   public Android debug-APK preview release.
 
 ## 4. Planned, NOT implemented
 
-Deeper per-ask routing integration
-(the registry and router above exist as pure, tested modules; routing every
-ask through them is the next M1 slice); a secure credential-vault adapter
+A secure credential-vault adapter
 for Android/web key storage; hardware detection and profiles; agent orchestrator, typed tools,
 approval cards, audit log, emergency stop; proactive scheduler and OS
 notifications; wake word; text-to-speech; multilingual speech; Android
