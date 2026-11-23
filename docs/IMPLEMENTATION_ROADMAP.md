@@ -1,8 +1,8 @@
 # CompanionDesk Implementation Roadmap
 
 Status: M0 and M1 are COMPLETE on main (verified 23 Nov 2026; current
-baseline `0e242ce`, 428 passing tests, all three main-branch CI workflows green
-on that head (CI 45230375359, CI macOS + Linux 45230375298, Android APK 45230433953). Doc-only commits after the baseline do not change
+baseline `40946f4`, 437 passing tests, all three main-branch CI workflows green
+on that head (CI 45231761653, CI macOS + Linux 45231761785, Android APK 45232214311). Doc-only commits after the baseline do not change
 these numbers). Supersedes `docs/COMPANIONDESK_ROADMAP.md` and
 `docs/FEATURE_GAP.md` once approved; those files stay until then. Phases
 are dependency-ordered with explicit gates. Phases M2-M8 below are planned

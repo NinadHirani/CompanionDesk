@@ -1,9 +1,9 @@
 # CompanionDesk Product Blueprint
 
 Status: **proposed** in direction; M0 and M1 are COMPLETE on main, verified
-23 Nov 2026. The current verified baseline is main `0e242ce` with 428
+23 Nov 2026. The current verified baseline is main `40946f4` with 437
 passing tests and all three main-branch CI workflows green on that head
-(CI 45230375359, CI macOS + Linux 45230375298, Android APK 45230433953). Doc-only commits after the baseline do not change these
+(CI 45231761653, CI macOS + Linux 45231761785, Android APK 45232214311). Doc-only commits after the baseline do not change these
 numbers. This document states the agreed product vision and the
 verified current state. No decision here is accepted until Ninad approves
 it. Every feature is marked **implemented** (verified against the
@@ -182,7 +182,7 @@ claims to literally experience emotions.
 - Update policy that never auto-installs unsigned builds; update modes
   disabled/auto/manual-download (`src/update-policy.js`, `src/updater.js`).
 - Health check and onboarding interview (`src/health.js`, `src/onboarding.js`).
-- 428 passing unit/integration tests (258 baseline; model selection +18, conversation history +17, optional key storage +13, M1 provider registry/task router/cloud gate +25, M1 per-ask routing integration +18, M1 review fixes +18, M1 hardware profiles +12, M1 provider status +11, M1 provider contract tests +18, M1 provider fault diagnostics +18, fault-detail sanitization review fix +3, offline memory-v2 retrieval harness +12, memory-v2 harness slice 4 fold fix and bridges +5); three main-branch CI workflows green
+- 437 passing unit/integration tests (258 baseline; model selection +18, conversation history +17, optional key storage +13, M1 provider registry/task router/cloud gate +25, M1 per-ask routing integration +18, M1 review fixes +18, M1 hardware profiles +12, M1 provider status +11, M1 provider contract tests +18, M1 provider fault diagnostics +18, fault-detail sanitization review fix +3, offline memory-v2 retrieval harness +12, memory-v2 harness slice 4 fold fix and bridges +5, memory-v2 store contract tests +9); three main-branch CI workflows green
   (CI, CI macOS + Linux, Android APK; verified this session: only these
   three have ever run on main);
   public Android debug-APK preview release.
