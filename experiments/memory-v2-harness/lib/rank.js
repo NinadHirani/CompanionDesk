@@ -43,15 +43,35 @@ const SYNONYMS = {
   laundry: ['chore', 'washing'],
   diet: ['eat', 'food', 'allergic'],
   eat: ['diet', 'food', 'allergic', 'spice'],
+  dietary: ['diet', 'food', 'allergic'],
+  restaurant: ['eat', 'food', 'dining'],
+  running: ['run', 'marathon'],
   fitness: ['run', 'marathon', 'exercise'],
+  weekend: ['saturday', 'sunday'],
+  activities: ['hobby', 'volunteer', 'club'],
+  family: ['parents', 'sibling'],
+  habits: ['planning', 'plans', 'routine'],
+  meeting: ['call', 'appointment'],
   credential: ['password', 'locker', 'passport'],
   document: ['scan', 'paperwork', 'transcript'],
 };
 
+// Slice-4 fault fix: query tokens are plural-folded BEFORE lookup, so a
+// written key like 'fitness' (which folds to 'fitnes') never fired and the
+// entry was silently dead. Normalize the map once at load: keys AND values
+// go through fold(), so the written map stays human-readable while lookup
+// always agrees with the folded token space.
+const FOLDED_SYNONYMS = {};
+for (const [key, values] of Object.entries(SYNONYMS)) {
+  const fk = fold(key);
+  const list = FOLDED_SYNONYMS[fk] || (FOLDED_SYNONYMS[fk] = []);
+  for (const v of values) if (!list.includes(fold(v))) list.push(fold(v));
+}
+
 function expand(tokens) {
   const out = new Set(tokens);
   for (const t of tokens) {
-    for (const syn of SYNONYMS[t] || []) out.add(syn);
+    for (const syn of FOLDED_SYNONYMS[t] || []) out.add(syn);
   }
   return [...out];
 }
@@ -128,4 +148,4 @@ function selectForTask(index, query, task, opts) {
   return search(index, query, { ...o, k: budget, synonyms: syn });
 }
 
-module.exports = { tokenize, buildIndex, search, selectForTask, BUDGETS, SYNONYMS, K1, B };
+module.exports = { tokenize, buildIndex, search, selectForTask, BUDGETS, SYNONYMS, FOLDED_SYNONYMS, K1, B };

@@ -101,3 +101,47 @@ test('synonym expansion is opt-out: plain mode stays purely lexical', () => {
   assert.ok(!plain.includes('f16'), 'groceries bullet only reachable via expansion');
   assert.ok(full.includes('f29') && full.includes('f16'));
 });
+
+// --- slice 4: fold-normalized synonym keys (fault fix) + vocabulary bridges ---
+
+test('fold fix: a written key that plural-folds still fires (fitness -> fitnes)', () => {
+  // The fault: query tokens fold first, so 'fitness' arrived as 'fitnes' and
+  // the map key 'fitness' was silently dead. The folded lookup must expose it.
+  assert.ok(H.fold === undefined || true); // fold is internal; assert via lookup
+  const folded = H.FOLDED_SYNONYMS['fitnes'];
+  assert.ok(Array.isArray(folded), 'folded key for fitness exists');
+  assert.ok(folded.includes('run'), 'fitness expands to run');
+  assert.ok(folded.includes('marathon'), 'fitness expands to marathon');
+});
+
+test('running and fitness retrieves the run and marathon bullets', () => {
+  const idx = H.buildIndex(corpus);
+  const got = H.selectForTask(idx, 'running and fitness', 'chat').map((r) => r.id);
+  assert.ok(got.includes('f15'), 'morning run bullet retrieved');
+  assert.ok(got.includes('f34'), 'half marathon bullet retrieved');
+});
+
+test('weekend activities retrieves the saturday/sunday bullets', () => {
+  const idx = H.buildIndex(corpus);
+  const got = H.selectForTask(idx, 'weekend activities', 'chat').map((r) => r.id);
+  assert.ok(got.includes('f27'), 'table tennis Saturday bullet retrieved');
+  assert.ok(got.includes('f30'), 'library Sunday bullet retrieved');
+  assert.ok(got.includes('f44'), 'weekly review Sunday bullet retrieved');
+});
+
+test('dietary booking paraphrase retrieves allergy and food bullets, sensitive gate intact', () => {
+  const idx = H.buildIndex(corpus);
+  const got = H.selectForTask(idx, 'dietary needs for a restaurant booking', 'chat').map((r) => r.id);
+  assert.ok(got.includes('f24'), 'peanut allergy bullet retrieved');
+  assert.ok(got.includes('f36'), 'food preference bullet retrieved');
+  // The same query under the default gate must never surface sensitive rows.
+  for (const sid of ['f21', 'f22', 'f38']) assert.ok(!got.includes(sid), `sensitive ${sid} stays hidden`);
+});
+
+test('family and habits bridges retrieve their expected bullets', () => {
+  const idx = H.buildIndex(corpus);
+  const fam = H.selectForTask(idx, 'family contact routine', 'chat').map((r) => r.id);
+  assert.ok(fam.includes('f18') && fam.includes('f39'), 'family bullets retrieved');
+  const study = H.selectForTask(idx, 'study habits', 'chat').map((r) => r.id);
+  assert.ok(study.includes('f17') && study.includes('f06') && study.includes('f44'), 'study bullets retrieved');
+});
