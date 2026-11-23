@@ -60,6 +60,11 @@ docs/IMPLEMENTATION_ROADMAP.md.
    platform vault adapter exists; no insecure fallback.
 2. Conversation history in the ask flow - DONE 23 Nov 2026 (local-only,
    rename, confirmed delete; src/chat-history.js).
+5. Hardware-aware model defaults - DONE 23 Nov 2026 (src/hardware.js:
+   local-only OS/browser readings, sanitized coarse facts only, documented
+   lightweight/balanced/powerful thresholds, conservative fallback when
+   unknown; the profile steers only DEFAULT choices and Settings recommends
+   installed models, never downloads).
 3. Model-as-setting instead of hardcoded constants - DONE 23 Nov 2026
    (separate chat and vision settings, installed-only selection,
    src/model-selection.js).

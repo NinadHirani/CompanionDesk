@@ -86,9 +86,27 @@ and the streaming reader, `ai:cancel` IPC channel) and bounded (probe 1.5 s,
 local chat 120 s, cloud 30 s by default); there are no retries anywhere.
 The web/mobile bridge routes its asks through the same router and fails
 closed: no key exists there, so the cloud can never arm.
-Still planned in M1: hardware probe and lightweight/balanced/powerful
-profiles (`src/hardware.js`), provider health checks surfaced in the status
-UI. Acceptance: routing decisions unit-tested; no hardcoded model constants
+THIRD SLICE DONE 23 Nov 2026: local hardware detection and profiles
+(`src/hardware.js`). Strictly local and read-only: no shell commands, no
+network, no telemetry; the desktop main process reads only the OS's own APIs
+(total/free memory, logical cores, platform, arch) once at startup, and the
+web build reads the browser's coarse hints, always labelled approximate
+(`navigator.deviceMemory` is a rounded-down bucket and is never presented as
+exact). GPU/NPU stay unknown unless a safe built-in API reports them.
+Renderers receive only sanitized facts: coarse memory buckets, no exact
+bytes, no architecture, no free-memory reading, so the settings view cannot
+become a device fingerprint (tested). Profiles lightweight/balanced/powerful
+have documented thresholds (powerful: >=16 GiB AND >=8 logical cores;
+balanced: >=8 GiB AND >=4; unknown or malformed readings land on
+lightweight, the conservative end). A new `hardware_profile` setting
+(auto/lightweight/balanced/powerful, default auto) steers ONLY the DEFAULT
+model choices when the user picked none (`chatFallbackForProfile`), and
+Settings shows a recommendation that names only models already installed
+(`recommendedForProfile`); an explicit model choice always wins and nothing
+is ever downloaded.
+
+Still planned in M1: provider health checks surfaced in the status UI.
+Acceptance: routing decisions unit-tested; no hardcoded model constants
 in `src/ai.js`; contract tests per provider.
 
 ## GATE 1 - Android intelligence (3-4 wks, device time)

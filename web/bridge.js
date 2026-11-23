@@ -307,12 +307,16 @@
   async function ai_models() {
     await readyPromise;
     const settings = CompanionSettings.normalizeSettings(db.allSettings());
+    const profile = CompanionHardware.resolveProfile(
+      settings.hardware_profile,
+      CompanionHardware.classifyWebHardware(CompanionHardware.detectWebHardware())
+    );
     const res = await CompanionModelSelection.resolveModelSelection({
       settings, ai,
-      chatFallback: ai.localModel,
+      chatFallback: CompanionModelSelection.chatFallbackForProfile(profile),
       visionFallback: CompanionModelSelection.DEFAULT_VISION_MODEL,
     });
-    return { ok: true, ...res, defaults: { chat: ai.localModel, vision: CompanionModelSelection.DEFAULT_VISION_MODEL } };
+    return { ok: true, ...res, defaults: { chat: CompanionModelSelection.chatFallbackForProfile(profile), vision: CompanionModelSelection.DEFAULT_VISION_MODEL } };
   }
 
   function localNowIso() {
@@ -358,6 +362,20 @@
     if (!r.ok) return { ok: false, error: 'invalid_settings', details: r.errors };
     for (const [key, value] of Object.entries(r.clean)) db.setSetting(key, value);
     return { ok: true, settings: CompanionSettings.normalizeSettings(db.allSettings()) };
+  }
+
+  // Hardware facts, web edition: the browser's coarse hints only, always
+  // labelled approximate (deviceMemory is a rounded-down bucket, never an
+  // exact reading). Same sanitized shape as the desktop hardware:report; no
+  // recommendation is invented without an installed-models list.
+  function hardware_report() {
+    const raw = CompanionHardware.detectWebHardware();
+    const settings = CompanionSettings.normalizeSettings(db.allSettings());
+    const profile = CompanionHardware.resolveProfile(
+      settings.hardware_profile,
+      CompanionHardware.classifyWebHardware(raw)
+    );
+    return { ok: true, ...CompanionHardware.sanitizeHardware(raw), profile, recommendation: null };
   }
 
   // ---- today: the brief and done-marking (mirrors services.js) --------------
@@ -517,7 +535,7 @@
     cloud_testKey: () => ({ ok: false, error: 'unsupported' }),
     cloud_removeKey: () => ({ ok: true, supported: false, configured: false }),
     brief_today, assignment_setDone,
-    settings_get, settings_save,
+    settings_get, settings_save, hardware_report,
     grades_get, grades_setScore, grades_setTarget,
     patterns_get, activity_clear,
     deadline_add, deadline_remove,

@@ -26,6 +26,7 @@ const IPC_CHANNELS = [
   'assignment:setDone',
   'settings:get',
   'settings:save',
+  'hardware:report',
   'memory:list',
   'memory:add',
   'memory:forget',

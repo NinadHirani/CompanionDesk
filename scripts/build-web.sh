@@ -16,7 +16,7 @@ cp prompts/syllabus-extract.md web/prompts/
 # Pure logic modules, wrapped dual-mode by scripts/web-wrap.js.
 node scripts/web-wrap.js
 # Already dual-mode modules plus the web bridge.
-cp src/extraction-core.js src/import-errors.js src/ai.js src/model-selection.js src/chat-history.js src/ollama-setup.js src/db.js src/provider-registry.js src/task-router.js web/core/
+cp src/extraction-core.js src/import-errors.js src/ai.js src/model-selection.js src/chat-history.js src/ollama-setup.js src/db.js src/provider-registry.js src/task-router.js src/hardware.js web/core/
 cp src/web/bridge.js web/bridge.js
 cp node_modules/sql.js/dist/sql-wasm.js node_modules/sql.js/dist/sql-wasm.wasm web/vendor/
 cp node_modules/pdfjs-dist/build/pdf.min.mjs web/vendor/

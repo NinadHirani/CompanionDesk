@@ -92,5 +92,37 @@
     };
   }
 
-  return { DEFAULT_CHAT_MODEL, DEFAULT_VISION_MODEL, isPresent, resolveChatModel, pickVisionModel, resolveModelSelection };
+  // Profile-aware DEFAULT, used ONLY when the user picked no chat model of
+  // their own ('' in settings). A profile never overrides an explicit choice
+  // and never pulls anything. lightweight/balanced keep the smallest known
+  // default; on a powerful machine the 4B model is the better starting point
+  // (the registry lists it chat- and vision-capable).
+  const PROFILE_CHAT_FALLBACK = Object.freeze({
+    lightweight: DEFAULT_CHAT_MODEL,
+    balanced: DEFAULT_CHAT_MODEL,
+    powerful: DEFAULT_VISION_MODEL, // gemma3:4b: chat + vision capable
+  });
+  function chatFallbackForProfile(profile) {
+    return PROFILE_CHAT_FALLBACK[profile] || DEFAULT_CHAT_MODEL;
+  }
+
+  // What Settings shows as a recommendation for a profile. Every name must
+  // already be installed (Ollama's own list); when the preferred default is
+  // absent the answer is null ("keep the current default"), never a pull.
+  // lightweight recommends no vision model: vision models are the heavy ones.
+  function recommendedForProfile(profile, installed) {
+    const names = Array.isArray(installed) ? installed : null;
+    if (!names) return null;
+    const want = {
+      lightweight: { chat: DEFAULT_CHAT_MODEL, vision: null },
+      balanced: { chat: DEFAULT_CHAT_MODEL, vision: DEFAULT_VISION_MODEL },
+      powerful: { chat: DEFAULT_VISION_MODEL, vision: DEFAULT_VISION_MODEL },
+    }[profile] || { chat: DEFAULT_CHAT_MODEL, vision: null };
+    return {
+      chat: isPresent(want.chat, names) ? want.chat : null,
+      vision: want.vision && isPresent(want.vision, names) ? want.vision : null,
+    };
+  }
+
+  return { DEFAULT_CHAT_MODEL, DEFAULT_VISION_MODEL, isPresent, resolveChatModel, pickVisionModel, resolveModelSelection, chatFallbackForProfile, recommendedForProfile };
 });

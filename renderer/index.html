@@ -176,6 +176,14 @@
       <div class="field"><label for="s-aimodel">Local model (chat)</label><select id="s-aimodel"><option value="">Default</option></select></div>
       <div class="field"><label for="s-visionmodel">Vision model (screen questions)</label><select id="s-visionmodel"><option value="">Default</option></select></div>
       <p class="hint" id="models-note">Model lists come from the Ollama already installed on this computer; nothing is downloaded from here.</p>
+      <div class="field"><label for="s-hwprofile">Hardware profile</label>
+        <select id="s-hwprofile">
+          <option value="auto">Auto (detect this computer)</option>
+          <option value="lightweight">Lightweight</option>
+          <option value="balanced">Balanced</option>
+          <option value="powerful">Powerful</option>
+        </select></div>
+      <p class="hint" id="hw-note">The profile steers only the default models when none is chosen; a model you pick yourself always wins.</p>
       <label class="check"><input id="s-learn" type="checkbox" /> Learn from what I mark done (kept on this computer)</label>
       <label class="check"><input id="s-suggest" type="checkbox" /> Offer to remember things I mention</label>
       <label class="check"><input id="s-cloud" type="checkbox" /> Share my notes and habits with the cloud model if my local one is unavailable</label>

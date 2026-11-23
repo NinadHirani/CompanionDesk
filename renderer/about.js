@@ -112,6 +112,8 @@
     cloud: document.getElementById('s-cloud'),
     aimodel: document.getElementById('s-aimodel'),
     visionmodel: document.getElementById('s-visionmodel'),
+    hwprofile: document.getElementById('s-hwprofile'),
+    hwnote: document.getElementById('hw-note'),
   };
 
   function fillSettings(s) {
@@ -126,6 +128,7 @@
     F.cloud.checked = s.cloud_personal;
     F.aimodel.value = s.ai_model_local || '';
     F.visionmodel.value = s.ai_model_vision || '';
+    if (F.hwprofile) F.hwprofile.value = s.hardware_profile;
   }
 
   // Model choices come only from what Ollama already has installed; nothing
@@ -168,9 +171,31 @@
     if (note) note.textContent = '';
   }
 
+  // Hardware facts come from the main process already sanitized: coarse
+  // memory buckets only, never an exact reading. The profile steers only
+  // the DEFAULT models; anything picked explicitly always wins.
+  async function fillHardware() {
+    const note = F.hwnote;
+    if (!note) return;
+    let res = null;
+    try { res = await api.hardware_report(); } catch { res = null; }
+    if (!res || !res.ok) { note.textContent = ''; return; }
+    const bits = [];
+    if (res.memoryLabel && res.memoryLabel !== 'unknown') bits.push(`${res.memoryLabel} memory`);
+    if (res.coresTier === 'low') bits.push('a light CPU');
+    else if (res.coresTier === 'medium') bits.push('a mid-range CPU');
+    else if (res.coresTier === 'high') bits.push('a multicore CPU');
+    const rec = res.recommendation || {};
+    const recBits = [];
+    if (rec.chat) recBits.push(`chat: ${rec.chat}`);
+    if (rec.vision) recBits.push(`vision: ${rec.vision}`);
+    note.textContent = `This computer: ${bits.join(', ') || 'details unknown'}. Profile: ${res.profile}. `
+      + `Suggested defaults for it: ${recBits.join(', ') || 'keep the current ones'}. A model you pick yourself always wins.`;
+  }
+
   document.getElementById('settings-save').addEventListener('click', async () => {
     const msg = document.getElementById('settings-msg');
-    const res = await api.settings_save({
+    const payload = {
       user_name: F.user.value,
       assistant_name: F.assistant.value,
       student_module: F.student.value,
@@ -182,7 +207,9 @@
       cloud_personal: F.cloud.checked,
       ai_model_local: F.aimodel.value,
       ai_model_vision: F.visionmodel.value,
-    });
+    };
+    if (F.hwprofile) payload.hardware_profile = F.hwprofile.value;
+    const res = await api.settings_save(payload);
     if (res.ok) { fillSettings(res.settings); msg.textContent = 'Saved.'; msg.className = 'hint'; UI.today.refresh(); }
     else { msg.textContent = UI.friendlyError(res.error); msg.className = 'hint error'; }
   });
@@ -325,7 +352,7 @@
     const [mem, pat, set] = await Promise.all([api.memory_list(), api.patterns_get(), api.settings_get()]);
     if (mem.ok) { renderItems(mem); renderProposals(mem.proposals); }
     if (pat.ok) renderPatterns(pat);
-    if (set.ok) { fillSettings(set.settings); fillModels(set.settings); }
+    if (set.ok) { fillSettings(set.settings); fillModels(set.settings); fillHardware(); }
     await fillCloud();
   }
 

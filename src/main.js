@@ -31,6 +31,9 @@ const P = require('./personal');
 const G = require('./gradebook');
 const CAL = require('./calendar');
 const fs = require('fs');
+const os = require('os');
+const Hardware = require('./hardware');
+const { chatFallbackForProfile, recommendedForProfile } = require('./model-selection');
 const { todayIso, localNowIso, addDaysIso } = require('./dates');
 const { createUpdateController } = require('./updater');
 const policy = require('./update-policy');
@@ -39,6 +42,9 @@ const SMOKE = process.argv.includes('--smoke');
 
 let db = null;
 let ai = null;
+// Detected once at startup from the OS's own APIs (local-only); the renderer
+// only ever receives sanitized facts via hardware:report.
+let hardwareRaw = null;
 // In-flight ask abort controllers, keyed by request id (M1 slice 2): the
 // renderer cancels through ai:cancel, the abort reaches the network call and
 // the streaming reader, and no retry follows.
@@ -82,11 +88,18 @@ function ctx() {
 // Which models actually answer: the user's saved choice when it is still
 // installed, the built-in default otherwise. Nothing is pulled from here;
 // the settings UI only ever offers models Ollama reports as installed.
+// The hardware profile steers only the DEFAULT models, never an explicit
+// choice; unknown hardware stays on the conservative lightweight tier.
+function effectiveProfile(settings) {
+  return Hardware.resolveProfile(settings.hardware_profile, Hardware.classifyProfile(hardwareRaw || {}));
+}
+
 async function modelSelection() {
+  const settings = P.getSettings(db);
   return resolveModelSelection({
-    settings: P.getSettings(db),
+    settings,
     ai,
-    chatFallback: ai.localModel,
+    chatFallback: chatFallbackForProfile(effectiveProfile(settings)),
     visionFallback: SCREEN.DEFAULT_VISION_MODEL,
   });
 }
@@ -94,6 +107,7 @@ async function modelSelection() {
 async function init() {
   const dataDir = path.join(app.getPath('userData'), 'data');
   db = await LocalDb.open({ file: path.join(dataDir, 'companiondesk.db') });
+  hardwareRaw = Hardware.detectNodeHardware(os);
   // The optional Gemini key lives in the OS credential vault, decrypted in
   // this process only when a cloud call needs it. Without a saved key the
   // cloud fallback is off.
@@ -237,10 +251,31 @@ function registerIpc() {
   ipcMain.handle('ai:models', async () => ({
     ok: true,
     ...(await modelSelection()),
-    defaults: { chat: ai.localModel, vision: SCREEN.DEFAULT_VISION_MODEL },
+    defaults: { chat: chatFallbackForProfile(effectiveProfile(P.getSettings(db))), vision: SCREEN.DEFAULT_VISION_MODEL },
   }));
 
   ipcMain.handle('settings:get', async () => ({ ok: true, settings: P.getSettings(db) }));
+
+  // Hardware facts for Settings: read once at startup from the OS's own APIs,
+  // then sanitized before leaving this process (coarse memory buckets only:
+  // no exact bytes, no architecture, no free-memory reading, nothing that
+  // could fingerprint the device). The recommendation only names models
+  // Ollama already has installed; nothing is downloaded.
+  ipcMain.handle('hardware:report', async () => {
+    const settings = P.getSettings(db);
+    const profile = effectiveProfile(settings);
+    let installed = null;
+    try { installed = await ai.listModels(); } catch { installed = null; }
+    const names = Array.isArray(installed)
+      ? installed.map((m) => String((m && m.name) || '')).filter(Boolean)
+      : null;
+    return {
+      ok: true,
+      ...Hardware.sanitizeHardware(hardwareRaw),
+      profile,
+      recommendation: recommendedForProfile(profile, names),
+    };
+  });
   ipcMain.handle('settings:save', async (_e, payload) => P.saveSettings(db, payload));
 
   ipcMain.handle('memory:list', async () => P.listMemory(ctx()));

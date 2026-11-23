@@ -19,12 +19,14 @@ const DEFAULTS = Object.freeze({
   onboarding_done: false,
   ai_model_local: '', // Ollama chat model; '' = the built-in default
   ai_model_vision: '', // Ollama vision model for screen questions; '' = default
+  hardware_profile: 'auto', // 'auto' detects this computer; a chosen profile steers only DEFAULT models
 });
 
 const ENUMS = Object.freeze({
   student_module: ['auto', 'off'],
   tone: ['direct', 'warm', 'formal'],
   brevity: ['short', 'normal', 'detailed'],
+  hardware_profile: ['auto', 'lightweight', 'balanced', 'powerful'],
 });
 const BOOLEANS = ['learn_from_activity', 'suggest_memories', 'cloud_personal', 'cloud_enabled', 'onboarding_done'];
 const TEXT_MAX = Object.freeze({ user_name: 40, assistant_name: 40, language: 30 });
