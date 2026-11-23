@@ -159,10 +159,16 @@ claims to literally experience emotions.
   (`src/provider-faults.js`). Fault text never contains a raw server body,
   URL, prompt, image, key material or file path. A caller cancellation
   during routing surfaces as the cancellation it is: no retry and no cloud
-  consideration. Probes stay read-only and on-demand (no polling, no
-  telemetry), the strict router is unchanged (health must be KNOWN true;
-  unknown refuses), and the cloud consent gates are untouched. Settings
-  displays the fault reasons via the shared display map.
+  consideration. Fault details are strictly whitelisted: only a 3-digit HTTP
+  status (http_error) or an errno-style network code (unreachable) can
+  carry a detail, everything else drops it, and a surviving detail is at
+  most 32 characters; every fault crossing the status view is normalized
+  through that sanitizer, so no raw body, URL, path or secret can reach
+  Settings. Probes stay read-only and on-demand
+  (no polling, no telemetry), the strict router is unchanged (health must
+  be KNOWN true; unknown refuses), and the cloud consent gates are
+  untouched. Settings displays the fault reasons via the shared display
+  map.
 - Push-to-talk voice input via a fixed-path whisper.cpp allowlist, English
   models only (`src/voice.js`, `src/whisper.js`, `src/vad.js`).
 - On-demand single-window screen Q&A with a local vision model
@@ -177,7 +183,7 @@ claims to literally experience emotions.
 - Update policy that never auto-installs unsigned builds; update modes
   disabled/auto/manual-download (`src/update-policy.js`, `src/updater.js`).
 - Health check and onboarding interview (`src/health.js`, `src/onboarding.js`).
-- 408 passing unit/integration tests (258 baseline; model selection +18, conversation history +17, optional key storage +13, M1 provider registry/task router/cloud gate +25, M1 per-ask routing integration +18, M1 review fixes +18, M1 hardware profiles +12, M1 provider status +11, M1 provider contract tests +18, M1 provider fault diagnostics +18); three main-branch CI workflows green
+- 411 passing unit/integration tests (258 baseline; model selection +18, conversation history +17, optional key storage +13, M1 provider registry/task router/cloud gate +25, M1 per-ask routing integration +18, M1 review fixes +18, M1 hardware profiles +12, M1 provider status +11, M1 provider contract tests +18, M1 provider fault diagnostics +18, fault-detail sanitization review fix +3); three main-branch CI workflows green
   (CI, CI macOS + Linux, Android APK; verified this session: only these
   three have ever run on main);
   public Android debug-APK preview release.

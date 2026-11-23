@@ -267,3 +267,46 @@ test('status() reports a typed fault and stays additive', async () => {
   assert.equal(good.ollama, true);
   assert.equal(good.fault, null);
 });
+
+test('fault() drops any detail outside the strict whitelist (review finding)', () => {
+  assert.deepEqual(F.fault({ code: 'timeout', detail: 'SECRET-TOKEN /private/path' }), { code: 'timeout', detail: null });
+  assert.deepEqual(F.fault({ code: 'http_error', detail: '5033' }), { code: 'http_error', detail: null });
+  assert.deepEqual(F.fault({ code: 'http_error', detail: '50' }), { code: 'http_error', detail: null });
+  assert.deepEqual(F.fault({ code: 'http_error', detail: '503' }), { code: 'http_error', detail: '503' });
+  assert.deepEqual(F.fault({ code: 'unreachable', detail: 'ECONNREFUSED and SECRET' }), { code: 'unreachable', detail: null });
+  assert.deepEqual(F.fault({ code: 'unreachable', detail: 'econn_refused' }), { code: 'unreachable', detail: null });
+  assert.deepEqual(F.fault({ code: 'unreachable', detail: 'ECONNREFUSED' }), { code: 'unreachable', detail: 'ECONNREFUSED' });
+  assert.deepEqual(F.fault({ code: 'model_missing', detail: '/etc/passwd' }), { code: 'model_missing', detail: null });
+  assert.deepEqual(F.fault({ code: 'malformed', detail: 'http://secret-host' }), { code: 'malformed', detail: null });
+  assert.deepEqual(F.fault({ code: 'unreachable', detail: 'E'.repeat(500) }), { code: 'unreachable', detail: null });
+  assert.equal(F.fault({ code: 'made_up', detail: 'x' }), null);
+});
+
+test('describeFault can never emit a non-whitelisted detail', () => {
+  assert.equal(F.describeFault({ code: 'timeout', detail: 'SECRET-TOKEN http://10.0.0.1' }), 'Timed out');
+  assert.equal(F.describeFault({ code: 'cancelled', detail: 'prompt text here' }), 'Cancelled');
+  assert.equal(F.describeFault({ code: 'http_error', detail: '500 with SECRET' }), 'Server error');
+  assert.equal(F.describeFault({ code: 'capability_unsuitable', detail: 'raw body SECRET' }), 'Not capable of this task');
+});
+
+test('provider-status normalizes upstream fault objects before display', () => {
+  const dirty = ProviderStatus.buildProviderStatus({
+    ollamaUp: false, installed: null,
+    chat: { model: LLAMA, resolved: 'ollama_down' },
+    vision: { model: GEMMA, resolved: 'ollama_down', visionVerified: null },
+    ollamaFault: { code: 'timeout', detail: 'SECRET-TOKEN /private/path' },
+    capsFaults: { [GEMMA]: { code: 'capability_unknown', detail: 'SECRET-BODY' } },
+    caps: {},
+  });
+  assert.equal(dirty.ollama.fault.detail, null);
+  assert.equal(dirty.vision.fault.code, 'capability_unknown');
+  assert.equal(dirty.vision.fault.detail, null);
+  assert.equal(JSON.stringify(dirty).includes('SECRET'), false);
+  const bogus = ProviderStatus.buildProviderStatus({
+    ollamaUp: false, installed: null,
+    chat: { model: LLAMA, resolved: 'ollama_down' },
+    vision: { model: GEMMA, resolved: 'ollama_down', visionVerified: null },
+    ollamaFault: { code: 'made_up', detail: 'SECRET' },
+  });
+  assert.equal(bogus.ollama.fault, null); // unknown codes fail closed, no fault emitted
+});

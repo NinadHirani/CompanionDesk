@@ -13,6 +13,19 @@
   if (typeof module === 'object' && module.exports) module.exports = factory();
   else root.CompanionProviderStatus = factory();
 })(typeof self !== 'undefined' ? self : this, function () {
+  // Fault objects arriving here come from upstream callers; nothing crosses
+  // this module's output unnormalized (review fix, 23 Nov 2026). The shared
+  // sanitizer (src/provider-faults.js) is used when present; without it the
+  // module fails closed and emits no fault at all rather than an
+  // unverified one.
+  function faultsMod() {
+    if (typeof module === 'object' && module.exports) return require('./provider-faults');
+    return (typeof self !== 'undefined' && self.CompanionProviderFaults) || null;
+  }
+  function cleanFault(f) {
+    const F = faultsMod();
+    return F ? F.fault(f) : null;
+  }
   // Same family-match semantics as ai.hasModel and model-selection: a name
   // without a tag matches any tag of the same family.
   function isInstalled(name, installed) {
@@ -46,8 +59,8 @@
     // from 'unknown' (unreadable or not probed).
     else if (caps && visionModel && Array.isArray(caps[visionModel]) && caps[visionModel].indexOf('vision') === -1) capability = 'unsuitable';
     else capability = 'unknown';
-    const visionFault = (capsFaults && visionModel && capsFaults[visionModel]) || null;
-    const chatFault = (up && chatInstalled === false) ? { code: 'model_missing', detail: null } : null;
+    const visionFault = cleanFault(capsFaults && visionModel ? capsFaults[visionModel] : null);
+    const chatFault = (up && chatInstalled === false) ? cleanFault({ code: 'model_missing', detail: null }) : null;
 
     const knownStorage = Boolean(secureStore && typeof secureStore === 'object');
     const supported = Boolean(secureStore && secureStore.supported);
@@ -60,7 +73,7 @@
     else state = supported ? 'armed' : 'no_secure_storage'; // key + enabled but no real vault: fail closed
 
     return {
-      ollama: { reachable: ollamaUp === null ? null : up, fault: ollamaFault || null },
+      ollama: { reachable: ollamaUp === null ? null : up, fault: cleanFault(ollamaFault) },
       chat: { model: chatModel, installed: chatInstalled, fault: chatFault },
       vision: { model: visionModel, capability, fault: visionFault },
       cloud: {

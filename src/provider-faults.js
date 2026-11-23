@@ -52,11 +52,31 @@
     return { code: 'unreachable', detail: null };
   }
 
+  // Whitelisted detail carriers: a 3-digit HTTP status for http_error and
+  // an errno-style network code for unreachable. Any other code, or any
+  // detail that fails its code's exact pattern, drops the detail entirely,
+  // so an upstream caller can never smuggle a raw body, URL, path or
+  // secret through a fault object (review fix, 23 Nov 2026).
+  const DETAIL_PATTERNS = Object.freeze({
+    http_error: /^\d{3}$/,
+    unreachable: /^E[A-Z0-9_]+$/,
+  });
+
   // Shape guard: only known codes ever leave this module, and detail is a
-  // short token, never a message. Returns null for anything unrecognized.
+  // whitelisted token, never a message. Returns null for anything
+  // unrecognized.
   function fault(f) {
     if (!f || FAULT_CODES.indexOf(f.code) === -1) return null;
-    return { code: f.code, detail: f.detail == null ? null : String(f.detail).slice(0, 32) };
+    const pattern = DETAIL_PATTERNS[f.code];
+    let detail = null;
+    if (pattern && f.detail != null) {
+      const d = String(f.detail);
+      // An errno-shaped token that runs for hundreds of characters is not a
+      // network code; the length bound keeps every surviving detail short
+      // enough for the Settings line.
+      if (d.length <= 32 && pattern.test(d)) detail = d;
+    }
+    return { code: f.code, detail };
   }
 
   // Settings-view text for one fault, or null when there is none to show.
