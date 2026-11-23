@@ -1,13 +1,13 @@
 # CompanionDesk Product Blueprint
 
-Status: **proposed**; M0 complete on main and the first five M1 slices
+Status: **proposed**; M0 complete on main and the first six M1 slices
 landed 23 Nov 2026 (baseline docs via PR #10, model selection, conversation
 history, secure key setup, provider registry and routing, hardware profiles,
-provider status, provider contract tests).
+provider status, provider contract tests, provider fault diagnostics).
 This document states the agreed product vision and the verified current state.
 No decision here is accepted until Ninad approves it. Every feature is marked
-**implemented** (verified against main, most recently the M1 provider
-contract-test slice `7f41929`) or **planned** (not built; do
+**implemented** (verified against main, most recently the M1 provider fault
+diagnostics slice `cda1813`) or **planned** (not built; do
 not assume otherwise).
 
 ## 1. What CompanionDesk is
