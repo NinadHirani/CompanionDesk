@@ -1,10 +1,11 @@
 # CompanionDesk Implementation Roadmap
 
 Status: M0 and M1 are COMPLETE on main (verified 23 Nov 2026; current
-baseline `bccfa75`, 423 passing tests, three green main-branch CI workflows:
-CI 45224283832, CI macOS + Linux 45224283878, Android APK 45224409304 — the
-APK run was a manual dispatch because its path filter does not trigger on
-docs- and src-only changes). Supersedes `docs/COMPANIONDESK_ROADMAP.md` and
+baseline `7652b3a`, 423 passing tests. CI run 45227806938 and CI macOS +
+Linux run 45227806720 are green on `7652b3a`; Android APK run 45227335469
+is green on `d4afad1`, not the latest head, because the APK path filter
+does not trigger on docs-only commits. Doc-only commits after the baseline
+do not change these numbers). Supersedes `docs/COMPANIONDESK_ROADMAP.md` and
 `docs/FEATURE_GAP.md` once approved; those files stay until then. Phases
 are dependency-ordered with explicit gates. Phases M2-M8 below are planned
 unless stated as implemented; M0 and M1 are the only implemented phases.
@@ -165,10 +166,10 @@ Review fix (23 Nov 2026): fault details are strictly whitelisted (a
 3-digit HTTP status or an errno-style network code, at most 32 characters;
 anything else drops the detail) and every fault crossing the status view is
 normalized through that sanitizer, fail closed.
-M1 is COMPLETE (23 Nov 2026, final head `bccfa75`): final suite 411 passing
-tests at that head (423 including the offline memory-v2 harness tests), three green main-branch CI workflows on that head (CI
-45224283832, CI macOS + Linux 45224283878, Android APK 45224409304, the
-APK manually dispatched).
+M1 is COMPLETE (23 Nov 2026; completion head `bccfa75`, where the suite
+stood at 411 tests). The current baseline in the Status header carries the
+verified head, the 423-test count (including the offline memory-v2
+harness tests) and the CI run ids.
 Acceptance verified: routing decisions unit-tested; no hardcoded model
 constants in `src/ai.js` (defaults come from the provider registry);
 contract tests per provider (scripted fake servers for Ollama

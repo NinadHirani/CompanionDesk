@@ -32,6 +32,20 @@ about-me file.
   no inferred-fact auto-saving, and no background monitoring in this phase;
   inferred sensitive facts are never saved silently.
 
+## Caveats
+
+- The corpus is SYNTHETIC and FICTIONAL: 45 bullets written for the
+  harness, not real user content and not a sample of production data.
+- The query set is 18 hand-written queries; coverage is exactly those 18,
+  and the aggregate numbers move when the corpus or queries change.
+- The ranking stack is BM25 plus a section boost, a contiguous bigram
+  phrase bonus, and a hand-seeded LOCAL lexical synonym map. No
+  embeddings, no vector store, no network anywhere in the harness.
+- There is NO product wiring: nothing under `src/` reads the harness.
+  These numbers are harness-level evidence, not product measurements.
+- Every metric is re-measured and reported per slice; slices never change
+  product behavior.
+
 ## Measured retrieval quality (harness: 45 synthetic bullets, 18 queries)
 
 Fictional corpus on purpose: the fixture is public. Baseline and each
