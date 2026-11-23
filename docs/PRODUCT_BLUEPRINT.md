@@ -86,7 +86,9 @@ claims to literally experience emotions.
 - Update policy that never auto-installs unsigned builds; update modes
   disabled/auto/manual-download (`src/update-policy.js`, `src/updater.js`).
 - Health check and onboarding interview (`src/health.js`, `src/onboarding.js`).
-- 258 passing unit/integration tests; five CI workflows green on main;
+- 258 passing unit/integration tests; three main-branch CI workflows green
+  (CI, CI macOS + Linux, Android APK; verified this session: only these
+  three have ever run on main);
   public Android debug-APK preview release.
 
 Known dormant: the Gemini cloud fallback exists in code (`src/ai.js`) but no
@@ -109,7 +111,7 @@ code today.
 
 | Capability | macOS | Windows | Linux | Android |
 |---|---|---|---|---|
-| Core app, storage, UI | working | same code, unexercised | same code, unexercised | working (web in webview) |
+| Core app, storage, UI | working | same code, unexercised | same code, unexercised | build/preview exists; runtime on device unverified |
 | Local AI (Ollama) | working | untested | untested | absent (no Ollama on Android) |
 | Voice input | working (manual) | untested | untested | absent |
 | Screen understanding | working (on-demand) | untested | untested | absent |

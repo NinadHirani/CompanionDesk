@@ -71,9 +71,11 @@ Piper is deferred pending verification of its successor project (the
 original repository is reported archived).
 
 ## ADR-0011 - Model licensing stance
-Needs user decision. Default: bundle only Apache/MIT families (Qwen, Phi)
-as defaults; Gemma and Llama remain strictly user-installed until a stance
-is set.
+Needs user decision. License status is judged per exact model and version,
+including its bundled assets, never by family reputation. Permissive
+licenses (Apache-2.0, MIT) are preferred, but no model is bundled as a
+default until its exact license is checked. Gemma and Llama remain strictly
+user-installed pending that review.
 
 ## ADR-0012 - Distribution and signing posture
 Needs user decision. Current state: unsigned desktop builds with
