@@ -81,3 +81,23 @@ test('every result names its matched terms (explainable ranking)', () => {
   const got = H.selectForTask(H.buildIndex(corpus), 'travel preferences', 'chat');
   for (const r of got) assert.ok(r.matched.length >= 1);
 });
+
+test('paraphrases retrieve through the seeded local synonym map (no network)', () => {
+  const idx = H.buildIndex(corpus);
+  const got = H.selectForTask(idx, 'household chores schedule', 'screen').map((r) => r.id);
+  assert.ok(got.includes('f40'), 'laundry bullet retrieved');
+  assert.ok(got.includes('f29'), 'watering bullet retrieved');
+  assert.ok(got.includes('f16'), 'groceries bullet retrieved');
+  // Expansion is pure and local: only tokens from the static map appear.
+  const before = H.tokenize('household chores schedule');
+  for (const t of before) assert.ok(H.SYNONYMS[t] === undefined || Array.isArray(H.SYNONYMS[t]));
+});
+
+test('synonym expansion is opt-out: plain mode stays purely lexical', () => {
+  const idx = H.buildIndex(corpus);
+  const plain = H.selectForTask(idx, 'household chores schedule', 'screen', { synonyms: false }).map((r) => r.id);
+  const full = H.selectForTask(idx, 'household chores schedule', 'screen').map((r) => r.id);
+  assert.ok(!plain.includes('f29'), 'watering bullet only reachable via expansion');
+  assert.ok(!plain.includes('f16'), 'groceries bullet only reachable via expansion');
+  assert.ok(full.includes('f29') && full.includes('f16'));
+});

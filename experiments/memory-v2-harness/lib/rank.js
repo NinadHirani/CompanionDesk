@@ -32,6 +32,30 @@ function tokenize(text) {
     .map(fold);
 }
 
+// Optional seeded synonym expansion: a small hand-written LOCAL lexical
+// resource (no network, no cloud, no embeddings). One hop, symmetrical.
+// This is a proposal to measure, not a decided design; the map is explicit
+// and auditable in this file.
+// Keys and values are in FOLDED token form (the plural fold runs before
+// expansion), so expansion and document tokens always agree.
+const SYNONYMS = {
+  chore: ['laundry', 'grocerie', 'watering', 'cleaning'],
+  laundry: ['chore', 'washing'],
+  diet: ['eat', 'food', 'allergic'],
+  eat: ['diet', 'food', 'allergic', 'spice'],
+  fitness: ['run', 'marathon', 'exercise'],
+  credential: ['password', 'locker', 'passport'],
+  document: ['scan', 'paperwork', 'transcript'],
+};
+
+function expand(tokens) {
+  const out = new Set(tokens);
+  for (const t of tokens) {
+    for (const syn of SYNONYMS[t] || []) out.add(syn);
+  }
+  return [...out];
+}
+
 // items: [{ id, section, text, sensitive? }] in file order.
 function buildIndex(items) {
   const docs = items.map((it, i) => {
@@ -57,7 +81,7 @@ function buildIndex(items) {
 function search(index, query, opts) {
   const o = opts || {};
   const k = o.k == null ? 10 : o.k;
-  const qTokens = tokenize(query);
+  const qTokens = o.synonyms ? expand(tokenize(query)) : tokenize(query);
   const out = [];
   for (const d of index.docs) {
     if (d.sensitive && o.includeSensitive !== true) continue;
@@ -98,7 +122,10 @@ function selectForTask(index, query, task, opts) {
   const o = opts || {};
   const budget = BUDGETS[task] == null ? BUDGETS.default : BUDGETS[task];
   if (budget === 0) return [];
-  return search(index, query, { ...o, k: budget });
+  // Seeded synonyms default ON for every task kind; callers may opt out
+  // with { synonyms: false }. Measured, not decided: see the design doc.
+  const syn = o.synonyms == null ? true : o.synonyms;
+  return search(index, query, { ...o, k: budget, synonyms: syn });
 }
 
-module.exports = { tokenize, buildIndex, search, selectForTask, BUDGETS, K1, B };
+module.exports = { tokenize, buildIndex, search, selectForTask, BUDGETS, SYNONYMS, K1, B };
