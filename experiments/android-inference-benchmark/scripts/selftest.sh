@@ -94,10 +94,7 @@ case "$*" in
     echo $((n + 1)) > "$STATE/rc_calls"
     if [ "$n" -ge 2 ]; then printf '0'; fi ;;
   *bench.out*) printf 'raw benchmark output line' ;;
-  *pidof*)
-    n=$(cat "$STATE/pid_calls" 2>/dev/null || echo 0)
-    echo $((n + 1)) > "$STATE/pid_calls"
-    if [ "$n" -eq 0 ]; then printf '1234'; fi ;;
+  *bench.pid*) printf '1234' ;;
   *date*) printf '11-23 16:50:00.000' ;;
   *push*) echo 'pushed' ;;
   *mkdir*) : ;;

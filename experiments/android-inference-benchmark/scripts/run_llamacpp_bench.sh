@@ -3,7 +3,9 @@
 # Review fix, 23 Nov 2026: the benchmark now runs in the BACKGROUND on the
 # device and /proc/<pid>/status VmHWM is sampled WHILE the process is
 # alive; the earlier version sampled pidof after exit, which made peak RSS
-# null on every run. Exit code is captured via a device-side rc file, and
+# null on every run. The PID comes from a device-side pid file written as
+# $! of the backgrounded llama-bench itself, so an unrelated process can
+# never be sampled. Exit code is captured via a device-side rc file, and
 # logcat is captured through a timestamp window: device-wide logcat is
 # never cleared.
 # Env: LLAMA_BENCH_BIN, MODEL_FILE, RUN_ID (default timestamp),
@@ -31,6 +33,7 @@ DEV_BIN="$DEV_DIR/llama-bench"
 DEV_MODEL="$DEV_DIR/$(basename "$MODEL_FILE")"
 DEV_OUT="$DEV_DIR/bench.out"
 DEV_RC="$DEV_DIR/bench.rc"
+DEV_PID="$DEV_DIR/bench.pid"
 MET="$OUTDIR/$RUN_ID.metrics.log"
 
 adb shell "mkdir -p $DEV_DIR"
@@ -38,9 +41,11 @@ adb push "$LLAMA_BENCH_BIN" "$DEV_BIN" >/dev/null
 adb push "$MODEL_FILE" "$DEV_MODEL" >/dev/null
 "$HERE/scripts/collect_metrics.sh" before "$MET"
 START_TS=$(adb shell 'date "+%m-%d %H:%M:%S.000"' | tr -d '\r')
-# Background launch on device; the rc file is the completion marker.
-adb shell "(nohup sh -c '$DEV_BIN -m $DEV_MODEL -t 4 -p 512 -n 128 -r 3 -o md > $DEV_OUT 2>&1; echo \$? > $DEV_RC' >/dev/null 2>&1 &); sleep 1"
-PID=$(adb shell 'pidof llama-bench || true' | tr -d '\r' | head -n 1 | tr -d '[:space:]')
+# Background launch on device: llama-bench itself is the backgrounded job
+# ($!), so the pid file holds ITS exact pid; wait then records its exit
+# code. The rc file is the completion marker.
+adb shell "(nohup sh -c '$DEV_BIN -m $DEV_MODEL -t 4 -p 512 -n 128 -r 3 -o md > $DEV_OUT 2>&1 & echo \$! > $DEV_PID; wait \$!; echo \$? > $DEV_RC' >/dev/null 2>&1 &); sleep 1"
+PID=$(adb shell "cat $DEV_PID 2>/dev/null || true" | tr -d '\r' | tr -d '[:space:]')
 echo "remote pid: ${PID:-not-visible}"
 MAXPOLL=$(awk -v s="$MAXSEC" -v i="$INTERVAL" 'BEGIN{ i=i; if (i<=0) i=1; printf "%d", s/i }')
 PEAK=""
