@@ -32,8 +32,11 @@ docs/IMPLEMENTATION_ROADMAP.md.
 ## CompanionDesk status (verified in the working copy, Nov 23, 2026, main 2d349c5)
 
 - Local-first chat with local Ollama (llama3.2:latest default); the opt-in
-  Gemini fallback exists in code but has NO key-entry UI yet, so it cannot
-  currently be used. VERIFIED in src/ai.js.
+  Gemini fallback now has secure key setup: the key is encrypted at rest in
+  the OS credential vault via Electron safeStorage, decrypted only in the
+  main process, never returned to the renderer or placed in a URL, and
+  fail-closed when OS encryption is unavailable. VERIFIED in src/ai.js and
+  src/secure-store.js.
 - General-purpose persona by default; student module optional
   (src/skills.js, docs/SKILLS.md). VERIFIED.
 - Local DB (sql.js) with export to a markdown vault. VERIFIED.
@@ -44,12 +47,15 @@ docs/IMPLEMENTATION_ROADMAP.md.
   src/whisper.js), local About-me memory with propose-then-confirm cards
   (src/memory.js, src/proposals.js), on-demand single-window screen Q&A with
   a local vision model (src/screen-service.js), one-click Ollama onboarding
-  (src/ollama-setup.js, PR #9), and the public debug-APK preview. 293 tests
+  (src/ollama-setup.js, PR #9), and the public debug-APK preview. 306 tests
   passing; three main-branch CI workflows green.
 
 ## Gaps (current, mapped to docs/IMPLEMENTATION_ROADMAP.md)
 
-1. Gemini key-entry UI - ABSENT; the cloud fallback is dormant (M0).
+1. Gemini key-entry UI - DONE 23 Nov 2026 (encrypted-at-rest via safeStorage,
+   masked status, fail-closed, explicit opt-in wording; src/secure-store.js).
+   Android/web key setup is unsupported by design until a secure platform
+   vault adapter exists; no insecure fallback.
 2. Conversation history in the ask flow - DONE 23 Nov 2026 (local-only,
    rename, confirmed delete; src/chat-history.js).
 3. Model-as-setting instead of hardcoded constants - DONE 23 Nov 2026
