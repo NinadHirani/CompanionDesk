@@ -304,7 +304,9 @@
   function chat_delete(payload) { return CompanionChatHistory.deleteConversation(db, payload && payload.id); }
 
   // Which installed model answers; mirrors the desktop ai:models handler.
-  async function ai_models() {
+  // Shared selection used by both ai_models and provider_status: the
+  // profile-aware fallbacks live in one place.
+  async function webModelSelection() {
     await readyPromise;
     const settings = CompanionSettings.normalizeSettings(db.allSettings());
     const profile = CompanionHardware.resolveProfile(
@@ -316,7 +318,31 @@
       chatFallback: CompanionModelSelection.chatFallbackForProfile(profile),
       visionFallback: CompanionModelSelection.DEFAULT_VISION_MODEL,
     });
+    return { settings, profile, res };
+  }
+
+  async function ai_models() {
+    const { profile, res } = await webModelSelection();
     return { ok: true, ...res, defaults: { chat: CompanionModelSelection.chatFallbackForProfile(profile), vision: CompanionModelSelection.DEFAULT_VISION_MODEL } };
+  }
+
+  // Provider status for Settings, web edition: local Ollama facts and the
+  // browser's (absent) secure vault only. The browser never holds key
+  // material and no cloud health probe exists here: Gemini is contacted only
+  // when the user acts, never by a status read.
+  async function provider_status() {
+    const { settings, res } = await webModelSelection();
+    return {
+      ok: true,
+      ...CompanionProviderStatus.buildProviderStatus({
+        ollamaUp: res.ollama,
+        installed: res.installed,
+        chat: res.chat,
+        vision: res.vision,
+        secureStore: { supported: false },
+        cloudEnabled: settings.cloud_enabled === true,
+      }),
+    };
   }
 
   function localNowIso() {
@@ -535,7 +561,7 @@
     cloud_testKey: () => ({ ok: false, error: 'unsupported' }),
     cloud_removeKey: () => ({ ok: true, supported: false, configured: false }),
     brief_today, assignment_setDone,
-    settings_get, settings_save, hardware_report,
+    settings_get, settings_save, hardware_report, provider_status,
     grades_get, grades_setScore, grades_setTarget,
     patterns_get, activity_clear,
     deadline_add, deadline_remove,
