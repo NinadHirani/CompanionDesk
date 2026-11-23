@@ -23,6 +23,7 @@ Run: `node experiments/memory-v2-harness/eval.js`
 Tests: `tests/memory-v2-harness.test.js` (runs inside the normal suite).
 
 Baseline (no normalization, no expansion): recall 38.0%, MRR 0.395.
+After slice 4 (fold-normalized synonym keys + local bridges): recall 97.2%, MRR 0.793.
 Measured improvements are tracked per slice in the commit history and in
 `docs/M2_MEMORY_V2_DESIGN.md`.
 

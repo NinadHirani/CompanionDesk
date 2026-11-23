@@ -50,7 +50,7 @@ verified head, test count and CI run ids).
   (src/memory.js, src/proposals.js), on-demand single-window screen Q&A with
   a local vision model (src/screen-service.js), one-click Ollama onboarding
   (src/ollama-setup.js, PR #9), and the public debug-APK preview. 331 tests
-  passing and three main-branch CI workflows green at that snapshot (423 tests at the current baseline; the blueprint carries the
+  passing and three main-branch CI workflows green at that snapshot (428 tests at the current baseline; the blueprint carries the
   exact head and run ids).
 
 ## Gaps (current, mapped to docs/IMPLEMENTATION_ROADMAP.md)

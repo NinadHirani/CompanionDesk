@@ -57,6 +57,7 @@ slice were measured with the same corpus and queries.
 | 1 | f79c031 | plural fold in tokenizer | 55.6% | 0.545 | 421 |
 | 2 | b2d41d9 | contiguous query-bigram phrase bonus | 55.6% | 0.545 | 421 |
 | 3 | 128fdbd | seeded local synonym map (folded token form) | 72.2% | 0.647 | 423 |
+| 4 | 0e242ce | fold-normalized synonym keys (fixes the silently dead 'fitness' entry: plural fold reduced the query token to 'fitnes') + local vocabulary bridges (dietary, restaurant, running, weekend, activities, family, habits, meeting) | 97.2% | 0.793 | 428 |
 
 Slice 2 moved no aggregate metric; it is retained because phrase weighting
 was specified and it is deterministic, but it should be re-judged if the
@@ -64,12 +65,15 @@ corpus grows. Ranking stays deterministic and explainable at every slice:
 identical inputs produce identical orderings, and every result names its
 matched terms.
 
-Remaining misses are a known, measured class: zero-hit queries ("dietary
-needs for a restaurant booking", "running and fitness", "weekend
-activities") fail on vocabulary that never appears in the corpus. BM25
-plus lexical expansion cannot close that gap; that is exactly the evidence
-the embeddings deferral decision needs, and per-section fallback for
-screen-originated tasks is the cheap mitigation to try first.
+Slice 4 closed the three measured zero-hit queries with local lexical
+work, so no remaining miss is a zero-hit. What remains is ranking quality,
+not vocabulary: "morning schedule" still misses one expected bullet (the
+bedtime bullet has no honest lexical bridge to "morning"), and
+multi-expected queries cap MRR when the strongest lexical match is not the
+first-listed expectation ("travel preferences" at MRR 0.11). These are
+per-section fallback and weighting questions, not embeddings evidence;
+the embeddings deferral decision now rests on cost/benefit, not a measured
+recall wall.
 
 ## Test coverage (tests/memory-v2-harness.test.js)
 

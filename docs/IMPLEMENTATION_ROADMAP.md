@@ -1,11 +1,9 @@
 # CompanionDesk Implementation Roadmap
 
 Status: M0 and M1 are COMPLETE on main (verified 23 Nov 2026; current
-baseline `7652b3a`, 423 passing tests. CI run 45227806938 and CI macOS +
-Linux run 45227806720 are green on `7652b3a`; Android APK run 45227335469
-is green on `d4afad1`, not the latest head, because the APK path filter
-does not trigger on docs-only commits. Doc-only commits after the baseline
-do not change these numbers). Supersedes `docs/COMPANIONDESK_ROADMAP.md` and
+baseline `0e242ce`, 428 passing tests, all three main-branch CI workflows green
+on that head (CI 45230375359, CI macOS + Linux 45230375298, Android APK 45230433953). Doc-only commits after the baseline do not change
+these numbers). Supersedes `docs/COMPANIONDESK_ROADMAP.md` and
 `docs/FEATURE_GAP.md` once approved; those files stay until then. Phases
 are dependency-ordered with explicit gates. Phases M2-M8 below are planned
 unless stated as implemented; M0 and M1 are the only implemented phases.
@@ -168,7 +166,7 @@ anything else drops the detail) and every fault crossing the status view is
 normalized through that sanitizer, fail closed.
 M1 is COMPLETE (23 Nov 2026; completion head `bccfa75`, where the suite
 stood at 411 tests). The current baseline in the Status header carries the
-verified head, the 423-test count (including the offline memory-v2
+verified head, the current test count (including the offline memory-v2
 harness tests) and the CI run ids.
 Acceptance verified: routing decisions unit-tested; no hardcoded model
 constants in `src/ai.js` (defaults come from the provider registry);
@@ -214,7 +212,7 @@ has NO FTS5, so the route is a pure-JS index over the existing markdown
 About-me file (which stays canonical, the only memory store). Selective
 per-task retrieval; Remember/Forget commands; consent gate for sensitive
 entries; embeddings stay deferred. Measured keyword baseline and slice
-results (recall 38.0% -> 72.2%, MRR 0.395 -> 0.647 on the 18-query harness;
+results (recall 38.0% -> 97.2%, MRR 0.395 -> 0.793 on the 18-query harness;
 remaining misses are the semantic-vocabulary class) and the full design:
 see `docs/M2_MEMORY_V2_DESIGN.md` and `experiments/memory-v2-harness/`.
 No automatic extraction, no inferred-fact auto-saving, no background
