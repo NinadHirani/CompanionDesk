@@ -214,6 +214,55 @@
     else { msg.textContent = UI.friendlyError(res.error); msg.className = 'hint error'; }
   });
 
+  // ---- provider status (read on demand; no polling, no cloud probing) ----
+  const PS = {
+    list: document.getElementById('provider-list'),
+    refresh: document.getElementById('provider-refresh'),
+    msg: document.getElementById('provider-msg'),
+  };
+  const CLOUD_LABELS = {
+    off: 'Off (no key saved)',
+    configured_disabled: 'Key saved, fallback disabled',
+    enabled_no_key: 'Enabled in settings, but no key saved',
+    armed: 'Armed: enabled with a key saved',
+    no_secure_storage: 'Enabled, but no secure storage for the key',
+  };
+  function providerRow(label, value) {
+    const li = document.createElement('li');
+    li.textContent = `${label}: ${value}`;
+    return li;
+  }
+  async function fillProviderStatus() {
+    if (!PS.list || !PS.refresh || !PS.msg) return;
+    PS.refresh.disabled = true;
+    PS.msg.textContent = 'Checking local providers...';
+    PS.msg.className = 'hint';
+    PS.list.textContent = '';
+    let res = null;
+    try { res = await api.provider_status(); } catch { res = null; }
+    PS.refresh.disabled = false;
+    if (!res || !res.ok) {
+      PS.msg.textContent = 'Could not read the provider status. Try Refresh.';
+      PS.msg.className = 'hint error';
+      return;
+    }
+    PS.msg.textContent = '';
+    PS.list.appendChild(providerRow('Local model server (Ollama)',
+      res.ollama.reachable === true ? 'Reachable' : res.ollama.reachable === false ? 'Not running' : 'Unknown'));
+    PS.list.appendChild(providerRow('Chat model',
+      res.chat.installed === true ? `${res.chat.model} (installed)`
+        : res.chat.installed === false ? `${res.chat.model} (missing)`
+        : `${res.chat.model || 'default'} (unknown, server not reachable)`));
+    PS.list.appendChild(providerRow('Vision model',
+      `${res.vision.model || 'default'} (${res.vision.capability === 'verified' ? 'vision verified'
+        : res.vision.capability === 'unreachable' ? 'unreachable' : 'capability unknown'})`));
+    PS.list.appendChild(providerRow('Cloud fallback (Gemini)', CLOUD_LABELS[res.cloud.state] || 'Unknown'));
+    PS.list.appendChild(providerRow('Credential storage',
+      res.credentialStorage.available === true ? 'OS-encrypted vault'
+        : res.credentialStorage.available === false ? 'Unavailable on this platform' : 'Unknown'));
+  }
+  if (PS.refresh) PS.refresh.addEventListener('click', fillProviderStatus);
+
   // ---- optional cloud key (desktop: OS-encrypted; web: unsupported) --------------
   const CK = {
     input: document.getElementById('cloud-key'),
@@ -353,6 +402,7 @@
     if (mem.ok) { renderItems(mem); renderProposals(mem.proposals); }
     if (pat.ok) renderPatterns(pat);
     if (set.ok) { fillSettings(set.settings); fillModels(set.settings); fillHardware(); }
+    fillProviderStatus();
     await fillCloud();
   }
 

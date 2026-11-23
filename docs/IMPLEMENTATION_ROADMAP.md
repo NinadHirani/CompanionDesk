@@ -105,7 +105,24 @@ Settings shows a recommendation that names only models already installed
 (`recommendedForProfile`); an explicit model choice always wins and nothing
 is ever downloaded.
 
-Still planned in M1: provider health checks surfaced in the status UI.
+FOURTH SLICE DONE 23 Nov 2026: provider health surfaced in the status UI
+(`src/provider-status.js`, the `provider:status` channel). One read-only,
+on-demand snapshot in Settings: Ollama reachable/not running/unknown; the
+selected chat model installed or missing; the vision model's capability
+verified, unknown, or unreachable; the cloud fallback distinguished as off,
+key saved but disabled, enabled without a key, armed (enabled + key + vault),
+or enabled with no secure storage; and credential storage available,
+unavailable, or unknown (web/Android report unavailable and never store key
+material). Built ONLY from the existing bounded local probes and the vault's
+masked booleans - the builder does no I/O and NEVER contacts the cloud;
+Gemini's reachability is probed only when the user explicitly tests the key
+or an already-consented cloud request runs. No polling loops, no telemetry;
+a manual Refresh button with loading, error, and empty states; the list is
+aria-live so screen readers hear updates. Tests pin the state machine, the
+fail-closed vault rule, malformed-input conservatism, and that no key
+material can appear in the output.
+
+Still planned in M1: provider contract tests against a scripted fake server.
 Acceptance: routing decisions unit-tested; no hardcoded model constants
 in `src/ai.js`; contract tests per provider.
 

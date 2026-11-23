@@ -205,6 +205,14 @@
     </section>
 
     <section class="card">
+      <h2>Provider status</h2>
+      <ul id="provider-list" aria-live="polite"></ul>
+      <div class="actions"><button id="provider-refresh">Refresh status</button></div>
+      <p id="provider-msg" class="hint" role="status"></p>
+      <p class="hint">Checked on demand only: nothing polls, and Gemini's reachability is never probed on its own. Status comes from the local Ollama and this platform's credential storage.</p>
+    </section>
+
+    <section class="card">
       <h2>About this app</h2>
       <p id="app-version" class="hint"></p>
       <details><summary>Privacy policy</summary><pre id="doc-privacy" class="doc"></pre></details>

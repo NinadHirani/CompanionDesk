@@ -33,6 +33,7 @@ const CAL = require('./calendar');
 const fs = require('fs');
 const os = require('os');
 const Hardware = require('./hardware');
+const ProviderStatus = require('./provider-status');
 const { chatFallbackForProfile, recommendedForProfile } = require('./model-selection');
 const { todayIso, localNowIso, addDaysIso } = require('./dates');
 const { createUpdateController } = require('./updater');
@@ -274,6 +275,25 @@ function registerIpc() {
       ...Hardware.sanitizeHardware(hardwareRaw),
       profile,
       recommendation: recommendedForProfile(profile, names),
+    };
+  });
+
+  // One provider-status snapshot for Settings, on demand only. It gathers
+  // the bounded LOCAL probes (Ollama tags/show) and the OS vault's masked
+  // booleans; it never contacts the cloud and never polls. Key material is
+  // never passed anywhere: only the vault's configured boolean is read.
+  ipcMain.handle('provider:status', async () => {
+    const sel = await modelSelection();
+    return {
+      ok: true,
+      ...ProviderStatus.buildProviderStatus({
+        ollamaUp: sel.ollama,
+        installed: sel.installed,
+        chat: sel.chat,
+        vision: sel.vision,
+        secureStore: secureStore.status(),
+        cloudEnabled: P.getSettings(db).cloud_enabled === true,
+      }),
     };
   });
   ipcMain.handle('settings:save', async (_e, payload) => P.saveSettings(db, payload));
