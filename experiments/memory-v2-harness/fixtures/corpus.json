@@ -1,0 +1,230 @@
+[
+  {
+    "id": "f01",
+    "section": "Facts",
+    "text": "Studies computer engineering, final year, graduates 2027."
+  },
+  {
+    "id": "f02",
+    "section": "Facts",
+    "text": "Speaks English and Hindi; reads Gujarati."
+  },
+  {
+    "id": "f03",
+    "section": "Facts",
+    "text": "Uses a MacBook Air M1 with 8 GB memory and an Android phone."
+  },
+  {
+    "id": "f04",
+    "section": "Facts",
+    "text": "Lives in a three-person household; the other two travel often."
+  },
+  {
+    "id": "f05",
+    "section": "Facts",
+    "text": "Research interest: quantum optimisation and combinatorial solvers."
+  },
+  {
+    "id": "f06",
+    "section": "Facts",
+    "text": "Keeps a paper notebook for weekly planning, reviews it Sundays."
+  },
+  {
+    "id": "f07",
+    "section": "Goals",
+    "text": "Publish one workshop paper before the next semester starts."
+  },
+  {
+    "id": "f08",
+    "section": "Goals",
+    "text": "Save for a new laptop; target budget around 90000 by summer."
+  },
+  {
+    "id": "f09",
+    "section": "Goals",
+    "text": "Learn Rust well enough to read the servo sources by spring."
+  },
+  {
+    "id": "f10",
+    "section": "Preferences",
+    "text": "Prefers dark mode in every editor and terminal."
+  },
+  {
+    "id": "f11",
+    "section": "Preferences",
+    "text": "Coffee, two cups before noon, none after 4 pm."
+  },
+  {
+    "id": "f12",
+    "section": "Preferences",
+    "text": "Meetings before 10 am are declined unless urgent."
+  },
+  {
+    "id": "f13",
+    "section": "Preferences",
+    "text": "Likes plain, short replies in chat; no emoji."
+  },
+  {
+    "id": "f14",
+    "section": "Preferences",
+    "text": "Favours window seats on flights and aisle on trains."
+  },
+  {
+    "id": "f15",
+    "section": "Routines",
+    "text": "Morning run at 6:30 on weekdays, rest day Sunday."
+  },
+  {
+    "id": "f16",
+    "section": "Routines",
+    "text": "Meal prep happens Saturday evening; groceries Friday after work."
+  },
+  {
+    "id": "f17",
+    "section": "Routines",
+    "text": "Study block 8-10 pm nightly, phone on the shelf."
+  },
+  {
+    "id": "f18",
+    "section": "Routines",
+    "text": "Calls parents every Wednesday 8 pm without fail."
+  },
+  {
+    "id": "f19",
+    "section": "Constraints",
+    "text": "No meetings during the exam window each semester."
+  },
+  {
+    "id": "f20",
+    "section": "Constraints",
+    "text": "Budget for tools is capped monthly; big buys need a month's notice."
+  },
+  {
+    "id": "f21",
+    "section": "Constraints",
+    "text": "Sensitive: passport number and scan are stored only in the safe at home.",
+    "sensitive": true
+  },
+  {
+    "id": "f22",
+    "section": "Constraints",
+    "text": "Sensitive: therapy appointments are private, never mentioned to family.",
+    "sensitive": true
+  },
+  {
+    "id": "f23",
+    "section": "Constraints",
+    "text": "Cannot take calls during lab hours Tuesday and Thursday mornings."
+  },
+  {
+    "id": "f24",
+    "section": "Facts",
+    "text": "Allergic to peanuts; carries an antihistamine when travelling."
+  },
+  {
+    "id": "f25",
+    "section": "Preferences",
+    "text": "Prefers trains over flights for trips under five hours."
+  },
+  {
+    "id": "f26",
+    "section": "Goals",
+    "text": "Finish the driving licence before the internship starts."
+  },
+  {
+    "id": "f27",
+    "section": "Facts",
+    "text": "Plays table tennis at the campus club on Saturdays."
+  },
+  {
+    "id": "f28",
+    "section": "Preferences",
+    "text": "Gifts: likes books and board games, dislikes decorative items."
+  },
+  {
+    "id": "f29",
+    "section": "Routines",
+    "text": "Watering plants Monday and Thursday evenings."
+  },
+  {
+    "id": "f30",
+    "section": "Facts",
+    "text": "Volunteers at the local library on the first Sunday monthly."
+  },
+  {
+    "id": "f31",
+    "section": "Constraints",
+    "text": "Never shares the home address with delivery apps; pickup point only."
+  },
+  {
+    "id": "f32",
+    "section": "Preferences",
+    "text": "Prefers written summaries over voice notes."
+  },
+  {
+    "id": "f33",
+    "section": "Facts",
+    "text": "Uses a password manager; recovery sheet is in the bank locker."
+  },
+  {
+    "id": "f34",
+    "section": "Goals",
+    "text": "Run a half marathon in February; training plan starts January."
+  },
+  {
+    "id": "f35",
+    "section": "Routines",
+    "text": "Lights out by midnight on weekdays."
+  },
+  {
+    "id": "f36",
+    "section": "Preferences",
+    "text": "Indian food, medium spice, no coriander."
+  },
+  {
+    "id": "f37",
+    "section": "Facts",
+    "text": "Owns a bicycle used for short campus commutes."
+  },
+  {
+    "id": "f38",
+    "section": "Constraints",
+    "text": "Sensitive: medication list and dosage must not leave the device.",
+    "sensitive": true
+  },
+  {
+    "id": "f39",
+    "section": "Facts",
+    "text": "Sibling studies architecture in another city, visits quarterly."
+  },
+  {
+    "id": "f40",
+    "section": "Routines",
+    "text": "Laundry Wednesday nights, shared machine, book the slot by 6 pm."
+  },
+  {
+    "id": "f41",
+    "section": "Preferences",
+    "text": "Prefers email over phone calls for anything with a paper trail."
+  },
+  {
+    "id": "f42",
+    "section": "Goals",
+    "text": "Clear the certification exam by March; two mock tests a week from December."
+  },
+  {
+    "id": "f43",
+    "section": "Facts",
+    "text": "Camera is a mirrorless with one prime lens; edits on the laptop."
+  },
+  {
+    "id": "f44",
+    "section": "Routines",
+    "text": "Weekly review Sunday 7 pm, plans the coming week."
+  },
+  {
+    "id": "f45",
+    "section": "Constraints",
+    "text": "Exams period: no visitors, library only, silence until results."
+  }
+]

@@ -1,0 +1,20 @@
+[
+  {"q":"what does the user eat and not eat","expect":["f36","f24"],"task":"chat"},
+  {"q":"dietary needs for a restaurant booking","expect":["f24","f36"],"task":"chat"},
+  {"q":"when can we schedule a meeting","expect":["f12","f23","f19"],"task":"chat"},
+  {"q":"morning schedule","expect":["f15","f35"],"task":"screen"},
+  {"q":"family contact routine","expect":["f18","f39"],"task":"chat"},
+  {"q":"laptop budget","expect":["f08"],"task":"goal"},
+  {"q":"travel preferences","expect":["f25","f14"],"task":"chat"},
+  {"q":"gift ideas","expect":["f28"],"task":"chat"},
+  {"q":"study habits","expect":["f17","f06","f44"],"task":"chat"},
+  {"q":"running and fitness","expect":["f15","f34"],"task":"chat"},
+  {"q":"documents and credentials storage","expect":["f33","f21"],"task":"chat"},
+  {"q":"weekend activities","expect":["f27","f30","f44"],"task":"chat"},
+  {"q":"what languages does the user speak","expect":["f02"],"task":"chat"},
+  {"q":"camera and photography","expect":["f43"],"task":"chat"},
+  {"q":"medication information","expect":["f38"],"task":"chat"},
+  {"q":"home address sharing policy","expect":["f31"],"task":"chat"},
+  {"q":"certification exam plan","expect":["f42"],"task":"goal"},
+  {"q":"household chores schedule","expect":["f40","f29","f16"],"task":"screen"}
+]
