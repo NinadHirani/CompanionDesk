@@ -24,7 +24,7 @@ START_TS=$(adb shell 'date "+%m-%d %H:%M:%S.000"' | tr -d '\r')
 "$HERE/scripts/collect_metrics.sh" before "$MET"
 echo "owner: start the benchmark run in the MLC app NOW; sampling TOTAL PSS ${SAMPLES}x every ${INTERVAL}s..."
 : > /tmp/gate1-mem.txt
-for i in $(seq 1 "$SAMPLES"); do
+for _ in $(seq 1 "$SAMPLES"); do
   adb shell dumpsys meminfo "$APP_PACKAGE" 2>/dev/null | tr -d '\r' >> /tmp/gate1-mem.txt || true
   sleep "$INTERVAL"
 done

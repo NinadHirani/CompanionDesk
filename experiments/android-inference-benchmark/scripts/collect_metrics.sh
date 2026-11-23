@@ -11,6 +11,7 @@ set -euo pipefail
 LABEL="${1:?usage: collect_metrics.sh <before|after> <out-file>}"
 OUT="${2:?usage: collect_metrics.sh <before|after> <out-file>}"
 adb shell dumpsys battery | tr -d '\r' > /tmp/gate1-batt.txt
+# shellcheck disable=SC2016  # intentional: $z/$t must expand on the device
 adb shell 'for z in /sys/class/thermal/thermal_zone*; do t=$(cat "$z/temp" 2>/dev/null || true); n=$(cat "$z/type" 2>/dev/null || true); [ -n "$t" ] && echo "$z|$n|$t"; done' | tr -d '\r' > /tmp/gate1-therm.txt
 python3 - "$LABEL" <<'PY' >> "$OUT"
 import sys, datetime, re

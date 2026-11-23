@@ -6,6 +6,7 @@
 # tests against a mocked adb, run inside a TEMP COPY of this directory so
 # the real repo tree is never written to. These tests verify the SCRIPTS,
 # not any device: no device measurement is claimed anywhere.
+# shellcheck disable=SC2012  # ls -t | head over timestamp-named files is deliberate
 set -u
 HERE="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$HERE/.." && pwd)"
