@@ -25,6 +25,10 @@
     localModel = DEFAULT_LOCAL_MODEL,
     cloudModel = DEFAULT_CLOUD_MODEL,
     geminiKey = null,
+    // Explicit opt-in (M1 task router policy). A saved key alone no longer
+    // arms the fallback: cloudEnabled must be true in settings AND a key
+    // must exist. Default false, so behavior is unchanged out of the box.
+    cloudEnabled = false,
   } = {}) {
     // geminiKey may be a string or, on the desktop app, a getter into the
     // OS-encrypted store, so the key is read only when a cloud call actually
@@ -61,7 +65,8 @@
     }
 
     async function status() {
-      const out = { ollama: false, model: localModel, cloud: Boolean(keyFor()) };
+      // "cloud" means the fallback is actually armed: enabled AND keyed.
+      const out = { ollama: false, model: localModel, cloud: Boolean(cloudEnabled && keyFor()) };
       try {
         const res = await fetchImpl(`${ollamaUrl}/api/tags`, { signal: AbortSignal.timeout(STATUS_TIMEOUT_MS) });
         if (!res.ok) return out;
@@ -196,16 +201,18 @@
       }
     }
 
-    // Local first; cloud only when a key exists and the local call failed.
-    // args.cloudArgs, when given, REPLACES system/prompt for the cloud call
-    // only. Callers that put personal context in the local prompt use it to
-    // send a minimal prompt to the cloud instead. Without it the cloud gets
-    // exactly what the local model got (unchanged behavior).
+    // Local first; cloud only when the user explicitly enabled cloud use
+    // AND a key exists, and the local call failed. Policy details in
+    // src/task-router.js. args.cloudArgs, when given, REPLACES system/
+    // prompt for the cloud call only. Callers that put personal context in
+    // the local prompt use it to send a minimal prompt to the cloud
+    // instead. Without it the cloud gets exactly what the local model got
+    // (unchanged behavior).
     async function complete(args) {
       try {
         return await chatOllama(args);
       } catch (err) {
-        if (keyFor()) {
+        if (cloudEnabled && keyFor()) {
           // The local model name must never reach the cloud call: cloud has
           // its own model setting, and an Ollama id is not a Gemini id.
           const { cloudArgs, model, history, ...rest } = args || {};

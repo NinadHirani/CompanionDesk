@@ -87,6 +87,18 @@ claims to literally experience emotions.
   real secret service counts: `basic_text` (hardcoded-password encryption)
   and `unknown` backends fail closed even when Electron reports encryption
   available, and a missing backend-query API fails closed too.
+5. **Cloud fallback is explicitly gated (M1 first slice, 23 Nov 2026).** A
+   provider/model registry (`src/provider-registry.js`) describes the local
+   Ollama provider and the optional Gemini cloud provider with per-exact-
+   model capabilities; license, context and cost stay unknown until verified
+   and are never inferred from a model family. A deterministic task router
+   (`src/task-router.js`) makes the policy explicit: local first, vision/
+   screen tasks local-only, cloud only for a cloud-eligible chat task with
+   privacy mode allowing it, cloud_enabled true in settings (default false),
+   explicit consent, an available key and a healthy provider; a saved key
+   alone routes nothing and missing models are never auto-downloaded.
+   `src/ai.js` enforces the same gate for its fallback (`cloudEnabled`,
+   default false).
 - Local conversation history in the ask view: conversations with rename and
   confirmed delete, stored only in the device database, never synced and
   never sent to the cloud; the local model sees the last ten turns of the
@@ -120,8 +132,10 @@ claims to literally experience emotions.
 
 ## 4. Planned, NOT implemented
 
-A provider/model registry and task
-router; a secure credential-vault adapter for Android/web key storage; hardware detection and profiles; agent orchestrator, typed tools,
+Deeper per-ask routing integration
+(the registry and router above exist as pure, tested modules; routing every
+ask through them is the next M1 slice); a secure credential-vault adapter
+for Android/web key storage; hardware detection and profiles; agent orchestrator, typed tools,
 approval cards, audit log, emergency stop; proactive scheduler and OS
 notifications; wake word; text-to-speech; multilingual speech; Android
 on-device inference; secure desktop gateway for Android; live session screen

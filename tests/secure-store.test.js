@@ -179,7 +179,7 @@ function mockFetch(routes) {
 
 test('the key getter is consulted lazily; status follows it', async () => {
   let stored = null;
-  const ai = createAi({ geminiKey: () => stored, fetchImpl: mockFetch([]) });
+  const ai = createAi({ geminiKey: () => stored, cloudEnabled: true, fetchImpl: mockFetch([]) });
   assert.equal((await ai.status()).cloud, false);
   stored = KEY;
   assert.equal((await ai.status()).cloud, true);

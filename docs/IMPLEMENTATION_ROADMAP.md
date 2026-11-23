@@ -47,11 +47,21 @@ no existing feature changes behavior.
 
 ## M1 - Intelligence core (2-3 wks, estimate)
 
-Provider/model registry (`src/providers/`), task router (`src/router.js`),
-hardware probe and lightweight/balanced/powerful profiles (`src/hardware.js`),
-health checks, timeout/retry/cancel formalization. Acceptance: routing
-decisions unit-tested; no hardcoded model constants in `src/ai.js`; contract
-tests per provider.
+FIRST SLICE DONE 23 Nov 2026: provider/model registry
+(`src/provider-registry.js`) and deterministic task router
+(`src/task-router.js`), both pure and unit-tested (17 router/registry tests).
+The router is policy, not heuristics: vision/screen tasks are local-only;
+cloud routes need the task to be cloud-eligible, privacy mode to allow it,
+explicit cloud_enabled in settings (default false), explicit consent, a key,
+and a healthy provider; a saved key alone routes nothing; uninstalled models
+are never auto-downloaded. `src/ai.js` now carries the explicit
+`cloudEnabled` gate (default false): the cloud fallback runs only when
+enabled AND a key exists, replacing the implicit key-presence fallback.
+Still planned in M1: deeper per-ask routing integration, hardware probe and
+lightweight/balanced/powerful profiles (`src/hardware.js`), health checks,
+timeout/retry/cancel formalization. Acceptance: routing decisions
+unit-tested; no hardcoded model constants in `src/ai.js`; contract tests per
+provider.
 
 ## GATE 1 - Android intelligence (3-4 wks, device time)
 

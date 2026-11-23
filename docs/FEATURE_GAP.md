@@ -63,7 +63,12 @@ docs/IMPLEMENTATION_ROADMAP.md.
 3. Model-as-setting instead of hardcoded constants - DONE 23 Nov 2026
    (separate chat and vision settings, installed-only selection,
    src/model-selection.js).
-4. Provider/model registry and task router - PLANNED (M1); not implemented.
+4. Provider/model registry and task router - FIRST SLICE DONE 23 Nov 2026
+   (pure modules: src/provider-registry.js describes Ollama and optional
+   Gemini with per-exact-model capabilities and unverified license/context/
+   cost; src/task-router.js decides deterministically: local-first, vision
+   local-only, cloud only with cloud_enabled + consent + key + healthy
+   provider). Deeper per-ask routing integration remains PLANNED (M1).
 5. Reusable step workflows - ABSENT (planned with the workspace UI, M8).
 6. Safe computer assistance (propose-then-confirm OS actions) - PLANNED as
    the Gate 2 agent foundation: typed tool registry, external policy engine,

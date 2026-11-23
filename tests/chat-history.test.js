@@ -222,6 +222,7 @@ test('ai.complete strips history and the local model name from the cloud fallbac
   let cloudBody = null;
   const ai = createAi({
     geminiKey: 'k',
+    cloudEnabled: true,
     fetchImpl: mockFetch([
       ['/api/chat', (opts) => { localBody = JSON.parse(opts.body); return { ok: false, status: 500 }; }],
       [(url, opts) => { if (url.includes('generativelanguage')) { cloudBody = opts.body; return true; } return false; },

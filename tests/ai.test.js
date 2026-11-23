@@ -49,18 +49,48 @@ test('chat assembles a non-streaming NDJSON body and reports tokens', async () =
   assert.equal(sent.messages[1].content, 'hi');
 });
 
-test('complete falls back to the cloud key only when local fails', async () => {
+function cloudRoutes() {
+  return [
+    ['/api/chat', () => ({ ok: false, status: 500, text: async () => '' })],
+    ['generativelanguage.googleapis.com', () => ({
+      ok: true,
+      json: async () => ({ candidates: [{ content: { parts: [{ text: 'cloud answer' }] } }] }),
+    })],
+  ];
+}
+
+test('complete falls back to the cloud only when enabled AND a key exists', async () => {
   const ai = createAi({
     geminiKey: 'test-key',
-    fetchImpl: mockFetch([
-      ['/api/chat', () => ({ ok: false, status: 500, text: async () => '' })],
-      ['generativelanguage.googleapis.com', () => ({
-        ok: true,
-        json: async () => ({ candidates: [{ content: { parts: [{ text: 'cloud answer' }] } }] }),
-      })],
-    ]),
+    cloudEnabled: true,
+    fetchImpl: mockFetch(cloudRoutes()),
   });
   assert.equal(await ai.complete({ prompt: 'q' }), 'cloud answer');
+});
+
+test('a key alone routes nothing: cloudEnabled defaults false', async () => {
+  const routes = cloudRoutes();
+  let cloudCalled = 0;
+  const counting = async (url, opts) => {
+    if (String(url).includes('generativelanguage.googleapis.com')) cloudCalled += 1;
+    return routes.find(([m]) => String(url).includes(m))[1](opts || {});
+  };
+  const ai = createAi({
+    geminiKey: 'test-key',
+    fetchImpl: counting,
+  });
+  await assert.rejects(() => ai.complete({ prompt: 'q' }), /ollama_http_500/);
+  assert.equal(cloudCalled, 0); // the local error surfaced; the cloud was never contacted
+});
+
+test('status.cloud reflects the armed state: enabled AND keyed', async () => {
+  const routes = [['/api/tags', () => ({ ok: true, json: async () => ({ models: [{ name: 'llama3.2:latest' }] }) })]];
+  const keyedOnly = createAi({ geminiKey: 'k', fetchImpl: mockFetch(routes) });
+  assert.equal((await keyedOnly.status()).cloud, false);
+  const armed = createAi({ geminiKey: 'k', cloudEnabled: true, fetchImpl: mockFetch(routes) });
+  assert.equal((await armed.status()).cloud, true);
+  const enabledNoKey = createAi({ cloudEnabled: true, fetchImpl: mockFetch(routes) });
+  assert.equal((await enabledNoKey.status()).cloud, false);
 });
 
 test('complete throws when local is down and no cloud key exists', async () => {

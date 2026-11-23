@@ -15,6 +15,7 @@ const DEFAULTS = Object.freeze({
   learn_from_activity: true, // log finished items locally to spot patterns
   suggest_memories: true, // offer "remember this?" cards after a question
   cloud_personal: false, // send personal context to the cloud fallback (off)
+  cloud_enabled: false, // explicit opt-in: the cloud fallback runs only when this is true AND a key is saved
   onboarding_done: false,
   ai_model_local: '', // Ollama chat model; '' = the built-in default
   ai_model_vision: '', // Ollama vision model for screen questions; '' = default
@@ -25,7 +26,7 @@ const ENUMS = Object.freeze({
   tone: ['direct', 'warm', 'formal'],
   brevity: ['short', 'normal', 'detailed'],
 });
-const BOOLEANS = ['learn_from_activity', 'suggest_memories', 'cloud_personal', 'onboarding_done'];
+const BOOLEANS = ['learn_from_activity', 'suggest_memories', 'cloud_personal', 'cloud_enabled', 'onboarding_done'];
 const TEXT_MAX = Object.freeze({ user_name: 40, assistant_name: 40, language: 30 });
 
 // Ollama model ids, e.g. "llama3.2:latest" or "hf.co/org/model:Q4_K_M":

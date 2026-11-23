@@ -105,6 +105,7 @@ test('ai.complete keeps the local model name away from the cloud fallback', asyn
   let cloudModel = null;
   const ai = createAi({
     geminiKey: 'k',
+    cloudEnabled: true,
     fetchImpl: mockFetch([
       ['/api/chat', () => ({ ok: false, status: 500 })],
       [(url) => { if (url.includes('generativelanguage')) { cloudModel = url; return true; } return false; },

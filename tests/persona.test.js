@@ -111,7 +111,7 @@ test('end to end through ai.complete: local down, cloud receives only the minima
     sent.push(JSON.parse(init.body).contents[0].parts[0].text);
     return { ok: true, json: async () => ({ candidates: [{ content: { parts: [{ text: 'cloud answer' }] } }] }) };
   };
-  const ai = createAi({ fetchImpl, geminiKey: 'test-key' });
+  const ai = createAi({ fetchImpl, geminiKey: 'test-key', cloudEnabled: true });
   const p = buildPersona({ settings: { ...DEFAULTS, user_name: 'Asha' }, memories: MEM, contextPack: pack, question: 'What is due?' });
   const answer = await ai.complete({ system: p.system, prompt: p.prompt, cloudArgs: p.cloud });
   assert.equal(answer, 'cloud answer');
@@ -127,7 +127,7 @@ test('ai.complete without cloudArgs behaves exactly as before', async () => {
     sent.push(JSON.parse(init.body).contents[0].parts[0].text);
     return { ok: true, json: async () => ({ candidates: [{ content: { parts: [{ text: 'ok' }] } }] }) };
   };
-  const ai = createAi({ fetchImpl, geminiKey: 'k' });
+  const ai = createAi({ fetchImpl, geminiKey: 'k', cloudEnabled: true });
   await ai.complete({ system: 'SYS', prompt: 'PROMPT' });
   assert.equal(sent[0], 'SYS\n\nPROMPT');
 });

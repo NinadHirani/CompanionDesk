@@ -94,7 +94,9 @@ async function init() {
   // this process only when a cloud call needs it. Without a saved key the
   // cloud fallback is off.
   secureStore = createSecureStore({ safeStorage, filePath: path.join(app.getPath('userData'), 'gemini.key.bin'), platform: process.platform });
-  ai = createAi({ geminiKey: () => secureStore.readKey() });
+  // Cloud fallback is double-gated: the saved key AND the explicit
+  // cloud_enabled setting (default false). A key alone arms nothing.
+  ai = createAi({ geminiKey: () => secureStore.readKey(), cloudEnabled: P.getSettings(db).cloud_enabled === true });
 }
 
 function createWindow() {
