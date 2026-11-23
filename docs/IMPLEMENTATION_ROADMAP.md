@@ -213,7 +213,11 @@ About-me file (which stays canonical, the only memory store). Selective
 per-task retrieval; Remember/Forget commands; consent gate for sensitive
 entries; embeddings stay deferred. Measured keyword baseline and slice
 results (recall 38.0% -> 97.2%, MRR 0.395 -> 0.793 on the 18-query harness;
-remaining misses are the semantic-vocabulary class) and the full design:
+no zero-hit queries remain; what is left is ranking quality, not
+vocabulary) and the full design: see `docs/M2_MEMORY_V2_DESIGN.md` and
+`experiments/memory-v2-harness/`. A pure store-contract slice (5) is
+drafted and contract-tested against the current memory module, still
+with NO product wiring; the four open decisions gate implementation.
 see `docs/M2_MEMORY_V2_DESIGN.md` and `experiments/memory-v2-harness/`.
 No automatic extraction, no inferred-fact auto-saving, no background
 monitoring in this phase.

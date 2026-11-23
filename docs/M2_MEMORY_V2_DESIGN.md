@@ -58,6 +58,7 @@ slice were measured with the same corpus and queries.
 | 2 | b2d41d9 | contiguous query-bigram phrase bonus | 55.6% | 0.545 | 421 |
 | 3 | 128fdbd | seeded local synonym map (folded token form) | 72.2% | 0.647 | 423 |
 | 4 | 0e242ce | fold-normalized synonym keys (fixes the silently dead 'fitness' entry: plural fold reduced the query token to 'fitnes') + local vocabulary bridges (dietary, restaurant, running, weekend, activities, family, habits, meeting) | 97.2% | 0.793 | 428 |
+| 5 | 40946f4 | store contract module: in-memory view over parsed about-me bullets in the SAME markdown format, sanitize rules and add/duplicate/remove semantics as src/memory.js; retrieval unchanged (slice-4 ranker); NO product wiring | 97.2% | 0.793 | 437 |
 
 Slice 2 moved no aggregate metric; it is retained because phrase weighting
 was specified and it is deterministic, but it should be re-judged if the
@@ -83,6 +84,33 @@ corpus; unicode bullets returned verbatim as data; prompt-injection text
 in stored content treated as inert data; sensitive gate (hidden without
 explicit consent); task budgets (vision retrieves nothing); synonym
 expansion opt-out; paraphrase retrieval (chores/laundry/groceries).
+
+## Store contract (slice 5, no product wiring)
+
+`experiments/memory-v2-harness/lib/store.js` drafts the shape a memory-v2
+implementation would expose, as pure offline code with contract tests:
+
+- `parseMarkdown(markdown, { sensitiveIds })` -> bullets with stable ids in
+  file order, mirroring the product parser (bullets before any heading count
+  as Facts).
+- `createStore(bullets)` with `addMemory` (same unknown_section / empty /
+  duplicate semantics as the product module; duplicate judged within the
+  target section by normalized text), `forgetMemory`, `markSensitive`,
+  `search` (the slice-4 ranker with the consent gate and task budgets) and
+  `toMarkdown`.
+- The markdown About-me file stays canonical and the only store; the
+  contract is an in-memory view plus retrieval, never a second persistence
+  layer.
+- The sensitive-entry convention stays OPEN: flags are explicit caller
+  input and `toMarkdown()` writes plain bullets, so the contract invents
+  no on-disk format the user has not decided.
+- 9 contract tests pin compatibility with the CURRENT product memory
+  module (`src/memory.js`): its parser consumes store output, its
+  add/remove round-trips on it, and both sanitize implementations agree on
+  a fixed case set. Wiring later cannot silently diverge.
+
+Nothing under `src/` imports the store; the retrieval metrics are unchanged
+by this slice.
 
 ## Open decisions for the owner
 
