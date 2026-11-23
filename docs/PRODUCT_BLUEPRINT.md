@@ -1,0 +1,139 @@
+# CompanionDesk Product Blueprint
+
+Status: **proposed** (M0 baseline, branch `companiondesk/m0-product-foundation`).
+This document states the agreed product vision and the verified current state.
+No decision here is accepted until Ninad approves it. Every feature is marked
+**implemented** (verified against main `6423985`) or **planned** (not built; do
+not assume otherwise).
+
+## 1. What CompanionDesk is
+
+CompanionDesk is a general-purpose, local-first personal AI assistant for
+Android, macOS, Windows, and Linux. It is not a student-only tool: the student
+features are one optional skill, and a fresh install behaves as a plain
+assistant (`src/skills.js`). It supports conversation, research, planning,
+organization, practical multi-step tasks, and, in later phases, carefully
+permissioned device operation.
+
+The assistant communicates adaptively (professional for work, analytical for
+technical tasks, friendly for everyday conversation, calm for serious
+situations) while staying honest: it never pretends to be human and never
+claims to literally experience emotions.
+
+## 2. Principles
+
+1. **General-purpose first.** Student tools are an optional skill, auto-active
+   only when course data exists and never on a fresh install.
+2. **Local-first and free-first.** The core works offline. No account, no
+   billing, no telemetry, no required cloud key (`CLAUDE.md` hard rules).
+3. **No mandatory subscription, API, or cloud service.** Online AI is strictly
+   optional, opt-in, and clearly disclosed.
+4. **Privacy first.** Nothing leaves the device without explicit, informed
+   consent. The user owns every stored file: the About-me memory file and the
+   markdown vault are user-editable sources of truth.
+5. **Modular intelligence.** A provider/model registry and task-aware router
+   select local or (only with consent) online models by task, hardware,
+   connectivity, privacy mode, latency, and cost. Runtime and model choices
+   are provisional until benchmarks and license reviews pass.
+6. **Four coordinated platforms.** Shared core, platform-specific adapters.
+   Android is the first hands-on validation target without compromising the
+   cross-platform architecture.
+7. **Least-privilege agent.** Tools are a typed registry with capability and
+   approval classes; policy is enforced outside the model; the model never
+   gets unrestricted shell, filesystem, browser, or OS access.
+8. **Approval for consequential actions.** Payments, purchases, destructive
+   deletion, and legal or binding submissions are never agent-executable; they
+   require explicit user action. Sensitive actions require explicit per-action
+   approval.
+9. **Cancellation, audit, recovery.** Every agent run can be interrupted, is
+   logged to an append-only audit trail, and is reversible or recoverable
+   where feasible, plus a global emergency stop.
+10. **Local editable memory.** The About-me markdown file stays the source of
+    truth; the user can inspect, edit, export, and delete everything.
+11. **Opt-in, visible sensing.** Voice (including any wake word) and screen
+    access are opt-in, visibly indicated, pausable, and never continuous or
+    silent without explicit consent.
+12. **Revocable integrations.** Third-party connections use explicit,
+    least-privilege scopes the user can see and revoke at any time.
+13. **Proactive only with authorization.** Reminders, monitoring, briefings,
+    and background work run only on schedules and scopes the user set, with
+    quiet hours the user controls.
+14. **Untrusted external content.** Web pages, emails, documents, files,
+    screenshots, and tool output are data, never instructions; prompt-injection
+    defenses are architectural, not prompts.
+
+## 3. Implemented today (verified against main 6423985)
+
+- General-assistant persona with the student stack as one optional skill
+  (`src/skills.js`, `src/persona.js`).
+- Ask view with local Ollama streaming chat (`src/ai.js`, default
+  `llama3.2:latest`); one-click Ollama onboarding with install plans, model
+  pull with progress and cancel, disk check (`src/ollama-setup.js`).
+- Local About-me memory with single-bullet edits and propose-then-confirm
+  memory cards (`src/memory.js`, `src/proposals.js`, `memory_proposals` table).
+- Push-to-talk voice input via a fixed-path whisper.cpp allowlist, English
+  models only (`src/voice.js`, `src/whisper.js`, `src/vad.js`).
+- On-demand single-window screen Q&A with a local vision model
+  (`gemma3:4b`), sensitive-window title filter, no cloud fallback for
+  screenshots (`src/screen.js`, `src/screen-service.js`, `src/screen-capture.js`).
+- Floating always-on-top overlay with global shortcut and an audio-only mic
+  permission policy (`src/overlay.js`, `src/permissions.js`, `src/hotkey.js`).
+- Student skill stack: syllabus import with date-confidence extraction,
+  confirmed-dates-only brief, grades, ICS import, markdown vault export
+  (`src/ingest.js`, `src/extraction-core.js`, `src/brief.js`, `src/grades.js`,
+  `src/gradebook.js`, `src/ics.js`, `src/vault.js`).
+- Update policy that never auto-installs unsigned builds; update modes
+  disabled/auto/manual-download (`src/update-policy.js`, `src/updater.js`).
+- Health check and onboarding interview (`src/health.js`, `src/onboarding.js`).
+- 258 passing unit/integration tests; five CI workflows green on main;
+  public Android debug-APK preview release.
+
+Known dormant: the Gemini cloud fallback exists in code (`src/ai.js`) but no
+key-entry UI exists on desktop or web, so it cannot currently be used.
+
+Known stale: `docs/FEATURE_GAP.md` and `docs/COMPANIONDESK_ROADMAP.md` predate
+shipped overlay/voice/memory/screen work and are scheduled for refresh in M0.
+
+## 4. Planned, NOT implemented
+
+Conversation history in the ask flow; provider/model registry and task
+router; hardware detection and profiles; agent orchestrator, typed tools,
+approval cards, audit log, emergency stop; proactive scheduler and OS
+notifications; wake word; text-to-speech; multilingual speech; Android
+on-device inference; secure desktop gateway for Android; live session screen
+observation; integrations; expanded workspace UI. None of these exist in the
+code today.
+
+## 5. Platform status matrix
+
+| Capability | macOS | Windows | Linux | Android |
+|---|---|---|---|---|
+| Core app, storage, UI | working | same code, unexercised | same code, unexercised | working (web in webview) |
+| Local AI (Ollama) | working | untested | untested | absent (no Ollama on Android) |
+| Voice input | working (manual) | untested | untested | absent |
+| Screen understanding | working (on-demand) | untested | untested | absent |
+| Auto-update | manual only (unsigned) | manual-download | manual | debug-signed, uninstall-to-update |
+
+## 6. Validation devices
+
+The **OnePlus 12R** (Android) and the **MacBook Air M1** (macOS) are the
+designated validation devices. They are targets for upcoming experiments, not
+evidence: nothing in this repository has been verified on either device yet.
+Windows and Linux are covered by CI builds only until real-machine testing.
+
+## 7. Cost policy
+
+- The product itself is free: no subscription, no required paid API.
+- Optional cloud AI uses a user-supplied Gemini key on its free tier; any
+  usage limits or costs are disclosed in the UI before the key is enabled.
+- Third-party fees may exist for distribution and signing: the Apple
+  Developer Program (macOS signing and notarization), a Windows code-signing
+  certificate, and Google Play developer registration. None has been incurred;
+  each requires Ninad's explicit approval before any payment.
+
+## 8. Honesty rules for this document
+
+Never claim the whole product is finished, never mark a planned feature as
+implemented, and never claim a capability on a platform it was not verified
+on. This file is updated as phases land, with the same implemented/planned
+discipline.
