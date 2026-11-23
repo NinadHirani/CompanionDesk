@@ -1,0 +1,167 @@
+# Gate 1 benchmark POC - Android on-device inference (llama.cpp vs MLC)
+
+**STATUS: UNVERIFIED SCAFFOLD. No device run has happened. Nothing in this
+directory is a measurement.** Results exist only after the OnePlus 12R owner
+executes the runbook below and commits the recorded outputs.
+
+**NON-PRODUCTION.** This experiment is deliberately outside the production
+app. No production source file is touched by this scaffold. Gate 1 decisions
+may cite only the recorded results under `results/`, never these scripts'
+expectations.
+
+## Purpose
+
+Produce measured numbers (tokens/s, memory, thermals, battery, stability) for
+two candidate Android inference runtimes on the OnePlus 12R, so the Android
+local-inference architecture is decided from data, not expectation. Per the
+roadmap, no Android AI architecture is committed until these numbers exist.
+
+## Fairness rules (read before running anything)
+
+1. **Same exact model for both runtimes only when both support it.** The two
+   runtimes use different weight formats (GGUF vs MLC-converted), so a
+   byte-identical artifact is generally not possible. Where formats differ,
+   use the same base model repo and the closest equivalent quantization and
+   record BOTH artifacts (`model_id`, `model_quant`, sha256) in every result
+   row. Never present different models as equivalent.
+2. **If a candidate model is unsupported by one runtime, document the gap** in
+   `comparison-matrix.md` and benchmark each runtime's best supported
+   candidate, clearly labeled. Do not fake equivalence.
+3. **Licenses are verified, never inferred.** Before any model download, run
+   `scripts/verify-model-license.sh <org/model-id>` and archive its output
+   under `results/`. Runtime licenses were verified 23 Nov 2026 via the
+   GitHub API (see `comparison-matrix.md`) and the re-verify commands are in
+   that file.
+
+## Model policy (hard rules)
+
+- **No script downloads model weights. Ever.** Weight downloads happen only
+  as manual commands run by the device owner after they see the verified
+  license and explicitly approve.
+- **No weights in the repo.** `models/` and all weight/build artifacts are
+  gitignored. Check `git status` before committing; nothing over ~1 MB goes
+  in from this directory.
+- Model shortlist (licenses verified via the HF model-card API on 23 Nov
+  2026, all Apache-2.0, not gated; re-verify before use):
+  - `Qwen/Qwen2.5-0.5B-Instruct` (Apache-2.0)
+  - `HuggingFaceTB/SmolLM2-360M-Instruct` (Apache-2.0)
+  - `HuggingFaceTB/SmolLM2-135M-Instruct` (Apache-2.0)
+  The exact GGUF repo (llama.cpp) and MLC-converted weights source must be
+  verified at run time per model; see `comparison-matrix.md`.
+
+## Metrics and how each is captured
+
+| Field | Capture |
+|---|---|
+| model_id / license / quant / sha256 | the artifact files themselves (`sha256sum`), license from `verify-model-license.sh` |
+| cold start | first benchmark run after pushing the binary/model (llama-bench `t_load` on first run; approximate - noted in results) |
+| warm start | subsequent runs' `t_load` |
+| time-to-first-token | NOT measured by llama-bench; recorded as `null` for CLI runs. Precise TTFT is an optional Phase B app measurement. Never fill it with an estimate. |
+| prompt tokens/s, generation tokens/s | llama-bench `pp` / `tg` columns directly |
+| peak RSS | `/proc/<pid>/status` VmHWM of the benchmark process (adb) |
+| peak PSS | `dumpsys meminfo` sampling while an app runtime runs (null for CLI runs) |
+| thermal before/after | `/sys/class/thermal/thermal_zone*/temp` max + `dumpsys thermalservice`, recorded before and after each run block |
+| battery before/after | `dumpsys battery` level + charge counter, before and after each run block; screen state and brightness fixed |
+| crashes | process exit code + `adb logcat -b crash -d` excerpt for the run window |
+| device / API / ABI / SoC | `getprop` via `scripts/collect_device_info.sh` |
+
+## Acceptance criteria (Gate 1 data is valid only when ALL hold)
+
+1. Both runtimes measured on the OnePlus 12R with full device metadata, OR a
+   specific documented reason in `comparison-matrix.md` (e.g. a runtime
+   unsupported on this device). Never silent.
+2. Model identity recorded per rule 1 above; any deviation stated in the
+   results and matrix.
+3. Every result record contains every schema field (see
+   `results/schema.md`); a field that was not measured is `null` with a
+   note in `notes`, never omitted.
+4. Raw benchmark stdout archived per run (`results/<runtime>/<ts>.raw.txt`)
+   next to the parsed record.
+5. A crash is a recorded result (exit code + logcat excerpt), not a silent
+   retry.
+6. No weights or large binaries in the repo (rule above, checked before each
+   commit).
+7. License verification output for the chosen model archived under
+   `results/`.
+8. The Gate 1 decision paragraph is written only after at least 3 repeat
+   runs per runtime per configuration, medians reported, raw outputs kept.
+
+## Runbook (owner-executed; Mac M1 host + OnePlus 12R)
+
+All commands run on the Mac unless marked `(device)`. Nothing here uploads
+anything anywhere; every script writes only inside this directory (and
+`/tmp`).
+
+**Phase 0 - host and device prep.**
+
+1. Install Android SDK platform-tools (adb) and the NDK on the Mac
+   (`brew install --cask android-platform-tools`, and the NDK via Android
+   Studio or `sdkmanager`).
+2. On the phone: enable Developer options and USB debugging.
+3. Connect USB, confirm `adb devices` lists the 12R, and run
+   `scripts/collect_device_info.sh` once to record the baseline row.
+
+**Phase 1 - llama.cpp build (host).**
+
+1. Clone llama.cpp at a pinned tag (record the tag in every result row) and
+   verify its license:
+   `gh api repos/ggml-org/llama.cpp --jq .license` (expected MIT; verified
+   23 Nov 2026).
+2. Build for arm64-v8a per the official Android instructions
+   (https://github.com/ggml-org/llama.cpp/blob/master/docs/build.md):
+   ```
+   cmake -B build-android-arm64 \
+     -DCMAKE_TOOLCHAIN_FILE=$NDK/build/cmake/android.toolchain.cmake \
+     -DANDROID_PLATFORM=android-28 -DANDROID_ABI=arm64-v8a \
+     -DCMAKE_BUILD_TYPE=Release
+   cmake --build build-android-arm64 --config Release -j
+   ```
+3. Verify the produced binary list includes `llama-bench`.
+
+**Phase 2 - model (owner-approved download).**
+
+1. `scripts/verify-model-license.sh <chosen-model-id>` - read the output.
+2. Download the chosen artifact MANUALLY into `models/` (gitignored), e.g.
+   `huggingface-cli download <repo> <file> --local-dir models/`. Only after
+   explicit approval of the license shown in step 1.
+3. Record `sha256sum models/<file>`.
+
+**Phase 3 - llama.cpp on-device run.**
+
+1. `adb push` the `llama-bench` binary and the model to
+   `/data/local/tmp/` (device).
+2. Capture battery/thermal before; run
+   `scripts/run_llamacpp_bench.sh` (it drives adb, fixes threads/prompt/gen
+   lengths, repeats, and captures raw output + VmHWM); capture battery/
+   thermal after. Screen on, fixed brightness, no other apps, device off
+   charger during the run block.
+
+**Phase 4 - MLC on-device run.**
+
+1. Build the MLC Android app per the official docs
+   (https://llm.mlc.ai/docs/deploy/android): requires Android Studio + NDK
+   + CMake + Rust on the host and the physical phone (MLC's GPU path cannot
+   be meaningfully tested in an emulator). Verify the mlc-llm license the
+   same way (`gh api repos/mlc-ai/mlc-llm --jq .license`; expected
+   Apache-2.0, verified 23 Nov 2026).
+2. Model weights: prebuilt MLC weights if available for the chosen model,
+   else `mlc_llm convert_weight` on the Mac per official docs - again a
+   manual, owner-approved download/step; nothing scripted.
+3. Install the app on the 12R, run the model, and run
+   `scripts/run_mlc_bench.sh` to capture battery/thermal before/after,
+   PSS sampling, and the app's benchmark logcat for the run window.
+
+**Phase 5 - record.** Convert raw outputs to the schema
+(`results/schema.md`), fill one JSON record + one CSV row per run, commit
+results (small files only) and any comparison-matrix updates.
+
+**Phase 6 - decide.** Write the Gate 1 decision summary (medians, anomalies,
+crashes, thermal behavior) into `results/RESULTS.md`, then the roadmap Gate 1
+section cites it. No architecture commitment happens before that.
+
+## Out of scope for this scaffold
+
+- Any production app change, any Capacitor plugin, any release.
+- Model downloads, weight hosting, or any large binary in the repo.
+- Any network upload of results: results stay local and are committed as
+  plain files by the owner.

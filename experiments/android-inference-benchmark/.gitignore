@@ -1,0 +1,7 @@
+models/
+build*/
+*.gguf
+*.task
+*.so
+*.apk
+results/**/*.metrics.log.tmp
