@@ -21,6 +21,7 @@ const path = require('path');
 const LocalDb = require('./db');
 const { createAi } = require('./ai');
 const { resolveModelSelection } = require('./model-selection');
+const chatHistory = require('./chat-history');
 const OllamaSetup = require('./ollama-setup');
 const { ingestSyllabus } = require('./ingest');
 const { humanizeImportError } = require('./import-errors');
@@ -182,6 +183,15 @@ function registerIpc() {
     const sel = await modelSelection();
     return P.ask(ctx(), payload, todayIso(), { model: sel.chat.model });
   });
+
+  // Conversation history: local only, created when the ask view asks for
+  // one; the overlay keeps its single-shot behavior.
+  ipcMain.handle('chat:list', async () => chatHistory.listConversations(db));
+  ipcMain.handle('chat:messages', async (_e, payload) => chatHistory.getMessages(db, payload && payload.id));
+  ipcMain.handle('chat:new', async () => chatHistory.createConversation(db, { now: localNowIso() }));
+  ipcMain.handle('chat:rename', async (_e, payload) =>
+    chatHistory.renameConversation(db, payload && payload.id, payload && payload.title));
+  ipcMain.handle('chat:delete', async (_e, payload) => chatHistory.deleteConversation(db, payload && payload.id));
 
   ipcMain.handle('ai:models', async () => ({
     ok: true,

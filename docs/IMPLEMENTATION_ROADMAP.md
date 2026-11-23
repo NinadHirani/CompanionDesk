@@ -29,11 +29,14 @@ Done: the docs baseline (PR #10, main 2d349c5) and the stale-docs refresh
 `ai_model_vision` settings, selection only from models Ollama reports as
 installed (no pull from settings), validated ids, safe fallback to the
 defaults, and the cloud fallback never receives a local model name
-(`src/model-selection.js`). Remaining M0: the Gemini key entry UI behind
-secure storage (Electron safeStorage / OS keychain; web and Android
-constraints designed first, never plaintext) and conversation history in the
-ask flow. Acceptance: the suite stays green; no existing feature changes
-behavior.
+(`src/model-selection.js`). Done 23 Nov 2026: local conversation history in
+the ask flow — conversations with rename and confirmed delete, device-only
+storage (same sql.js database on desktop and web), the local model sees the
+last ten turns, the cloud fallback never does, and the overlay keeps its
+single-shot behavior (`src/chat-history.js`). Remaining M0: the Gemini key
+entry UI behind secure storage (Electron safeStorage / OS keychain; web and
+Android constraints designed first, never plaintext). Acceptance: the suite
+stays green; no existing feature changes behavior.
 
 ## M1 - Intelligence core (2-3 wks, estimate)
 

@@ -44,14 +44,17 @@ docs/IMPLEMENTATION_ROADMAP.md.
   src/whisper.js), local About-me memory with propose-then-confirm cards
   (src/memory.js, src/proposals.js), on-demand single-window screen Q&A with
   a local vision model (src/screen-service.js), one-click Ollama onboarding
-  (src/ollama-setup.js, PR #9), and the public debug-APK preview. 258 tests
+  (src/ollama-setup.js, PR #9), and the public debug-APK preview. 293 tests
   passing; three main-branch CI workflows green.
 
 ## Gaps (current, mapped to docs/IMPLEMENTATION_ROADMAP.md)
 
 1. Gemini key-entry UI - ABSENT; the cloud fallback is dormant (M0).
-2. Conversation history in the ask flow - ABSENT (M0).
-3. Model-as-setting instead of hardcoded constants - ABSENT (M0).
+2. Conversation history in the ask flow - DONE 23 Nov 2026 (local-only,
+   rename, confirmed delete; src/chat-history.js).
+3. Model-as-setting instead of hardcoded constants - DONE 23 Nov 2026
+   (separate chat and vision settings, installed-only selection,
+   src/model-selection.js).
 4. Provider/model registry and task router - PLANNED (M1); not implemented.
 5. Reusable step workflows - ABSENT (planned with the workspace UI, M8).
 6. Safe computer assistance (propose-then-confirm OS actions) - PLANNED as

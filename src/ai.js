@@ -27,9 +27,17 @@
     geminiKey = null,
   } = {}) {
     // images: optional array of base64 strings attached to the user message (vision models).
-    function messagesFor({ system, prompt, images }) {
+    function messagesFor({ system, prompt, images, history }) {
       const user = images && images.length ? { role: 'user', content: prompt, images } : { role: 'user', content: prompt };
-      return system ? [{ role: 'system', content: system }, user] : [user];
+      const messages = system ? [{ role: 'system', content: system }] : [];
+      // Past turns of the CURRENT conversation, local model only. The cloud
+      // fallback never receives them (complete strips this argument).
+      for (const turn of history || []) {
+        if (!turn || typeof turn.content !== 'string' || !turn.content.trim()) continue;
+        messages.push({ role: turn.role === 'assistant' ? 'assistant' : 'user', content: turn.content });
+      }
+      messages.push(user);
+      return messages;
     }
 
     // Is a model with this name (ignoring the :tag) installed in Ollama right now?
@@ -63,7 +71,7 @@
       }
     }
 
-    async function chatOllama({ system, prompt, model, temperature = 0.1, onToken, images } = {}) {
+    async function chatOllama({ system, prompt, model, temperature = 0.1, onToken, images, history } = {}) {
       const res = await fetchImpl(`${ollamaUrl}/api/chat`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
@@ -71,7 +79,7 @@
           model: model || localModel,
           stream: true,
           options: { temperature },
-          messages: messagesFor({ system, prompt, images }),
+          messages: messagesFor({ system, prompt, images, history }),
         }),
       });
       if (!res.ok) throw new Error(`ollama_http_${res.status}`);
@@ -175,7 +183,7 @@
         if (geminiKey) {
           // The local model name must never reach the cloud call: cloud has
           // its own model setting, and an Ollama id is not a Gemini id.
-          const { cloudArgs, model, ...rest } = args || {};
+          const { cloudArgs, model, history, ...rest } = args || {};
           return chatGemini(cloudArgs ? { ...rest, ...cloudArgs } : rest);
         }
         throw err;

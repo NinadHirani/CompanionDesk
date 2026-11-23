@@ -72,6 +72,12 @@ claims to literally experience emotions.
   pull with progress and cancel, disk check (`src/ollama-setup.js`).
 - Local About-me memory with single-bullet edits and propose-then-confirm
   memory cards (`src/memory.js`, `src/proposals.js`, `memory_proposals` table).
+- Local conversation history in the ask view: conversations with rename and
+  confirmed delete, stored only in the device database, never synced and
+  never sent to the cloud; the local model sees the last ten turns of the
+  current conversation, the cloud fallback never does. Only prompt/answer
+  text is stored (`src/chat-history.js`, `chat_messages`/`conversations`
+  tables, `chat:*` IPC channels).
 - User-configurable model selection: the chat and screen-vision models are
   separate settings (`ai_model_local`, `ai_model_vision`), offered only from
   models Ollama already has installed (nothing is pulled from settings), with
@@ -92,7 +98,7 @@ claims to literally experience emotions.
 - Update policy that never auto-installs unsigned builds; update modes
   disabled/auto/manual-download (`src/update-policy.js`, `src/updater.js`).
 - Health check and onboarding interview (`src/health.js`, `src/onboarding.js`).
-- 276 passing unit/integration tests (was 258; model selection added 18); three main-branch CI workflows green
+- 293 passing unit/integration tests (258 baseline; model selection +18, conversation history +17); three main-branch CI workflows green
   (CI, CI macOS + Linux, Android APK; verified this session: only these
   three have ever run on main);
   public Android debug-APK preview release.
@@ -105,7 +111,7 @@ shipped overlay/voice/memory/screen work and are scheduled for refresh in M0.
 
 ## 4. Planned, NOT implemented
 
-Conversation history in the ask flow; provider/model registry and task
+A provider/model registry and task
 router; hardware detection and profiles; agent orchestrator, typed tools,
 approval cards, audit log, emergency stop; proactive scheduler and OS
 notifications; wake word; text-to-speech; multilingual speech; Android

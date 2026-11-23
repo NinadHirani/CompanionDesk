@@ -16,6 +16,7 @@ const onboarding = require('./onboarding');
 const { addDaysIso } = require('./dates');
 const { validIsoDate } = require('./extraction-core');
 const { PERSONAL_COURSE, activeSkills } = require('./skills');
+const chatHistory = require('./chat-history');
 
 
 // ---- settings ---------------------------------------------------------------
@@ -141,6 +142,16 @@ function removeDeadline({ db }, payload) {
 async function ask({ db, ai, meFile }, payload, todayIso, { onToken, model } = {}) {
   const question = payload && typeof payload.prompt === 'string' ? payload.prompt.trim() : '';
   if (!question) return { ok: false, error: 'empty_prompt' };
+  // Conversation history is opt-in per call: the desktop ask view passes a
+  // conversation id, the overlay stays single-shot. Past turns go to the
+  // LOCAL model only; the cloud fallback never receives them.
+  const conversationId = payload && Number.isInteger(payload.conversation_id) ? payload.conversation_id : null;
+  let history;
+  if (conversationId) {
+    const got = chatHistory.getMessages(db, conversationId);
+    if (got.ok) history = chatHistory.contextTurns(got.messages);
+    else return { ok: false, error: 'not_found' };
+  }
   const settings = getSettings(db);
   const skills = activeSkills(db, settings);
   const contextPack = renderContextPack({
@@ -159,9 +170,21 @@ async function ask({ db, ai, meFile }, payload, todayIso, { onToken, model } = {
     question,
   });
   try {
-    const answer = await ai.complete({ system: persona.system, prompt: persona.prompt, cloudArgs: persona.cloud || undefined, onToken, model });
-    return { ok: true, answer };
+    const answer = await ai.complete({
+      system: persona.system,
+      prompt: persona.prompt,
+      cloudArgs: persona.cloud || undefined,
+      onToken, model,
+      history: history && history.length ? history : undefined,
+    });
+    if (conversationId) {
+      const now = new Date().toISOString();
+      chatHistory.addMessage(db, conversationId, 'user', question, now);
+      chatHistory.addMessage(db, conversationId, 'assistant', answer, now);
+    }
+    return conversationId ? { ok: true, answer, conversation_id: conversationId } : { ok: true, answer };
   } catch (err) {
+    if (conversationId) chatHistory.addMessage(db, conversationId, 'user', question, new Date().toISOString());
     return { ok: false, error: String((err && err.message) || err) };
   }
 }

@@ -240,12 +240,39 @@
       const chat = installed
         ? CompanionModelSelection.resolveChatModel({ configured: settings.ai_model_local, fallback: ai.localModel, installed: installed.map((m) => m.name) })
         : { model: ai.localModel };
-      const answer = await ai.complete({ system: composeVoice(), prompt: buildContextPack() + '\n\nQuestion: ' + prompt, model: chat.model });
-      return { ok: true, answer };
+      // Conversation history is local-only; the cloud fallback never sees it
+      // (ai.complete strips the history argument before any cloud call).
+      const conversationId = payload && Number.isInteger(payload.conversation_id) ? payload.conversation_id : null;
+      let history;
+      if (conversationId) {
+        const got = CompanionChatHistory.getMessages(db, conversationId);
+        if (got.ok) history = CompanionChatHistory.contextTurns(got.messages);
+        else return { ok: false, error: 'not_found' };
+      }
+      const answer = await ai.complete({
+        system: composeVoice(),
+        prompt: buildContextPack() + '\n\nQuestion: ' + prompt,
+        model: chat.model,
+        history: history && history.length ? history : undefined,
+      });
+      if (conversationId) {
+        const now = localNowIso();
+        CompanionChatHistory.addMessage(db, conversationId, 'user', prompt, now);
+        CompanionChatHistory.addMessage(db, conversationId, 'assistant', answer, now);
+      }
+      return conversationId ? { ok: true, answer, conversation_id: conversationId } : { ok: true, answer };
     } catch (err) {
       return { ok: false, error: String((err && err.message) || err) };
     }
   }
+
+  // Conversation history handlers, local storage only (the same sql.js
+  // database the web build persists in IndexedDB).
+  function chat_new() { return CompanionChatHistory.createConversation(db, { now: localNowIso() }); }
+  function chat_list() { return CompanionChatHistory.listConversations(db); }
+  function chat_messages(payload) { return CompanionChatHistory.getMessages(db, payload && payload.id); }
+  function chat_rename(payload) { return CompanionChatHistory.renameConversation(db, payload && payload.id, payload && payload.title); }
+  function chat_delete(payload) { return CompanionChatHistory.deleteConversation(db, payload && payload.id); }
 
   // Which installed model answers; mirrors the desktop ai:models handler.
   async function ai_models() {
@@ -450,6 +477,7 @@
   window.companiondesk = {
     bridgeMode: 'web',
     state_get, syllabus_import, ai_ask, ai_models,
+    chat_new, chat_list, chat_messages, chat_rename, chat_delete,
     brief_today, assignment_setDone,
     settings_get, settings_save,
     grades_get, grades_setScore, grades_setTarget,
