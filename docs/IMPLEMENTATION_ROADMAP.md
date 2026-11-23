@@ -33,10 +33,15 @@ defaults, and the cloud fallback never receives a local model name
 the ask flow — conversations with rename and confirmed delete, device-only
 storage (same sql.js database on desktop and web), the local model sees the
 last ten turns, the cloud fallback never does, and the overlay keeps its
-single-shot behavior (`src/chat-history.js`). Remaining M0: the Gemini key
-entry UI behind secure storage (Electron safeStorage / OS keychain; web and
-Android constraints designed first, never plaintext). Acceptance: the suite
-stays green; no existing feature changes behavior.
+single-shot behavior (`src/chat-history.js`). Done 23 Nov 2026: the
+optional Gemini key behind secure storage — Electron safeStorage in the OS
+credential vault, 0600 ciphertext file under userData, main-process-only
+decryption via a lazy key getter, header-based key transport (never a URL),
+masked status across IPC, fail-closed when OS encryption is unavailable,
+explicit save/test/remove UI with clear opt-in wording, and web/Android key
+setup reported unsupported instead of insecure fallback
+(`src/secure-store.js`). M0 is COMPLETE. Acceptance: the suite stays green;
+no existing feature changes behavior.
 
 ## M1 - Intelligence core (2-3 wks, estimate)
 

@@ -72,6 +72,16 @@ claims to literally experience emotions.
   pull with progress and cancel, disk check (`src/ollama-setup.js`).
 - Local About-me memory with single-bullet edits and propose-then-confirm
   memory cards (`src/memory.js`, `src/proposals.js`, `memory_proposals` table).
+- Optional Gemini key, encrypted at rest: the key is stored only in the OS
+  credential vault via Electron safeStorage (0600 file under userData),
+  decrypted in the main process only when a cloud call needs it, and never
+  returned to the renderer, logged, or placed in a URL (the key travels in
+  the `x-goog-api-key` header). Status across IPC is masked booleans only.
+  Fail closed: no OS encryption means nothing is saved and the cloud stays
+  off. Setup UI saves, tests (one GET, no prompt) and removes the key, and
+  states what enabling the cloud sends. The web/Android build has no secure
+  vault adapter, so key setup is reported unsupported there, never stored
+  insecurely (`src/secure-store.js`, `cloud:*` IPC channels).
 - Local conversation history in the ask view: conversations with rename and
   confirmed delete, stored only in the device database, never synced and
   never sent to the cloud; the local model sees the last ten turns of the
@@ -98,7 +108,7 @@ claims to literally experience emotions.
 - Update policy that never auto-installs unsigned builds; update modes
   disabled/auto/manual-download (`src/update-policy.js`, `src/updater.js`).
 - Health check and onboarding interview (`src/health.js`, `src/onboarding.js`).
-- 293 passing unit/integration tests (258 baseline; model selection +18, conversation history +17); three main-branch CI workflows green
+- 306 passing unit/integration tests (258 baseline; model selection +18, conversation history +17, optional key storage +13); three main-branch CI workflows green
   (CI, CI macOS + Linux, Android APK; verified this session: only these
   three have ever run on main);
   public Android debug-APK preview release.
@@ -112,7 +122,7 @@ shipped overlay/voice/memory/screen work and are scheduled for refresh in M0.
 ## 4. Planned, NOT implemented
 
 A provider/model registry and task
-router; hardware detection and profiles; agent orchestrator, typed tools,
+router; a secure credential-vault adapter for Android/web key storage; hardware detection and profiles; agent orchestrator, typed tools,
 approval cards, audit log, emergency stop; proactive scheduler and OS
 notifications; wake word; text-to-speech; multilingual speech; Android
 on-device inference; secure desktop gateway for Android; live session screen

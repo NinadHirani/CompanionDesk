@@ -160,6 +160,18 @@
       <label class="check"><input id="s-suggest" type="checkbox" /> Offer to remember things I mention</label>
       <label class="check"><input id="s-cloud" type="checkbox" /> Share my notes and habits with the cloud model if my local one is unavailable</label>
       <p class="hint">The last option is off by default and only matters if you added a Gemini key. Without it, the cloud only ever sees your deadlines and your question.</p>
+      <div class="field" id="cloud-key-wrap">
+        <label for="cloud-key">Gemini API key (optional)</label>
+        <input id="cloud-key" type="password" maxlength="80" autocomplete="off" spellcheck="false" />
+        <p class="hint">Stored only on this computer, encrypted by the operating system's credential vault. It is never shown again and never leaves the app's main process.</p>
+        <div class="actions">
+          <button id="cloud-save" class="primary">Save key</button>
+          <button id="cloud-test">Test key</button>
+          <button id="cloud-remove">Remove key</button>
+        </div>
+        <p id="cloud-status" class="hint" role="status"></p>
+        <p class="hint">Off by default. Saving a key enables the cloud fallback: the current prompt, plus only the context you explicitly allowed, is sent to Google. Conversation history is never sent. Your Google plan may charge for usage or limit how often the key may be used.</p>
+      </div>
       <button id="settings-save" class="primary">Save</button>
       <p id="settings-msg" class="hint" role="status"></p>
     </section>

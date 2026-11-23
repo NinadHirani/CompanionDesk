@@ -6,7 +6,7 @@
 // Handler logic lives in services.js and personal.js so it can be tested
 // without Electron; this file only wires channels to those functions.
 
-const { app, BrowserWindow, ipcMain, dialog, session, desktopCapturer, systemPreferences, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, session, desktopCapturer, systemPreferences, shell, safeStorage } = require('electron');
 const { createOverlayController } = require('./overlay');
 const hotkey = require('./hotkey');
 const voice = require('./voice');
@@ -20,6 +20,7 @@ const { collectHealth } = require('./health');
 const path = require('path');
 const LocalDb = require('./db');
 const { createAi } = require('./ai');
+const { createSecureStore } = require('./secure-store');
 const { resolveModelSelection } = require('./model-selection');
 const chatHistory = require('./chat-history');
 const OllamaSetup = require('./ollama-setup');
@@ -38,6 +39,7 @@ const SMOKE = process.argv.includes('--smoke');
 
 let db = null;
 let ai = null;
+let secureStore = null;
 let win = null;
 let overlay = null;
 
@@ -88,7 +90,11 @@ async function modelSelection() {
 async function init() {
   const dataDir = path.join(app.getPath('userData'), 'data');
   db = await LocalDb.open({ file: path.join(dataDir, 'companiondesk.db') });
-  ai = createAi();
+  // The optional Gemini key lives in the OS credential vault, decrypted in
+  // this process only when a cloud call needs it. Without a saved key the
+  // cloud fallback is off.
+  secureStore = createSecureStore({ safeStorage, filePath: path.join(app.getPath('userData'), 'gemini.key.bin') });
+  ai = createAi({ geminiKey: () => secureStore.readKey() });
 }
 
 function createWindow() {
@@ -191,6 +197,16 @@ function registerIpc() {
   ipcMain.handle('chat:new', async () => chatHistory.createConversation(db, { now: localNowIso() }));
   ipcMain.handle('chat:rename', async (_e, payload) =>
     chatHistory.renameConversation(db, payload && payload.id, payload && payload.title));
+  // Optional cloud key. The renderer gets masked status only; the key never
+  // crosses the IPC boundary in either direction.
+  ipcMain.handle('cloud:status', async () => ({ ok: true, ...secureStore.status() }));
+  ipcMain.handle('cloud:setKey', async (_e, payload) => secureStore.saveKey(payload && payload.key));
+  ipcMain.handle('cloud:testKey', async (_e, payload) => {
+    const key = payload && payload.key ? String(payload.key) : undefined;
+    const res = await ai.testGeminiKey(key != null && key ? { key } : {});
+    return { ok: Boolean(res.ok), reason: res.reason || null };
+  });
+  ipcMain.handle('cloud:removeKey', async () => ({ ...secureStore.removeKey() }));
   ipcMain.handle('chat:delete', async (_e, payload) => chatHistory.deleteConversation(db, payload && payload.id));
 
   ipcMain.handle('ai:models', async () => ({

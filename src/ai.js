@@ -26,6 +26,10 @@
     cloudModel = DEFAULT_CLOUD_MODEL,
     geminiKey = null,
   } = {}) {
+    // geminiKey may be a string or, on the desktop app, a getter into the
+    // OS-encrypted store, so the key is read only when a cloud call actually
+    // happens and the renderer never needs it.
+    const keyFor = () => (typeof geminiKey === 'function' ? geminiKey() : geminiKey);
     // images: optional array of base64 strings attached to the user message (vision models).
     function messagesFor({ system, prompt, images, history }) {
       const user = images && images.length ? { role: 'user', content: prompt, images } : { role: 'user', content: prompt };
@@ -57,7 +61,7 @@
     }
 
     async function status() {
-      const out = { ollama: false, model: localModel, cloud: Boolean(geminiKey) };
+      const out = { ollama: false, model: localModel, cloud: Boolean(keyFor()) };
       try {
         const res = await fetchImpl(`${ollamaUrl}/api/tags`, { signal: AbortSignal.timeout(STATUS_TIMEOUT_MS) });
         if (!res.ok) return out;
@@ -125,12 +129,15 @@
 
     // Cloud fallback. Plain REST, no SDK, so the dependency tree stays light.
     async function chatGemini({ system, prompt, model } = {}) {
-      if (!geminiKey) throw new Error('no_cloud_key');
+      const key = keyFor();
+      if (!key) throw new Error('no_cloud_key');
+      // The key travels in a header, never a URL: a query parameter would end
+      // up in logs, proxies and crash reports.
       const res = await fetchImpl(
-        `https://generativelanguage.googleapis.com/v1beta/models/${model || cloudModel}:generateContent?key=${encodeURIComponent(geminiKey)}`,
+        `https://generativelanguage.googleapis.com/v1beta/models/${model || cloudModel}:generateContent`,
         {
           method: 'POST',
-          headers: { 'content-type': 'application/json' },
+          headers: { 'content-type': 'application/json', 'x-goog-api-key': key },
           body: JSON.stringify({ contents: [{ parts: [{ text: (system ? system + '\n\n' : '') + prompt }] }] }),
         }
       );
@@ -140,6 +147,24 @@
       const text = (parts || []).map((p) => p.text || '').join('');
       if (!text) throw new Error('gemini_empty_response');
       return text;
+    }
+
+    // Explicit connectivity check for a saved or just-typed Gemini key. No
+    // prompt, no history, no model text: one GET on the models list. The
+    // reason never contains the key.
+    async function testGeminiKey({ key } = {}) {
+      const useKey = key != null ? String(key) : keyFor();
+      if (!useKey) return { ok: false, reason: 'no_cloud_key' };
+      try {
+        const res = await fetchImpl('https://generativelanguage.googleapis.com/v1beta/models', {
+          headers: { 'x-goog-api-key': useKey },
+          signal: AbortSignal.timeout(8000),
+        });
+        if (!res.ok) return { ok: false, reason: `gemini_http_${res.status}` };
+        return { ok: true };
+      } catch {
+        return { ok: false, reason: 'gemini_network_error' };
+      }
     }
 
     // Models actually installed right now. null means Ollama did not answer.
@@ -180,7 +205,7 @@
       try {
         return await chatOllama(args);
       } catch (err) {
-        if (geminiKey) {
+        if (keyFor()) {
           // The local model name must never reach the cloud call: cloud has
           // its own model setting, and an Ollama id is not a Gemini id.
           const { cloudArgs, model, history, ...rest } = args || {};
@@ -190,7 +215,7 @@
       }
     }
 
-    return { status, hasModel, chat: chatOllama, chatGemini, complete, listModels, modelCapabilities, localModel };
+    return { status, hasModel, chat: chatOllama, chatGemini, complete, listModels, modelCapabilities, testGeminiKey, localModel };
   }
 
   return createAi;

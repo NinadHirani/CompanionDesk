@@ -22,7 +22,6 @@
       return { promise, resolve, reject };
     };
   }
-  const GEMINI_KEY_STORAGE = 'companiondesk.geminiKey';
   // General-purpose default voice; the student framing is appended only when
   // student data exists. Mirrors src/skills.js (the web build does not bundle
   // the desktop skill registry yet; see docs/SKILLS.md).
@@ -469,8 +468,10 @@
 
   async function init() {
     db = await CompanionDb.open({ storage: idbStorage('sqlite') });
-    const key = (typeof localStorage !== 'undefined' && localStorage.getItem(GEMINI_KEY_STORAGE)) || null;
-    ai = CompanionAi.createAi({ geminiKey: key });
+    // No cloud key on the web build: there is no secure platform vault
+    // behind localStorage, so the key path stays desktop-only rather than
+    // falling back to insecure storage. The cloud fallback is therefore off.
+    ai = CompanionAi.createAi({});
     readyResolve();
   }
 
@@ -478,6 +479,13 @@
     bridgeMode: 'web',
     state_get, syllabus_import, ai_ask, ai_models,
     chat_new, chat_list, chat_messages, chat_rename, chat_delete,
+    // Optional cloud key setup needs an OS credential vault. The web build
+    // has none, so status reports unsupported and every change is refused;
+    // nothing is stored and no network call is made.
+    cloud_status: () => ({ ok: true, supported: false }),
+    cloud_setKey: () => ({ ok: false, error: 'unsupported' }),
+    cloud_testKey: () => ({ ok: false, error: 'unsupported' }),
+    cloud_removeKey: () => ({ ok: true, supported: false, configured: false }),
     brief_today, assignment_setDone,
     settings_get, settings_save,
     grades_get, grades_setScore, grades_setTarget,

@@ -31,6 +31,13 @@
     file_too_large: 'That file is too large (5 MB is the limit).',
     read_failed: 'That file could not be read.',
     desktop_only: 'That one needs the desktop app; the rest works here.',
+    unsupported: 'Cloud AI setup is not available in this build.',
+    invalid_key_format: 'That does not look like a Gemini API key. Keys start with AIza.',
+    missing_key: 'Paste a key first.',
+    encryption_unavailable: 'This computer cannot encrypt the key (no OS credential vault), so nothing was saved and the cloud stays off.',
+    key_file_write_failed: 'The key file could not be written. Check the app folder permissions.',
+    key_file_remove_failed: 'The key file could not be removed. Check the app folder permissions.',
+    gemini_network_error: 'Could not reach Google to check the key. Check your connection and try again.',
   };
 
   function friendlyError(code, detail) {
@@ -38,6 +45,8 @@
     if (c === 'screen_blocked') return `A window titled "${detail}" may show a password or sign-in form. Close or minimize it, then try again.`;
     if (c === 'vision_unavailable') return `Screen questions need a local vision model. Run: ollama pull ${detail}`;
     if (MESSAGES[c]) return MESSAGES[c];
+    if (/^gemini_http_40[13]/.test(c)) return 'Google rejected the key. Make sure it is a valid Gemini API key with the API enabled.';
+    if (/^gemini_http_429/.test(c)) return 'Google answered "too many requests". Your key plan is rate limited; try again later.';
     if (/fetch failed|ECONNREFUSED|ollama|NetworkError|no_cloud_key/i.test(c)) {
       return 'I could not reach the local model. Start Ollama, then try again.';
     }

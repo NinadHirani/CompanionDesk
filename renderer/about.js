@@ -187,6 +187,61 @@
     else { msg.textContent = UI.friendlyError(res.error); msg.className = 'hint error'; }
   });
 
+  // ---- optional cloud key (desktop: OS-encrypted; web: unsupported) --------------
+  const CK = {
+    input: document.getElementById('cloud-key'),
+    save: document.getElementById('cloud-save'),
+    test: document.getElementById('cloud-test'),
+    remove: document.getElementById('cloud-remove'),
+    msg: document.getElementById('cloud-status'),
+  };
+  function showCloud(text, bad) {
+    if (!CK.msg) return;
+    CK.msg.textContent = text;
+    CK.msg.className = bad ? 'hint error' : 'hint';
+  }
+  async function fillCloud() {
+    if (!CK.input) return;
+    let res;
+    try { res = await api.cloud_status(); } catch { res = { supported: false }; }
+    if (!res.supported) {
+      // No secure vault on this platform: the whole section stays out of the
+      // way and nothing is stored.
+      CK.input.closest('.field').hidden = true;
+      return;
+    }
+    CK.input.closest('.field').hidden = false;
+    CK.save.hidden = false;
+    CK.test.hidden = false;
+    CK.remove.hidden = false;
+    if (!res.encryptionAvailable) {
+      showCloud('This computer cannot encrypt the key (no OS credential vault), so nothing is saved and the cloud stays off.', true);
+      CK.input.disabled = true;
+      CK.save.disabled = true;
+      return;
+    }
+    CK.input.disabled = false;
+    CK.save.disabled = false;
+    showCloud(res.configured ? 'A key is saved on this computer.' : 'No key saved. The cloud fallback stays off.');
+  }
+  if (CK.save) CK.save.addEventListener('click', async () => {
+    const res = await api.cloud_setKey({ key: CK.input.value });
+    CK.input.value = '';
+    if (res.ok) { await fillCloud(); showCloud('Key saved and encrypted on this computer.'); }
+    else showCloud(window.friendlyError(res.error), true);
+  });
+  if (CK.test) CK.test.addEventListener('click', async () => {
+    showCloud('Checking with Google...');
+    const res = await api.cloud_testKey(CK.input.value ? { key: CK.input.value } : {});
+    if (res.ok) showCloud('The key works.');
+    else showCloud(window.friendlyError(res.reason), true);
+  });
+  if (CK.remove) CK.remove.addEventListener('click', async () => {
+    const res = await api.cloud_removeKey();
+    await fillCloud();
+    showCloud(res.ok ? 'Key removed. The cloud fallback is off.' : window.friendlyError(res.error), !res.ok);
+  });
+
   // ---- overlay shortcut ----------------------------------------------------------
   const ovInput = document.getElementById('ov-hotkey');
   const ovMsg = document.getElementById('ov-msg');
@@ -271,6 +326,7 @@
     if (mem.ok) { renderItems(mem); renderProposals(mem.proposals); }
     if (pat.ok) renderPatterns(pat);
     if (set.ok) { fillSettings(set.settings); fillModels(set.settings); }
+    await fillCloud();
   }
 
   UI.about = { renderProposals, refreshProposals, refresh };
