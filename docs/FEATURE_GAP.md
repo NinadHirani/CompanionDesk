@@ -1,6 +1,6 @@
 # FEATURE_GAP.md - CompanionDesk vs nus-desktop companion capabilities
 
-Updated Nov 23, 2026 against main `2d349c5`. The nus-desktop comparison below
+Updated Nov 23, 2026 against main `29c1417`. The nus-desktop comparison below
 is the Oct 28, 2026 snapshot, kept unchanged for reference. The
 CompanionDesk status and gap lists now reflect shipped reality; the current
 baseline is docs/PRODUCT_BLUEPRINT.md and the forward plan is
@@ -29,7 +29,7 @@ docs/IMPLEMENTATION_ROADMAP.md.
   questions/day, 20 companion minutes/day, etc.). CompanionDesk will NOT
   copy this: no billing by design.
 
-## CompanionDesk status (verified in the working copy, Nov 23, 2026, main 2d349c5)
+## CompanionDesk status (verified in the working copy, Nov 23, 2026, main 29c1417)
 
 - Local-first chat with local Ollama (llama3.2:latest default); the opt-in
   Gemini fallback now has secure key setup: the key is encrypted at rest in
@@ -47,7 +47,7 @@ docs/IMPLEMENTATION_ROADMAP.md.
   src/whisper.js), local About-me memory with propose-then-confirm cards
   (src/memory.js, src/proposals.js), on-demand single-window screen Q&A with
   a local vision model (src/screen-service.js), one-click Ollama onboarding
-  (src/ollama-setup.js, PR #9), and the public debug-APK preview. 306 tests
+  (src/ollama-setup.js, PR #9), and the public debug-APK preview. 331 tests
   passing; three main-branch CI workflows green.
 
 ## Gaps (current, mapped to docs/IMPLEMENTATION_ROADMAP.md)
@@ -67,8 +67,9 @@ docs/IMPLEMENTATION_ROADMAP.md.
    (pure modules: src/provider-registry.js describes Ollama and optional
    Gemini with per-exact-model capabilities and unverified license/context/
    cost; src/task-router.js decides deterministically: local-first, vision
-   local-only, cloud only with cloud_enabled + consent + key + healthy
-   provider). Deeper per-ask routing integration remains PLANNED (M1).
+   local-only, cloud only with cloud_enabled + consent + key + a provider
+   known healthy; unknown health and an unverified cloud capability refuse).
+   Deeper per-ask routing integration remains PLANNED (M1).
 5. Reusable step workflows - ABSENT (planned with the workspace UI, M8).
 6. Safe computer assistance (propose-then-confirm OS actions) - PLANNED as
    the Gate 2 agent foundation: typed tool registry, external policy engine,

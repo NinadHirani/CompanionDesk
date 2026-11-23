@@ -14,7 +14,8 @@
 //  4. A cloud route requires ALL of: the task is cloud-eligible, the user's
 //     privacy mode allows cloud, cloud use is explicitly enabled in
 //     settings, explicit consent, a key is available, and the cloud
-//     provider is healthy. A saved key alone routes nothing.
+//     provider is KNOWN healthy (unknown health refuses). A saved key
+//     alone routes nothing.
 //  5. A model that is not installed is not downloaded and not assumed: the
 //     router refuses or falls to the next known candidate.
 // Dual-mode: require() in Electron/Node, plain <script> in the web/mobile
@@ -72,8 +73,11 @@
 
     if (!Registry || !Registry.isKnownTask(task)) return refuse('unknown_task');
 
-    const ollamaUp = providerHealth.ollama !== false;
-    let localFailure = null;
+    // Health must be KNOWN healthy: an unknown state refuses, it is never
+    // read as healthy. ollama === true is the only healthy answer for the
+    // local route; anything else names why.
+    const ollamaUp = providerHealth.ollama === true;
+    let localFailure = providerHealth.ollama === false ? 'ollama_down' : 'ollama_health_unknown';
     const localCandidates = [];
     const push = (m) => { if (m && !localCandidates.includes(m)) localCandidates.push(m); };
     push(requestedModel);
@@ -93,8 +97,6 @@
       // Local could not serve: missing model, or no vision-capable model.
       if (task === 'vision') return refuse('no_vision_model_local');
       localFailure = 'no_local_model';
-    } else {
-      localFailure = 'ollama_down';
     }
 
     // Cloud is only ever considered when the local path could not serve,
@@ -110,7 +112,11 @@
     if (!cloudConsent) return refuse('no_cloud_consent');
     if (!cloudKeyAvailable) return refuse('no_cloud_key');
     if (providerHealth.gemini === false) return refuse('cloud_provider_down');
+    if (providerHealth.gemini !== true) return refuse('gemini_health_unknown');
+    // The cloud model's chat capability must be VERIFIED true: an unknown
+    // capability refuses, it is never assumed.
     const cloudCap = hasCapability(capabilities, cloudModel, 'chat');
+    if (cloudCap === null) return refuse('cloud_model_capability_unknown');
     if (cloudCap === false) return refuse('cloud_model_unsuitable');
     return route('gemini', cloudModel, 'cloud_fallback', true);
   }

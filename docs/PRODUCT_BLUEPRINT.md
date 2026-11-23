@@ -87,18 +87,19 @@ claims to literally experience emotions.
   real secret service counts: `basic_text` (hardcoded-password encryption)
   and `unknown` backends fail closed even when Electron reports encryption
   available, and a missing backend-query API fails closed too.
-5. **Cloud fallback is explicitly gated (M1 first slice, 23 Nov 2026).** A
-   provider/model registry (`src/provider-registry.js`) describes the local
-   Ollama provider and the optional Gemini cloud provider with per-exact-
-   model capabilities; license, context and cost stay unknown until verified
-   and are never inferred from a model family. A deterministic task router
-   (`src/task-router.js`) makes the policy explicit: local first, vision/
-   screen tasks local-only, cloud only for a cloud-eligible chat task with
-   privacy mode allowing it, cloud_enabled true in settings (default false),
-   explicit consent, an available key and a healthy provider; a saved key
-   alone routes nothing and missing models are never auto-downloaded.
-   `src/ai.js` enforces the same gate for its fallback (`cloudEnabled`,
-   default false).
+- **Cloud fallback is explicitly gated (M1 first slice, 23 Nov 2026).** A
+  provider/model registry (`src/provider-registry.js`) describes the local
+  Ollama provider and the optional Gemini cloud provider with per-exact-
+  model capabilities; license, context and cost stay unknown until verified
+  and are never inferred from a model family. A deterministic task router
+  (`src/task-router.js`) makes the policy explicit: local first, vision/
+  screen tasks local-only, cloud only for a cloud-eligible chat task with
+  privacy mode allowing it, cloud_enabled true in settings (default false),
+  explicit consent, an available key and a provider known healthy (unknown
+  health refuses, never assumed); a saved key alone routes nothing, an
+  unverified cloud capability refuses, and missing models are never
+  auto-downloaded. `src/ai.js` enforces the same gate for its fallback
+  (`cloudEnabled`, default false).
 - Local conversation history in the ask view: conversations with rename and
   confirmed delete, stored only in the device database, never synced and
   never sent to the cloud; the local model sees the last ten turns of the
@@ -125,7 +126,7 @@ claims to literally experience emotions.
 - Update policy that never auto-installs unsigned builds; update modes
   disabled/auto/manual-download (`src/update-policy.js`, `src/updater.js`).
 - Health check and onboarding interview (`src/health.js`, `src/onboarding.js`).
-- 306 passing unit/integration tests (258 baseline; model selection +18, conversation history +17, optional key storage +13); three main-branch CI workflows green
+- 331 passing unit/integration tests (258 baseline; model selection +18, conversation history +17, optional key storage +13, M1 provider registry/task router/cloud gate +25); three main-branch CI workflows green
   (CI, CI macOS + Linux, Android APK; verified this session: only these
   three have ever run on main);
   public Android debug-APK preview release.
