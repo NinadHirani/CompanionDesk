@@ -1,14 +1,14 @@
 # CompanionDesk Product Blueprint
 
-Status: **proposed**; M0 complete on main and the first six M1 slices
-landed 23 Nov 2026 (baseline docs via PR #10, model selection, conversation
-history, secure key setup, provider registry and routing, hardware profiles,
-provider status, provider contract tests, provider fault diagnostics).
-This document states the agreed product vision and the verified current state.
-No decision here is accepted until Ninad approves it. Every feature is marked
-**implemented** (verified against main, most recently the M1 provider fault
-diagnostics slice `cda1813`) or **planned** (not built; do
-not assume otherwise).
+Status: **proposed** in direction; M0 and M1 are COMPLETE on main, verified
+23 Nov 2026. The current verified baseline is main `6e7a975` with 411
+passing tests and three green main-branch CI workflows (CI 45215671429, CI
+macOS + Linux 45215671479, Android APK 45216119154; the APK run was a
+manual dispatch because its path filter does not trigger on docs- and
+src-only changes). This document states the agreed product vision and the
+verified current state. No decision here is accepted until Ninad approves
+it. Every feature is marked **implemented** (verified against main
+`6e7a975`) or **planned** (not built; do not assume otherwise).
 
 ## 1. What CompanionDesk is
 

@@ -1,9 +1,13 @@
 # CompanionDesk Implementation Roadmap
 
-Status: **proposed** (M0 baseline). Supersedes `docs/COMPANIONDESK_ROADMAP.md`
-and `docs/FEATURE_GAP.md` once approved; those files stay until then. Phases
-are dependency-ordered with explicit gates. Every feature here is planned
-unless stated as implemented; nothing in phases M1-M8 exists in the code yet.
+Status: M0 and M1 are COMPLETE on main (verified 23 Nov 2026; current
+baseline `6e7a975`, 411 passing tests, three green main-branch CI workflows:
+CI 45215671429, CI macOS + Linux 45215671479, Android APK 45216119154 — the
+APK run was a manual dispatch because its path filter does not trigger on
+docs- and src-only changes). Supersedes `docs/COMPANIONDESK_ROADMAP.md` and
+`docs/FEATURE_GAP.md` once approved; those files stay until then. Phases
+are dependency-ordered with explicit gates. Phases M2-M8 below are planned
+unless stated as implemented; M0 and M1 are the only implemented phases.
 
 ## Phase gates
 
@@ -24,7 +28,8 @@ CI-verified only until real-machine testing happens.
 ## M0 - Product foundation
 
 Done: the docs baseline (PR #10, main 2d349c5) and the stale-docs refresh
-(`FEATURE_GAP.md`, `COMPANIONDESK_ROADMAP.md`, main c351aa3). Done 23 Nov
+(`FEATURE_GAP.md`, `COMPANIONDESK_ROADMAP.md`, main c351aa3); the docs
+baseline is now main `6e7a975` (23 Nov 2026). Done 23 Nov
 2026: user-configurable local model selection — separate `ai_model_local` /
 `ai_model_vision` settings, selection only from models Ollama reports as
 installed (no pull from settings), validated ids, safe fallback to the
@@ -160,11 +165,15 @@ Review fix (23 Nov 2026): fault details are strictly whitelisted (a
 3-digit HTTP status or an errno-style network code, at most 32 characters;
 anything else drops the detail) and every fault crossing the status view is
 normalized through that sanitizer, fail closed.
-The M1 planned scope is now implemented; acceptance verification below.
-Acceptance: routing decisions unit-tested; no hardcoded model constants
-in `src/ai.js` (defaults come from the provider registry); contract tests
-per provider (scripted fake servers for Ollama chat/vision/tags/show and
-the Gemini REST path).
+M1 is COMPLETE (23 Nov 2026, main `6e7a975`): final suite 411 passing
+tests, three green main-branch CI workflows (CI 45215671429, CI macOS +
+Linux 45215671479, Android APK 45216119154, the APK manually dispatched).
+Acceptance verified: routing decisions unit-tested; no hardcoded model
+constants in `src/ai.js` (defaults come from the provider registry);
+contract tests per provider (scripted fake servers for Ollama
+chat/vision/tags/show and the Gemini REST path); the fault-detail
+sanitization review fix is merged (d36dc01) with adversarial tests, and
+docs were reconciled to this state.
 
 ## GATE 1 - Android intelligence (3-4 wks, device time)
 

@@ -1,10 +1,12 @@
 # FEATURE_GAP.md - CompanionDesk vs nus-desktop companion capabilities
 
-Updated Nov 23, 2026 against main `29c1417`. The nus-desktop comparison below
-is the Oct 28, 2026 snapshot, kept unchanged for reference. The
-CompanionDesk status and gap lists now reflect shipped reality; the current
-baseline is docs/PRODUCT_BLUEPRINT.md and the forward plan is
-docs/IMPLEMENTATION_ROADMAP.md.
+HISTORICAL COMPARISON SNAPSHOT. The nus-desktop comparison below is the
+Oct 28, 2026 snapshot, kept unchanged for reference, and the CompanionDesk
+status and gap lists below were last verified against main `29c1417` (331
+tests at that snapshot). This file is NOT the canonical current status: the
+current baseline is docs/PRODUCT_BLUEPRINT.md and the forward plan is
+docs/IMPLEMENTATION_ROADMAP.md (M0 and M1 complete as of main `6e7a975`,
+23 Nov 2026, 411 passing tests, three green CI workflows).
 
 ## What nus-desktop documents (verified from its README, Oct 28, 2026)
 
@@ -29,7 +31,7 @@ docs/IMPLEMENTATION_ROADMAP.md.
   questions/day, 20 companion minutes/day, etc.). CompanionDesk will NOT
   copy this: no billing by design.
 
-## CompanionDesk status (verified in the working copy, Nov 23, 2026, main 29c1417)
+## CompanionDesk status (historical snapshot, verified Nov 23, 2026 against main 29c1417; current state: docs/PRODUCT_BLUEPRINT.md)
 
 - Local-first chat with local Ollama (llama3.2:latest default); the opt-in
   Gemini fallback now has secure key setup: the key is encrypted at rest in
@@ -48,7 +50,8 @@ docs/IMPLEMENTATION_ROADMAP.md.
   (src/memory.js, src/proposals.js), on-demand single-window screen Q&A with
   a local vision model (src/screen-service.js), one-click Ollama onboarding
   (src/ollama-setup.js, PR #9), and the public debug-APK preview. 331 tests
-  passing; three main-branch CI workflows green.
+  passing and three main-branch CI workflows green at that snapshot (411
+  tests and three green workflows as of main `6e7a975`).
 
 ## Gaps (current, mapped to docs/IMPLEMENTATION_ROADMAP.md)
 
