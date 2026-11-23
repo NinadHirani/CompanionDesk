@@ -1,11 +1,13 @@
 # CompanionDesk Product Blueprint
 
-Status: **proposed**; M0 complete on main (baseline docs via PR #10, model
-selection, conversation history, and secure key setup landed 23 Nov 2026).
+Status: **proposed**; M0 complete on main and the first five M1 slices
+landed 23 Nov 2026 (baseline docs via PR #10, model selection, conversation
+history, secure key setup, provider registry and routing, hardware profiles,
+provider status, provider contract tests).
 This document states the agreed product vision and the verified current state.
 No decision here is accepted until Ninad approves it. Every feature is marked
-**implemented** (verified against main, most recently the secure-key slice
-`3ce8a0b`) or **planned** (not built; do
+**implemented** (verified against main, most recently the M1 provider
+contract-test slice `7f41929`) or **planned** (not built; do
 not assume otherwise).
 
 ## 1. What CompanionDesk is
@@ -132,6 +134,23 @@ claims to literally experience emotions.
   validated ids and a safe fallback to `llama3.2:latest` / `gemma3:4b` when a
   chosen model is absent; the cloud fallback never receives a local model
   name (`src/model-selection.js`, `src/settings.js`).
+- Hardware-aware model defaults (M1 third slice, 23 Nov 2026): strictly
+  local, read-only detection (no shell commands, no network, no telemetry)
+  classifies the machine lightweight/balanced/powerful (unknown or malformed
+  reads fall back to lightweight) and steers only the default model choices
+  when none is chosen; renderers receive only sanitized coarse facts, and an
+  explicit model choice always wins (`src/hardware.js`, `hardware:report`).
+- Provider status in Settings (M1 fourth slice, 23 Nov 2026): one on-demand,
+  read-only snapshot of provider health: Ollama reachable/not running, the
+  selected chat model installed or missing, vision capability
+  verified/unknown/unreachable, the cloud fallback's state (off, key saved
+  but disabled, enabled without a key, armed, or enabled with no secure
+  storage), and credential storage available/unavailable (web/Android always
+  report unavailable). Built only from the existing bounded local probes and
+  the vault's masked booleans; it never contacts the cloud, never polls, and
+  never carries key material (`src/provider-status.js`, `provider:status`).
+  Provider HTTP contracts are pinned by scripted-fake-server contract tests
+  (M1 fifth slice, 23 Nov 2026, `tests/provider-contracts.test.js`).
 - Push-to-talk voice input via a fixed-path whisper.cpp allowlist, English
   models only (`src/voice.js`, `src/whisper.js`, `src/vad.js`).
 - On-demand single-window screen Q&A with a local vision model
@@ -154,7 +173,8 @@ claims to literally experience emotions.
 ## 4. Planned, NOT implemented
 
 A secure credential-vault adapter
-for Android/web key storage; hardware detection and profiles; agent orchestrator, typed tools,
+for Android/web key storage; provider health/capability resilience and
+structured diagnostics; agent orchestrator, typed tools,
 approval cards, audit log, emergency stop; proactive scheduler and OS
 notifications; wake word; text-to-speech; multilingual speech; Android
 on-device inference; secure desktop gateway for Android; live session screen
