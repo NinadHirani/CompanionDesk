@@ -13,6 +13,7 @@
 const K1 = 1.2;
 const B = 0.75;
 const SECTION_BOOST = 1.25; // tokens also present in the section name count extra
+const PHRASE_BONUS = 0.5;   // per contiguous query bigram found in the bullet
 const STOPWORDS = new Set(('a an and are as at be by for from has have in is it its of on or that the '
   + 'this to was were will with').split(' '));
 
@@ -42,7 +43,7 @@ function buildIndex(items) {
       if (tf.has(t)) tf.set(t, tf.get(t) + SECTION_BOOST);
       else tf.set(t, SECTION_BOOST);
     }
-    return { ...it, order: i, tf, len: body.length || 1 };
+    return { ...it, order: i, tf, toks: body, len: body.length || 1 };
   });
   const df = new Map();
   for (const d of docs) for (const t of d.tf.keys()) df.set(t, (df.get(t) || 0) + 1);
@@ -70,7 +71,21 @@ function search(index, query, opts) {
       score += idf * (f * (K1 + 1)) / (f + K1 * (1 - B + B * (d.len / index.avgLen)));
       matched.push(t);
     }
-    if (matched.length) out.push({ id: d.id, section: d.section, text: d.text, score, matched });
+    // Phrase bonus: contiguous query bigrams in the bullet's own token
+    // order. Deterministic, purely lexical, and explainable (counted).
+    let phraseHits = 0;
+    for (let j = 0; j + 1 < qTokens.length; j++) {
+      const pair = qTokens[j];
+      const nxt = qTokens[j + 1];
+      for (let w = 0; w + 1 < d.toks.length; w++) {
+        if (d.toks[w] === pair && d.toks[w + 1] === nxt) { phraseHits += 1; break; }
+      }
+    }
+    score += phraseHits * PHRASE_BONUS;
+
+    if (matched.length || phraseHits) {
+      out.push({ id: d.id, section: d.section, text: d.text, score, matched });
+    }
   }
   out.sort((a, b) => (b.score - a.score) || (a.order - b.order));
   return out.slice(0, k);
