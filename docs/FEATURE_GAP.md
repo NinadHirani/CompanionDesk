@@ -5,8 +5,8 @@ Oct 28, 2026 snapshot, kept unchanged for reference, and the CompanionDesk
 status and gap lists below were last verified against main `29c1417` (331
 tests at that snapshot). This file is NOT the canonical current status: the
 current baseline is docs/PRODUCT_BLUEPRINT.md and the forward plan is
-docs/IMPLEMENTATION_ROADMAP.md (M0 and M1 complete as of main `6e7a975`,
-23 Nov 2026, 411 passing tests, three green CI workflows).
+docs/IMPLEMENTATION_ROADMAP.md (M0 and M1 complete; that file carries the
+verified head, test count and CI run ids).
 
 ## What nus-desktop documents (verified from its README, Oct 28, 2026)
 
