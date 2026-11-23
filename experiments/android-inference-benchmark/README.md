@@ -100,6 +100,16 @@ Positive controls prove allowlisted values still run: RUN_ID `ok-1.2_3`
 completes under the mocked adb and `org/name.v2_1-x` reaches the mocked HF
 endpoint and reports its license.
 
+## Results assembly (repo-only, runs anywhere)
+
+`scripts/assemble_comparison.py` reads whatever `*.metrics.log` files the two
+drivers have already written under `results/llamacpp/` and `results/mlc/` and
+renders `results/comparison.auto.md` with one row per run. It claims nothing
+about any device: an empty table means no runs exist yet, every value is
+carried verbatim from the run's own log, and missing values stay null. It
+makes no adb calls and no network calls (the selftest proves both, and
+asserts it imports no network libraries).
+
 ## Acceptance criteria (Gate 1 data is valid only when ALL hold)
 
 1. Both runtimes measured on the OnePlus 12R with full device metadata, OR a

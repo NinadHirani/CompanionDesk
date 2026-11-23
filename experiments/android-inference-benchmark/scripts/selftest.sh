@@ -269,5 +269,67 @@ else
   bad "license positive control"; cat "$TMP/pos2.out" 2>/dev/null
 fi
 
+echo "== comparison assembler (repo-only, no adb) =="
+mkdir -p "$SAND/results/llamacpp" "$SAND/results/mlc"
+cat > "$SAND/results/llamacpp/r1.metrics.log" <<'FIX'
+label=before
+battery_level=85
+battery_charge_counter_uah=4820000
+thermal_before_c=41.25
+---
+label=after
+battery_level=83
+thermal_after_c=44.10
+---
+run_id=r1
+exit_code=0
+peak_rss_kb=2000
+peak_rss_source=/proc/<pid>/status VmHWM, sampled live while the benchmark ran
+crash_lines=0
+FIX
+cat > "$SAND/results/mlc/m1.metrics.log" <<'FIX'
+label=before
+battery_level=85
+thermal_before_c=40.9
+---
+label=after
+battery_level=81
+thermal_after_c=42.3
+---
+run_id=m1
+peak_pss_kB_max=95000 kB (max of 3 samples)
+crash_excerpt: none
+FIX
+cat > "$TMP/checkasm.py" <<'CHKPY'
+import sys
+text = open(sys.argv[1]).read()
+assert "no device measurement is claimed" in text.lower()
+r1 = "| r1 | 0 | 2000 | null | 85 | 41.25 | 44.10 | llamacpp |"
+m1 = "| m1 | null | null | 95000 kB (max of 3 samples) | 85 | 40.9 | 42.3 | mlc |"
+assert r1 in text, r1
+assert m1 in text, m1
+print("ok")
+CHKPY
+calls_before=$(wc -l < "$STATE/calls.log" 2>/dev/null || echo 0)
+"$S/assemble_comparison.py" --results "$SAND/results" --out "$SAND/results/comparison.auto.md" > "$TMP/asm2.out" 2>&1
+asm_rc=$?
+calls_after=$(wc -l < "$STATE/calls.log" 2>/dev/null || echo 0)
+if [ "$asm_rc" -eq 0 ] && python3 "$TMP/checkasm.py" "$SAND/results/comparison.auto.md" >/dev/null 2>&1 && [ "$calls_after" = "$calls_before" ]; then
+  ok "comparison assembler: fixtures assembled verbatim, missing values null, no adb call"
+else
+  bad "comparison assembler"; cat "$TMP/asm2.out" 2>/dev/null; python3 "$TMP/checkasm.py" "$SAND/results/comparison.auto.md" 2>&1 | head -3
+fi
+"$S/assemble_comparison.py" --results "$TMP/empty-results" --out "$TMP/empty-cmp.md" >/dev/null 2>&1
+if [ $? -eq 0 ] && grep -q "No run outputs found yet" "$TMP/empty-cmp.md"; then
+  ok "comparison assembler: empty results render the no-runs note"
+else
+  bad "comparison assembler empty case"
+fi
+if grep -nE "import (requests|urllib|socket|http)" "$S/assemble_comparison.py" >/dev/null; then
+  bad "assembler must not use network libraries"
+else
+  ok "comparison assembler: no network libraries"
+fi
+
 echo "== result =="
 if [ "$FAIL" -eq 0 ]; then echo "SELFTEST PASS"; exit 0; else echo "SELFTEST FAIL"; exit 1; fi
