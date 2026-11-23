@@ -9,13 +9,34 @@
 # starts nothing, downloads nothing, uploads nothing.
 # Env: MLC_APP_PACKAGE (required), RUN_ID (default timestamp),
 #      MLC_SAMPLES (default 10), MLC_SAMPLE_SECONDS (default 5)
+# Input validation (review, 23 Nov 2026), strict allowlists:
+#   - MLC_APP_PACKAGE must be Android package-name syntax: one or more
+#     segments matching [A-Za-z][A-Za-z0-9_]* joined by dots, at most 200
+#     characters; RUN_ID must match [A-Za-z0-9][A-Za-z0-9._-]* (it names
+#     result files and is echoed into the metrics log, so slashes, leading
+#     dots and shell/control characters are impossible);
+#   - MLC_SAMPLES is an integer 1..1000, MLC_SAMPLE_SECONDS a number >0
+#     and <=3600; anything else is refused before any adb call.
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")/.." && pwd)"
 APP_PACKAGE="${MLC_APP_PACKAGE:?set MLC_APP_PACKAGE to the MLC demo app package id (from your build)}"
-case "$APP_PACKAGE" in *[\'\"\ \;]*|*\`*) echo "refusing: suspicious package id: $APP_PACKAGE" >&2; exit 2;; esac
+if ! [[ "$APP_PACKAGE" =~ ^[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z][A-Za-z0-9_]*)*$ ]] || [ "${#APP_PACKAGE}" -gt 200 ]; then
+  echo "refusing: MLC_APP_PACKAGE must be Android package syntax ([A-Za-z][A-Za-z0-9_]* segments joined by dots): $APP_PACKAGE" >&2
+  exit 2
+fi
 RUN_ID="${RUN_ID:-mlc-$(date -u +%Y%m%d-%H%M%S)}"
 SAMPLES="${MLC_SAMPLES:-10}"
 INTERVAL="${MLC_SAMPLE_SECONDS:-5}"
+if ! [[ "$RUN_ID" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]]; then
+  echo "refusing: RUN_ID must match [A-Za-z0-9][A-Za-z0-9._-]* (got: $RUN_ID)" >&2; exit 2
+fi
+if ! [[ "$SAMPLES" =~ ^[0-9]+$ ]] || [ "$SAMPLES" -lt 1 ] || [ "$SAMPLES" -gt 1000 ]; then
+  echo "refusing: MLC_SAMPLES must be an integer 1..1000 (got: $SAMPLES)" >&2; exit 2
+fi
+if ! [[ "$INTERVAL" =~ ^[0-9]+([.][0-9]+)?$ ]]; then
+  echo "refusing: MLC_SAMPLE_SECONDS must be a plain positive number (got: $INTERVAL)" >&2; exit 2
+fi
+awk -v i="$INTERVAL" 'BEGIN{ if (i+0<=0 || i+0>3600) exit 1 }' || { echo "refusing: MLC_SAMPLE_SECONDS must be >0 and <=3600 (got: $INTERVAL)" >&2; exit 2; }
 OUTDIR="$HERE/results/mlc"
 mkdir -p "$OUTDIR"
 MET="$OUTDIR/$RUN_ID.metrics.log"

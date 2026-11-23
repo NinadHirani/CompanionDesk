@@ -10,6 +10,25 @@
 set -euo pipefail
 LABEL="${1:?usage: collect_metrics.sh <before|after> <out-file>}"
 OUT="${2:?usage: collect_metrics.sh <before|after> <out-file>}"
+# Input validation (review, 23 Nov 2026): the label must be exactly
+# 'before' or 'after'; the out path is a caller-supplied destination, so
+# it must be absolute and free of '..' and control characters. All
+# validation runs BEFORE any adb call, and the script only ever appends
+# (>>), so it cannot truncate or overwrite an existing file.
+case "$LABEL" in
+  before|after) : ;;
+  *) echo "refusing: label must be exactly 'before' or 'after' (got: $LABEL)" >&2; exit 2;;
+esac
+case "$OUT" in
+  /*) : ;;
+  *) echo "refusing: out path must be absolute (caller-supplied destination): $OUT" >&2; exit 2;;
+esac
+case "$OUT" in
+  *..*) echo "refusing: out path must not contain '..': $OUT" >&2; exit 2;;
+esac
+case "$OUT" in
+  *[$'\n\r\t']*) echo "refusing: out path must not contain control characters" >&2; exit 2;;
+esac
 adb shell dumpsys battery | tr -d '\r' > /tmp/gate1-batt.txt
 # shellcheck disable=SC2016  # intentional: $z/$t must expand on the device
 adb shell 'for z in /sys/class/thermal/thermal_zone*; do t=$(cat "$z/temp" 2>/dev/null || true); n=$(cat "$z/type" 2>/dev/null || true); [ -n "$t" ] && echo "$z|$n|$t"; done' | tr -d '\r' > /tmp/gate1-therm.txt

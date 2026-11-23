@@ -65,6 +65,41 @@ roadmap, no Android AI architecture is committed until these numbers exist.
 | crashes | process exit code + a timestamp-windowed `adb logcat -d -b crash -T <start>` excerpt. Scripts never clear device-wide logs (`logcat -c` is not used anywhere) |
 | device / API / ABI / SoC | `getprop` via `scripts/collect_device_info.sh` |
 
+## Input validation (review, 23 Nov 2026)
+
+Every env/string input is strict-allowlisted BEFORE any adb call or network
+call; a refused value exits 2 with a reason and touches nothing.
+
+- run_llamacpp_bench.sh: the model's final filename component and RUN_ID must
+  match the anchored ERE `^[A-Za-z0-9][A-Za-z0-9._-]*$`; G1_SAMPLE_INTERVAL is
+  a plain number with 0 < interval <= 60; G1_MAX_SECONDS an integer 1..86400;
+  the device-sourced PID must be purely numeric before it is used in /proc
+  paths or the kill command. Host paths are still refused on space/quote.
+- run_mlc_bench.sh: MLC_APP_PACKAGE must be Android package syntax (segments
+  matching `[A-Za-z][A-Za-z0-9_]*` joined by dots, at most 200 chars); RUN_ID
+  the same anchored ERE; MLC_SAMPLES an integer 1..1000; MLC_SAMPLE_SECONDS a
+  number 0 < s <= 3600.
+- verify-model-license.sh: MODEL_ID must be exactly org/name with both
+  segments matching `[A-Za-z0-9][A-Za-z0-9._-]*`; a refused id never touches
+  the network. The manual download flow is unchanged and still owner-gated.
+- collect_metrics.sh: the label must be exactly `before` or `after`; the
+  caller-supplied out path must be absolute with no `..` or control
+  characters; the script only ever appends.
+
+Implementation note: the allowlists are anchored `[[ =~ ]]` checks, not
+`case` globs. A `case`-glob allowlist of the same shape was found to accept
+`sub/dir` and `mal;semi.gguf` while rejecting `x'y` (glob semantics are not
+full-string anchored), so it was replaced; do not reintroduce `case`-glob
+allowlists here.
+
+The mocked-adb selftest covers 33 malicious-input cases (path traversal,
+slashes, newlines, shell metacharacters, invalid and out-of-bound numbers,
+wrong labels, bad package and model ids). Each must exit non-zero, print a
+reason, and produce NO adb/curl call and NO file anywhere in the tree.
+Positive controls prove allowlisted values still run: RUN_ID `ok-1.2_3`
+completes under the mocked adb and `org/name.v2_1-x` reaches the mocked HF
+endpoint and reports its license.
+
 ## Acceptance criteria (Gate 1 data is valid only when ALL hold)
 
 1. Both runtimes measured on the OnePlus 12R with full device metadata, OR a

@@ -106,6 +106,19 @@ STUB
 chmod +x "$TMP/mockbin/adb"
 export PATH="$TMP/mockbin:$PATH"
 
+cat > "$TMP/mockbin/curl" <<'CURLSTUB'
+#!/usr/bin/env bash
+STATE="${G1_TEST_STATE:?}"
+printf '%s\n' "curl $*" >> "$STATE/calls.log"
+out=""; prev=""
+for a in "$@"; do
+  if [ "$prev" = "-o" ]; then out="$a"; fi
+  prev="$a"
+done
+printf '%s\n' '{"cardData":{"license":"apache-2.0"},"tags":["license:apache-2.0"],"gated":"manual","id":"ok/org-name_model.v2"}' > "${out:-/dev/stdout}"
+CURLSTUB
+chmod +x "$TMP/mockbin/curl"
+
 # --- test 1: device info JSON escaping ---
 "$S/collect_device_info.sh" > "$TMP/t1.out" 2>&1
 OUT_JSON=$(ls -t "$SAND/results"/device-info-*.json 2>/dev/null | head -1)
@@ -138,7 +151,7 @@ run_metrics_case empty null "null"
 
 # --- test 3: PSS numeric max ---
 rm -rf "$SAND/results/mlc"
-MLC_APP_PACKAGE=com.test.mlc MLC_SAMPLES=3 MLC_SAMPLE_SECONDS=0 \
+MLC_APP_PACKAGE=com.test.mlc MLC_SAMPLES=3 MLC_SAMPLE_SECONDS=0.1 \
   "$S/run_mlc_bench.sh" > "$TMP/t3.out" 2>&1
 MLOG=$(ls "$SAND/results/mlc"/*.metrics.log 2>/dev/null | head -1)
 if [ -n "$MLOG" ] && grep -q "peak_pss_kB_max=95000 kB (max of 3 samples)" "$MLOG" \
@@ -151,7 +164,7 @@ fi
 # --- test 4: llamacpp background run, live VmHWM sampling, exit code ---
 rm -rf "$SAND/results/llamacpp"
 : > "$TMP/fakebin"; : > "$TMP/fake.gguf"
-LLAMA_BENCH_BIN="$TMP/fakebin" MODEL_FILE="$TMP/fake.gguf" G1_SAMPLE_INTERVAL=0 \
+LLAMA_BENCH_BIN="$TMP/fakebin" MODEL_FILE="$TMP/fake.gguf" G1_SAMPLE_INTERVAL=0.05 \
   RUN_ID=t4 "$S/run_llamacpp_bench.sh" > "$TMP/t4.out" 2>&1
 MLOG=$(ls "$SAND/results/llamacpp"/t4.metrics.log 2>/dev/null | head -1)
 if [ -n "$MLOG" ] && grep -q "peak_rss_kb=2000" "$MLOG" && grep -q "exit_code=0" "$MLOG" \
@@ -166,6 +179,94 @@ if grep -E 'logcat' "$STATE/calls.log" | grep -Eq -- '-c([[:space:]]|$)'; then
   bad "stub observed a device-wide logcat clear"
 else
   ok "no device-wide logcat clear across all mocked runs"
+fi
+
+echo "== malicious input refusal (no adb/curl call, no file written) =="
+assert_refused() {
+  local name="$1"; shift
+  local calls_before calls_after rc files_before files_after
+  calls_before=$(wc -l < "$STATE/calls.log" 2>/dev/null || echo 0)
+  files_before=$(find "$SAND" -type f 2>/dev/null | wc -l | tr -d ' ')
+  "$@" >"$TMP/rej.out" 2>&1
+  rc=$?
+  calls_after=$(wc -l < "$STATE/calls.log" 2>/dev/null || echo 0)
+  files_after=$(find "$SAND" -type f 2>/dev/null | wc -l | tr -d ' ')
+  if [ "$rc" -eq 0 ]; then bad "$name: exited 0, expected refusal"; return 1; fi
+  if [ "$calls_after" != "$calls_before" ]; then bad "$name: an external call was made despite refusal"; return 1; fi
+  if [ "$files_after" != "$files_before" ]; then bad "$name: a file was written despite refusal"; return 1; fi
+  if ! grep -q "refusing" "$TMP/rej.out"; then bad "$name: no refusal reason printed"; echo "--- captured output ---"; cat "$TMP/rej.out"; echo "--- end ---"; return 1; fi
+  ok "$name refused (no calls, no files, reason printed)"
+}
+
+: > "$TMP/fakebin2"; : > "$TMP/fake.gguf2"
+: > "$TMP/mal;semi.gguf"; : > "$TMP/mal name.gguf"; : > "$TMP/.dotlead.gguf"
+
+# llamacpp: RUN_ID must be an allowlisted token (no traversal, slash, newline, metachars)
+assert_refused "llamacpp RUN_ID traversal"     env RUN_ID='../evil'   LLAMA_BENCH_BIN="$TMP/fakebin2" MODEL_FILE="$TMP/fake.gguf2" "$S/run_llamacpp_bench.sh"
+assert_refused "llamacpp RUN_ID slash"         env RUN_ID='sub/dir'   LLAMA_BENCH_BIN="$TMP/fakebin2" MODEL_FILE="$TMP/fake.gguf2" "$S/run_llamacpp_bench.sh"
+assert_refused "llamacpp RUN_ID newline"       env RUN_ID=$'x\ny'    LLAMA_BENCH_BIN="$TMP/fakebin2" MODEL_FILE="$TMP/fake.gguf2" "$S/run_llamacpp_bench.sh"
+assert_refused "llamacpp RUN_ID metachars"     env RUN_ID='x;touch x' LLAMA_BENCH_BIN="$TMP/fakebin2" MODEL_FILE="$TMP/fake.gguf2" "$S/run_llamacpp_bench.sh"
+assert_refused "llamacpp RUN_ID quote"         env RUN_ID="x'y"       LLAMA_BENCH_BIN="$TMP/fakebin2" MODEL_FILE="$TMP/fake.gguf2" "$S/run_llamacpp_bench.sh"
+assert_refused "llamacpp RUN_ID dotfile"       env RUN_ID='.hidden'   LLAMA_BENCH_BIN="$TMP/fakebin2" MODEL_FILE="$TMP/fake.gguf2" "$S/run_llamacpp_bench.sh"
+# llamacpp: model basename allowlist (device path is built from it)
+assert_refused "llamacpp model basename semi"  env LLAMA_BENCH_BIN="$TMP/fakebin2" MODEL_FILE="$TMP/mal;semi.gguf" "$S/run_llamacpp_bench.sh"
+assert_refused "llamacpp model basename space" env LLAMA_BENCH_BIN="$TMP/fakebin2" MODEL_FILE="$TMP/mal name.gguf" "$S/run_llamacpp_bench.sh"
+assert_refused "llamacpp model basename dot"   env LLAMA_BENCH_BIN="$TMP/fakebin2" MODEL_FILE="$TMP/.dotlead.gguf" "$S/run_llamacpp_bench.sh"
+# llamacpp: numeric bounds
+assert_refused "llamacpp interval zero"        env RUN_ID=v6a G1_SAMPLE_INTERVAL=0    LLAMA_BENCH_BIN="$TMP/fakebin2" MODEL_FILE="$TMP/fake.gguf2" "$S/run_llamacpp_bench.sh"
+assert_refused "llamacpp interval negative"    env G1_SAMPLE_INTERVAL=-1 LLAMA_BENCH_BIN="$TMP/fakebin2" MODEL_FILE="$TMP/fake.gguf2" "$S/run_llamacpp_bench.sh"
+assert_refused "llamacpp interval scientific"  env G1_SAMPLE_INTERVAL=1e3 LLAMA_BENCH_BIN="$TMP/fakebin2" MODEL_FILE="$TMP/fake.gguf2" "$S/run_llamacpp_bench.sh"
+assert_refused "llamacpp interval garbage"     env G1_SAMPLE_INTERVAL=abc LLAMA_BENCH_BIN="$TMP/fakebin2" MODEL_FILE="$TMP/fake.gguf2" "$S/run_llamacpp_bench.sh"
+assert_refused "llamacpp interval hex"         env G1_SAMPLE_INTERVAL=0x10 LLAMA_BENCH_BIN="$TMP/fakebin2" MODEL_FILE="$TMP/fake.gguf2" "$S/run_llamacpp_bench.sh"
+assert_refused "llamacpp interval over bound"  env G1_SAMPLE_INTERVAL=100 LLAMA_BENCH_BIN="$TMP/fakebin2" MODEL_FILE="$TMP/fake.gguf2" "$S/run_llamacpp_bench.sh"
+assert_refused "llamacpp maxsec zero"          env G1_MAX_SECONDS=0 LLAMA_BENCH_BIN="$TMP/fakebin2" MODEL_FILE="$TMP/fake.gguf2" "$S/run_llamacpp_bench.sh"
+assert_refused "llamacpp maxsec fractional"    env G1_MAX_SECONDS=1.5 LLAMA_BENCH_BIN="$TMP/fakebin2" MODEL_FILE="$TMP/fake.gguf2" "$S/run_llamacpp_bench.sh"
+assert_refused "llamacpp maxsec garbage"       env G1_MAX_SECONDS=abc LLAMA_BENCH_BIN="$TMP/fakebin2" MODEL_FILE="$TMP/fake.gguf2" "$S/run_llamacpp_bench.sh"
+assert_refused "llamacpp maxsec over bound"    env G1_MAX_SECONDS=999999999 LLAMA_BENCH_BIN="$TMP/fakebin2" MODEL_FILE="$TMP/fake.gguf2" "$S/run_llamacpp_bench.sh"
+# mlc: package-name syntax
+assert_refused "mlc package dash"              env MLC_APP_PACKAGE='com.Bad-Pkg' "$S/run_mlc_bench.sh"
+assert_refused "mlc package digit-led segment" env MLC_APP_PACKAGE='1abc.def' "$S/run_mlc_bench.sh"
+assert_refused "mlc package empty segment"     env MLC_APP_PACKAGE='com..pkg' "$S/run_mlc_bench.sh"
+assert_refused "mlc package metachars"         env MLC_APP_PACKAGE='com.pkg;id' "$S/run_mlc_bench.sh"
+assert_refused "mlc package space"             env MLC_APP_PACKAGE='com.pkg id' "$S/run_mlc_bench.sh"
+# mlc: RUN_ID allowlist
+assert_refused "mlc RUN_ID traversal"          env MLC_APP_PACKAGE=com.test.mlc RUN_ID='../evil' "$S/run_mlc_bench.sh"
+assert_refused "mlc RUN_ID slash"              env MLC_APP_PACKAGE=com.test.mlc RUN_ID='sub/dir' "$S/run_mlc_bench.sh"
+assert_refused "mlc RUN_ID newline"            env MLC_APP_PACKAGE=com.test.mlc RUN_ID=$'x\ny' "$S/run_mlc_bench.sh"
+assert_refused "mlc RUN_ID metachars"          env MLC_APP_PACKAGE=com.test.mlc RUN_ID='x;y' "$S/run_mlc_bench.sh"
+# mlc: numeric bounds
+assert_refused "mlc samples zero"              env MLC_APP_PACKAGE=com.test.mlc MLC_SAMPLES=0 "$S/run_mlc_bench.sh"
+assert_refused "mlc samples garbage"           env MLC_APP_PACKAGE=com.test.mlc MLC_SAMPLES=abc "$S/run_mlc_bench.sh"
+assert_refused "mlc samples over bound"        env MLC_APP_PACKAGE=com.test.mlc MLC_SAMPLES=1001 "$S/run_mlc_bench.sh"
+assert_refused "mlc interval zero"             env MLC_APP_PACKAGE=com.test.mlc MLC_SAMPLE_SECONDS=0 "$S/run_mlc_bench.sh"
+assert_refused "mlc interval garbage"          env MLC_APP_PACKAGE=com.test.mlc MLC_SAMPLE_SECONDS=abc "$S/run_mlc_bench.sh"
+# collect_metrics: label and out path
+assert_refused "metrics label wrong case"      "$S/collect_metrics.sh" BEFORE /tmp/g1-x.log
+assert_refused "metrics label unknown"         "$S/collect_metrics.sh" evil /tmp/g1-x.log
+assert_refused "metrics out relative"          "$S/collect_metrics.sh" before x.log
+assert_refused "metrics out traversal"         "$S/collect_metrics.sh" before ../g1-x.log
+assert_refused "metrics out control char"      "$S/collect_metrics.sh" before "$TMP/..$(printf '\n')x.log"
+# verify-model-license: MODEL_ID allowlist before any network call
+assert_refused "license id no slash"           bash "$S/verify-model-license.sh" no-slash-id
+assert_refused "license id traversal"          bash "$S/verify-model-license.sh" ../etc/passwd
+assert_refused "license id two slashes"        bash "$S/verify-model-license.sh" a/b/c
+assert_refused "license id space"              bash "$S/verify-model-license.sh" 'org/na me'
+assert_refused "license id metachars"          bash "$S/verify-model-license.sh" "org/n';touch x"
+assert_refused "license id empty segment"      bash "$S/verify-model-license.sh" org/
+
+# positive controls: allowlisted values still work
+if RUN_ID=ok-1.2_3 LLAMA_BENCH_BIN="$TMP/fakebin2" MODEL_FILE="$TMP/fake.gguf2" G1_SAMPLE_INTERVAL=0.05 \
+     "$S/run_llamacpp_bench.sh" >"$TMP/pos1.out" 2>&1 \
+   && [ -s "$SAND/results/llamacpp/ok-1.2_3.raw.txt" ]; then
+  ok "llamacpp positive control: allowlisted RUN_ID runs to completion"
+else
+  bad "llamacpp positive control"; cat "$TMP/pos1.out"
+fi
+if bash "$S/verify-model-license.sh" 'org/name.v2_1-x' >"$TMP/pos2.out" 2>&1 \
+   && grep -q "cardData.license : apache-2.0" "$TMP/pos2.out"; then
+  ok "license positive control: allowlisted id reaches (mocked) HF and reports the license"
+else
+  bad "license positive control"; cat "$TMP/pos2.out" 2>/dev/null
 fi
 
 echo "== result =="

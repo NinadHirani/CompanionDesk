@@ -11,8 +11,18 @@
 # Env: LLAMA_BENCH_BIN, MODEL_FILE, RUN_ID (default timestamp),
 #      G1_SAMPLE_INTERVAL (host poll seconds, default 0.5),
 #      G1_MAX_SECONDS (overall timeout, default 1800)
-# Paths with spaces or quotes are refused: they are forwarded into a
-# device-side shell command.
+# Input validation (review, 23 Nov 2026), strict allowlists:
+#   - host paths are refused if they contain spaces or quotes (they are
+#     forwarded into a device-side shell command), and the model's final
+#     filename component must match [A-Za-z0-9][A-Za-z0-9._-]* before it
+#     becomes part of a device path/command (no traversal, no metachars);
+#   - RUN_ID must match [A-Za-z0-9][A-Za-z0-9._-]*: it names result files
+#     and is echoed into the metrics log, so slashes, leading dots
+#     (path traversal) and shell/control characters are impossible;
+#   - G1_SAMPLE_INTERVAL is a number >0 and <=60, G1_MAX_SECONDS an
+#     integer 1..86400; anything else is refused before any adb call;
+#   - the device-sourced PID is accepted only if purely numeric before it
+#     is used in a /proc path or a device kill command.
 # No downloads, no uploads; writes only inside this directory. On timeout
 # the script kills only the benchmark process it launched.
 set -euo pipefail
@@ -26,11 +36,26 @@ for f in "$LLAMA_BENCH_BIN" "$MODEL_FILE"; do
   case "$f" in *[\'\"]*|*\ *) echo "refusing: path contains a space or quote: $f" >&2; exit 2;; esac
   [ -f "$f" ] || { echo "refusing: not a file: $f" >&2; exit 2; }
 done
+DEV_MODEL_BASE=$(basename "$MODEL_FILE")
+if ! [[ "$DEV_MODEL_BASE" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]]; then
+  echo "refusing: model filename must match [A-Za-z0-9][A-Za-z0-9._-]* (got: $DEV_MODEL_BASE)" >&2; exit 2
+fi
+if ! [[ "$RUN_ID" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]]; then
+  echo "refusing: RUN_ID must match [A-Za-z0-9][A-Za-z0-9._-]* (got: $RUN_ID)" >&2; exit 2
+fi
+if ! [[ "$INTERVAL" =~ ^[0-9]+([.][0-9]+)?$ ]]; then
+  echo "refusing: G1_SAMPLE_INTERVAL must be a plain positive number (got: $INTERVAL)" >&2; exit 2
+fi
+if ! [[ "$MAXSEC" =~ ^[0-9]+$ ]]; then
+  echo "refusing: G1_MAX_SECONDS must be a plain positive integer (got: $MAXSEC)" >&2; exit 2
+fi
+awk -v i="$INTERVAL" 'BEGIN{ if (i+0<=0 || i+0>60) exit 1 }' || { echo "refusing: G1_SAMPLE_INTERVAL must be >0 and <=60 (got: $INTERVAL)" >&2; exit 2; }
+awk -v m="$MAXSEC" 'BEGIN{ if (m+0<1 || m+0>86400) exit 1 }' || { echo "refusing: G1_MAX_SECONDS must be 1..86400 (got: $MAXSEC)" >&2; exit 2; }
 OUTDIR="$HERE/results/llamacpp"
 mkdir -p "$OUTDIR"
 DEV_DIR=/data/local/tmp/gate1
 DEV_BIN="$DEV_DIR/llama-bench"
-DEV_MODEL="$DEV_DIR/$(basename "$MODEL_FILE")"
+DEV_MODEL="$DEV_DIR/$DEV_MODEL_BASE"
 DEV_OUT="$DEV_DIR/bench.out"
 DEV_RC="$DEV_DIR/bench.rc"
 DEV_PID="$DEV_DIR/bench.pid"
@@ -46,6 +71,7 @@ START_TS=$(adb shell 'date "+%m-%d %H:%M:%S.000"' | tr -d '\r')
 # code. The rc file is the completion marker.
 adb shell "(nohup sh -c '$DEV_BIN -m $DEV_MODEL -t 4 -p 512 -n 128 -r 3 -o md > $DEV_OUT 2>&1 & echo \$! > $DEV_PID; wait \$!; echo \$? > $DEV_RC' >/dev/null 2>&1 &); sleep 1"
 PID=$(adb shell "cat $DEV_PID 2>/dev/null || true" | tr -d '\r' | tr -d '[:space:]')
+case "$PID" in ''|*[!0-9]*) PID='' ;; esac
 echo "remote pid: ${PID:-not-visible}"
 MAXPOLL=$(awk -v s="$MAXSEC" -v i="$INTERVAL" 'BEGIN{ i=i; if (i<=0) i=1; printf "%d", s/i }')
 PEAK=""
