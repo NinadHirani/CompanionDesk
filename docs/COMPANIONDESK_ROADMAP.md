@@ -1,16 +1,25 @@
 # CompanionDesk Roadmap (general-purpose desktop companion)
 
-Direction set Oct 28, 2026: CompanionDesk is a **general-purpose, local-first
-desktop AI companion** inspired by the companion functionality in
-potlakai/nus-desktop (floating companion/Knot, voice, screen awareness,
-point-at-element guidance, reusable step workflows, memory, safe computer
-assistance). CompanionDesk is NOT a NUS-for-students product: student features
-are one optional skill/module, never the core identity. Not to be confused
-with the original potlakai/nus student prompt project.
+Updated Nov 23, 2026. Direction set Oct 28, 2026: CompanionDesk is a
+**general-purpose, local-first desktop AI companion** inspired by the
+companion functionality in potlakai/nus-desktop (floating companion/Knot,
+voice, screen awareness, point-at-element guidance, reusable step workflows,
+memory, safe computer assistance). CompanionDesk is NOT a NUS-for-students
+product: student features are one optional skill/module, never the core
+identity. Not to be confused with the original potlakai/nus student prompt
+project.
 
-Standing constraints (unchanged): local-first, Ollama `llama3.2:latest` as the
-default model, no required cloud key, no billing/Supabase/Stripe, macOS
-desktop-first (no mobile/App Store/Play Store work).
+The forward plan now lives in docs/IMPLEMENTATION_ROADMAP.md (gated phases
+M0-M8) with the vision in docs/PRODUCT_BLUEPRINT.md. This file records the
+original direction, the standing constraints, and the completed-work
+history, kept consistent with those documents.
+
+Standing constraints (updated Nov 23, 2026): local-first and free-first; no
+billing/Supabase/Stripe; no required cloud key (optional, disclosed Gemini
+only); default model llama3.2:latest today, becoming a user setting in M0;
+macOS desktop-first for the Electron app, with an Android webview preview
+now in scope (debug-signed APK); App Store/Play Store distribution still out
+of scope.
 
 ## Phase 0 - General-purpose foundation (Oct 28, 2026, DONE)
 
@@ -19,60 +28,65 @@ desktop-first (no mobile/App Store/Play Store work).
 - General-purpose default voice in Electron main and web bridge; fresh
   install is a usable general assistant with zero imports.
 - Skill contract documented in `docs/SKILLS.md`.
-- Tests: 24 passing on Node v22.14.0 (19 pre-existing + 5 new skills tests).
+- Tests: 24 passing at the time on Node v22.14.0 (19 pre-existing + 5 new
+  skills tests).
 
 Acceptance criteria met: default persona has no student assumptions; academic
 functions unchanged when the student module activates; no cloud keys, no
 billing, local DB only.
 
-## Phase 1 - Companion surface (next)
+## Phase 1 - Companion surface (COMPLETE except workflows)
 
-Priority order, each independently shippable:
-1. **Floating companion window** (Electron always-on-top overlay, the "Knot"
-   analog): pinned to a screen edge, click-to-focus, global shortcut to
-   summon/dismiss. Acceptance: opens over other apps, never steals focus
-   during typing, hides to tray, zero telemetry.
-2. **Memory**: local, editable, exportable memory of user facts and
-   preferences (SQLite table + settings UI + per-item delete). Acceptance:
-   user can inspect and delete every stored fact; memory stays on disk.
-3. **Voice in**: push-to-talk only at first (no always-on listening without
-   explicit opt-in + visible indicator). Cross-platform local STT (not
-   Windows-only like nus-desktop's whisper.cpp path). Acceptance: no audio
-   leaves the machine; recording indicator visible whenever a mic is open.
-4. **Reusable step workflows**: user-defined multi-step prompts (template +
-   variables), run against local context. Acceptance: workflows are plain
-   files the user can edit, no remote definitions.
+1. **Floating companion window** - DONE. Always-on-top overlay with global
+   shortcut to summon/dismiss (src/overlay.js); never steals focus during
+   typing; audio-only mic permission policy (src/permissions.js).
+2. **Memory** - DONE. Local, editable, exportable About-me markdown file
+   plus per-item delete and propose-then-confirm memory cards (src/memory.js,
+   src/proposals.js); every stored fact is user-inspectable and stays on
+   disk.
+3. **Voice in** - DONE as push-to-talk. Local whisper.cpp with a fixed-path
+   allowlist and a visible recording indicator (src/voice.js, src/whisper.js,
+   src/vad.js); cross-platform on desktop, not Windows-only. Multilingual
+   models, wake word, and TTS remain PLANNED (M6); none implemented.
+4. **Reusable step workflows** - NOT DONE. Planned with the workspace UI
+   (M8).
 
-Dependencies: 1 is pure Electron; 2 needs a small DB migration; 3 needs a
-native STT binary decision (bundle vs download-with-consent).
+## Phase 2 - Screen awareness and guidance (PARTIALLY COMPLETE)
 
-## Phase 2 - Screen awareness and guidance (risky, careful)
+2.2 **Screen awareness** - DONE in deliberately stricter form than
+nus-desktop: on-demand capture of the focused window ONLY, visible
+indicator, no cloud fallback for screenshots (src/screen-service.js,
+src/screen-capture.js). The title-based sensitive-window filter is NOT
+complete protection (acknowledged in CLAUDE.md).
+2.1 **Point-at-element guidance** - NOT DONE. Planned after M7.
+2.3 **Safe computer assistance** - NOT DONE. Re-planned as the Gate 2 agent
+foundation: typed tool registry, external policy engine, approval classes,
+audit log, and emergency stop BEFORE any computer-control tool. The
+propose-then-confirm principle is unchanged.
 
-1. **Point-at-element guidance**: user points at a UI element in another app;
-   CompanionDesk explains it or suggests a step. Start read-only via the
-   macOS Accessibility API with a per-session permission grant.
-2. **Screen awareness**: on-demand capture of the focused window ONLY, never
-   continuous capture; every capture shows a visible indicator; title-based
-   sensitive-window checks are NOT considered complete protection (window
-   titles are attacker-controlled and incomplete). Acceptance: capture is
-   explicit per action, indicated on screen, stored nowhere by default.
-3. **Safe computer assistance**: propose-then-confirm actions only (the app
-   drafts the action, the user executes or approves each step). No
-   unrestricted control, no hidden automation, no keystroke injection without
-   an explicit per-action confirmation.
+Risks unchanged: per-OS permissions (Accessibility, Screen Recording,
+Android foreground-service types) must fail closed; privacy expectations are
+the product.
 
-Risks: macOS permissions (Accessibility, Screen Recording) are per-app and
-must fail closed; privacy expectations are the product.
+## Phase 4 - Packaging and release (ADVANCED; signing pending)
 
-## Phase 4 - Packaging and release
+- electron-builder mac dmg (arm64 + x64, unsigned); the macOS arm64 DMG was
+  verified building in CI (run 45012671571); signing and notarization still
+  need a certificate and Ninad's explicit cost approval.
+- Android: debug-signed public preview APK; the fresh key per CI run means
+  uninstall-before-update; release signing is a separate decision.
+- One-click Ollama onboarding shipped (PR #9, merged as 6423985).
 
-- electron-builder mac dmg (arm64 + x64, identity null today); signing and
-  notarization need a certificate Ninad does not have yet.
-- Acceptance: fresh install runs as a general assistant offline; student
-  module works only after the user opts in.
+## Superseded forward plan
 
-## Explicitly out of scope
+The old Phase 1/2/4 ordering is replaced by docs/IMPLEMENTATION_ROADMAP.md
+(M0-M8 with Gate 1 and Gate 2). Beyond the DONE items above, nothing in that
+plan is implemented; docs/PRODUCT_BLUEPRINT.md section 4 is the
+authoritative planned list.
 
-Mobile (Capacitor/Android/iOS), App Store/Play Store, billing of any kind,
-cloud-required features, always-on capture or listening without explicit
-opt-in and visible indicators.
+## Explicitly out of scope (updated Nov 23, 2026)
+
+Billing of any kind; cloud-required features; always-on capture or listening
+without explicit opt-in and visible indicators; App Store/Play Store
+distribution for now (iOS remains out of scope; Android is in scope: webview
+preview shipped, on-device AI pending Gate 1); unrestricted agent control.
