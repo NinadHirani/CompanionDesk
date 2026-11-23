@@ -18,7 +18,10 @@ official sources.
   to drive tools. Impact severe. Mitigation: policy engine outside the model,
   external content delimited as untrusted data, tool results never executed
   as instructions, approval classes, emergency stop, and an injection test
-  corpus required before any grant widening. Residual: low with the full
+  corpus required before any grant widening. Consequential actions (payments,
+  purchases, destructive deletion, legal or binding submissions) are denied
+  on model authority or standing grants alone and require fresh, explicit
+  user approval immediately before execution. Residual: low with the full
   framework; unacceptable without it, so no computer-control tool ships
   before Gate 2.
 - **R3 - Screen privacy exposure.** Captured windows can contain secrets.

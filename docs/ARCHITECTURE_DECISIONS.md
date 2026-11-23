@@ -38,14 +38,19 @@ LAN-only, token-gated, Ollama bound to localhost, disabled until Gate 1.
 
 ## ADR-0007 - Agent: typed tool registry + external policy engine
 Proposed. Tools carry typed schemas and capability classes (read-only,
-reversible-write, sensitive, forbidden). Approval classes: routine reversible
-actions inside explicit grants; sensitive actions behind confirm cards;
-payments, purchases, destructive deletion, and legal or binding submissions
-are never agent-executable. Orchestrator loop with plan/act/observe/verify/
-recover; append-only audit log; global emergency stop; no unrestricted shell,
-filesystem, browser, or OS access for the model; prompt-injection defenses
-are structural. Gate 2 requires this framework to prove refusal of ungranted
-calls before any computer-control tool exists.
+reversible-write, sensitive, forbidden). The forbidden class means a tool is
+denied on model authority or standing grants and runs only after fresh,
+explicit user approval immediately before execution. Approval classes:
+routine reversible actions inside explicit grants; sensitive actions behind
+confirm cards. Payments, purchases, destructive deletion, and legal or
+binding submissions must not be executed by the agent based on model
+authority or standing grants; they require fresh, explicit user approval
+immediately before execution, and are denied otherwise. Orchestrator loop
+with plan/act/observe/verify/recover; append-only audit log; global
+emergency stop; no unrestricted shell, filesystem, browser, or OS access for
+the model; prompt-injection defenses are structural. Gate 2 requires this
+framework to prove refusal of ungranted calls before any computer-control
+tool exists.
 
 ## ADR-0008 - Memory: markdown canonical, FTS index first
 Proposed. The About-me file stays the source of truth; an FTS or keyword

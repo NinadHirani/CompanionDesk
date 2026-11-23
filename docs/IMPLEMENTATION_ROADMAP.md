@@ -58,7 +58,10 @@ outside the model), `src/agent/audit.js` (append-only log), `src/agent/stop.js`
 (global emergency stop), `agent_runs` table. First tools: notifications,
 reminders, app open/switch/close (per-OS adapters), ICS events. NO shell or
 filesystem tools in this phase. Acceptance: policy engine refuses ungranted
-calls (tested); prompt-injection corpus passes before any grant widening.
+calls (tested); payments, purchases, destructive deletion, and legal or
+binding submissions are denied unless fresh, explicit user approval
+immediately precedes execution (tested); prompt-injection corpus passes
+before any grant widening.
 
 ## M4 - Memory v2 (1-2 wks)
 

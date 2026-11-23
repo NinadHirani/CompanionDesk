@@ -41,10 +41,11 @@ claims to literally experience emotions.
 7. **Least-privilege agent.** Tools are a typed registry with capability and
    approval classes; policy is enforced outside the model; the model never
    gets unrestricted shell, filesystem, browser, or OS access.
-8. **Approval for consequential actions.** Payments, purchases, destructive
-   deletion, and legal or binding submissions are never agent-executable; they
-   require explicit user action. Sensitive actions require explicit per-action
-   approval.
+8. **Approval for consequential actions.** The agent must not execute
+   payments, purchases, destructive deletion, or legal or binding submissions
+   based on model authority or standing grants; these require fresh, explicit
+   user approval immediately before execution, and are denied otherwise.
+   Sensitive actions require explicit per-action approval.
 9. **Cancellation, audit, recovery.** Every agent run can be interrupted, is
    logged to an append-only audit trail, and is reversible or recoverable
    where feasible, plus a global emergency stop.
