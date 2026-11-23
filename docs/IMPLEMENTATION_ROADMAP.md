@@ -1,7 +1,7 @@
 # CompanionDesk Implementation Roadmap
 
 Status: M0 and M1 are COMPLETE on main (verified 23 Nov 2026; current
-baseline `bccfa75`, 411 passing tests, three green main-branch CI workflows:
+baseline `bccfa75`, 423 passing tests, three green main-branch CI workflows:
 CI 45224283832, CI macOS + Linux 45224283878, Android APK 45224409304 — the
 APK run was a manual dispatch because its path filter does not trigger on
 docs- and src-only changes). Supersedes `docs/COMPANIONDESK_ROADMAP.md` and
@@ -166,7 +166,7 @@ Review fix (23 Nov 2026): fault details are strictly whitelisted (a
 anything else drops the detail) and every fault crossing the status view is
 normalized through that sanitizer, fail closed.
 M1 is COMPLETE (23 Nov 2026, final head `bccfa75`): final suite 411 passing
-tests, three green main-branch CI workflows on that head (CI
+tests at that head (423 including the offline memory-v2 harness tests), three green main-branch CI workflows on that head (CI
 45224283832, CI macOS + Linux 45224283878, Android APK 45224409304, the
 APK manually dispatched).
 Acceptance verified: routing decisions unit-tested; no hardcoded model
@@ -207,11 +207,17 @@ before any grant widening.
 
 ## M4 - Memory v2 (1-2 wks)
 
-FTS or keyword index over the existing markdown About-me file (which stays
-canonical); selective per-task retrieval; Remember/Forget commands; consent
-gate for sensitive entries. Embeddings are deferred until FTS/keyword
-retrieval quality is measured and found lacking. Prerequisite check: whether
-sql.js's WASM build includes FTS5.
+STATUS: unimplemented in product; offline design + harness complete
+(23 Nov 2026). Prerequisite answered by measurement: sql.js's WASM build
+has NO FTS5, so the route is a pure-JS index over the existing markdown
+About-me file (which stays canonical, the only memory store). Selective
+per-task retrieval; Remember/Forget commands; consent gate for sensitive
+entries; embeddings stay deferred. Measured keyword baseline and slice
+results (recall 38.0% -> 72.2%, MRR 0.395 -> 0.647 on the 18-query harness;
+remaining misses are the semantic-vocabulary class) and the full design:
+see `docs/M2_MEMORY_V2_DESIGN.md` and `experiments/memory-v2-harness/`.
+No automatic extraction, no inferred-fact auto-saving, no background
+monitoring in this phase.
 
 ## M5 - Proactive behavior (1-2 wks)
 
