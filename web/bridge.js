@@ -341,6 +341,9 @@
         vision: res.vision,
         secureStore: { supported: false },
         cloudEnabled: settings.cloud_enabled === true,
+        ollamaFault: res.fault || null,
+        caps: res.caps,
+        capsFaults: res.capsFaults || null,
       }),
     };
   }

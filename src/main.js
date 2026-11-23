@@ -293,6 +293,9 @@ function registerIpc() {
         vision: sel.vision,
         secureStore: secureStore.status(),
         cloudEnabled: P.getSettings(db).cloud_enabled === true,
+        ollamaFault: sel.fault || null,
+        caps: sel.caps,
+        capsFaults: sel.capsFaults || null,
       }),
     };
   });

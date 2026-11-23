@@ -23,17 +23,19 @@
     if (typeof module === 'object' && module.exports) return require('./task-router');
     return (typeof self !== 'undefined' && self.CompanionTaskRouter) || null;
   }
+  function faults() {
+    if (typeof module === 'object' && module.exports) return require('./provider-faults');
+    return (typeof self !== 'undefined' && self.CompanionProviderFaults) || null;
+  }
 
   const DEFAULT_OLLAMA_URL = ENV.OLLAMA_URL || 'http://127.0.0.1:11434';
-  const DEFAULT_LOCAL_MODEL = ENV.LOCAL_MODEL || 'llama3.2:latest';
-  const DEFAULT_CLOUD_MODEL = ENV.CLOUD_MODEL || 'gemini-2.0-flash';
   const STATUS_TIMEOUT_MS = 1500;
 
   function createAi({
     fetchImpl = globalThis.fetch,
     ollamaUrl = DEFAULT_OLLAMA_URL,
-    localModel = DEFAULT_LOCAL_MODEL,
-    cloudModel = DEFAULT_CLOUD_MODEL,
+    localModel = null,
+    cloudModel = null,
     geminiKey = null,
     // Explicit opt-in (M1 task router policy). A saved key alone no longer
     // arms the fallback: cloudEnabled must be true in settings AND a key
@@ -46,6 +48,13 @@
     chatTimeoutMs = 120000,
     cloudTimeoutMs = 30000,
   } = {}) {
+    // Model ids are registry facts, not literals in this file: the defaults
+    // come from the provider registry (src/provider-registry.js), with the
+    // environment overriding and the caller overriding both (M1 acceptance).
+    const RegDefaults = (registry() && registry().DEFAULTS) || {};
+    localModel = localModel || ENV.LOCAL_MODEL || RegDefaults.localChat || '';
+    cloudModel = cloudModel || ENV.CLOUD_MODEL || RegDefaults.cloudChat || '';
+
     // geminiKey may be a string or, on the desktop app, a getter into the
     // OS-encrypted store, so the key is read only when a cloud call actually
     // happens and the renderer never needs it.
@@ -99,16 +108,21 @@
 
     async function status() {
       // "cloud" means the fallback is actually armed: enabled AND keyed.
+      // fault is the typed, sanitized reason Ollama is unusable (slice 6).
+      const F = faults();
       const out = { ollama: false, model: localModel, cloud: Boolean(cloudEnabled && keyFor()) };
       try {
         const res = await fetchImpl(`${ollamaUrl}/api/tags`, { signal: AbortSignal.timeout(STATUS_TIMEOUT_MS) });
-        if (!res.ok) return out;
-        const data = await res.json();
+        if (!res.ok) { out.fault = F.fault({ code: 'http_error', detail: String(res.status) }); return out; }
+        let data;
+        try { data = await res.json(); } catch { out.fault = F.fault({ code: 'malformed' }); return out; }
         out.ollama = true;
+        out.fault = null;
         const family = localModel.split(':')[0];
         out.modelLoaded = (data.models || []).some((m) => String(m.name || '').startsWith(family));
         return out;
-      } catch {
+      } catch (err) {
+        out.fault = F.fault(F.classifyFailure({ err, callerAborted: false }));
         return out;
       }
     }
@@ -208,20 +222,29 @@
       }
     }
 
-    // Models actually installed right now. null means Ollama did not answer.
-    async function listModels() {
+    // Models actually installed right now. models null means Ollama did not
+    // answer; fault names why (slice 6), sanitized.
+    async function listModelsDetailed(signal) {
+      const F = faults();
       try {
         const res = await fetchImpl(`${ollamaUrl}/api/tags`, { signal: AbortSignal.timeout(STATUS_TIMEOUT_MS) });
-        if (!res.ok) return null;
-        return (await res.json()).models || [];
-      } catch {
-        return null;
+        if (!res.ok) return { models: null, fault: F.fault({ code: 'http_error', detail: String(res.status) }) };
+        let data;
+        try { data = await res.json(); } catch { return { models: null, fault: F.fault({ code: 'malformed' }) }; }
+        if (!data || !Array.isArray(data.models)) return { models: null, fault: F.fault({ code: 'malformed' }) };
+        return { models: data.models, fault: null };
+      } catch (err) {
+        return { models: null, fault: F.fault(F.classifyFailure({ err, callerAborted: Boolean(signal && signal.aborted) })) };
       }
     }
+    async function listModels() {
+      return (await listModelsDetailed()).models;
+    }
 
-    // What a model can do, per Ollama's /api/show. null when unreadable
-    // (the model is absent, or Ollama is too old to report capabilities).
-    async function modelCapabilities(name, signal) {
+    // What a model can do, per Ollama's /api/show. capabilities null when
+    // unreadable (absent model, old Ollama, bad answer); fault names why.
+    async function modelCapabilitiesDetailed(name, signal) {
+      const F = faults();
       try {
         const res = await fetchImpl(`${ollamaUrl}/api/show`, {
           method: 'POST',
@@ -229,12 +252,21 @@
           body: JSON.stringify({ model: name }),
           signal: withTimeouts(signal, probeTimeoutMs),
         });
-        if (!res.ok) return null;
-        const data = await res.json();
-        return Array.isArray(data.capabilities) ? data.capabilities : null;
-      } catch {
-        return null;
+        if (!res.ok) {
+          // Ollama answers 404 for an unknown model: that is a fact about the
+          // model list, not a generic server error.
+          return { capabilities: null, fault: F.fault(res.status === 404 ? { code: 'model_missing' } : { code: 'http_error', detail: String(res.status) }) };
+        }
+        let data;
+        try { data = await res.json(); } catch { return { capabilities: null, fault: F.fault({ code: 'malformed' }) }; }
+        if (!data || !Array.isArray(data.capabilities)) return { capabilities: null, fault: F.fault({ code: 'capability_unknown' }) };
+        return { capabilities: data.capabilities, fault: null };
+      } catch (err) {
+        return { capabilities: null, fault: F.fault(F.classifyFailure({ err, callerAborted: Boolean(signal && signal.aborted) })) };
       }
+    }
+    async function modelCapabilities(name, signal) {
+      return (await modelCapabilitiesDetailed(name, signal)).capabilities;
     }
 
     // ---- M1 slice 2: per-ask routing -----------------------------------
@@ -250,31 +282,39 @@
     // provider is not answering; healthy stays false and the router
     // refuses. Models are exact ids as Ollama serves them.
     async function probeLocal(signal) {
+      const F = faults();
       try {
         const res = await fetchImpl(`${ollamaUrl}/api/tags`, { signal: withTimeouts(signal, probeTimeoutMs) });
-        if (!res.ok) return { healthy: false, models: null };
-        const data = await res.json();
-        return { healthy: true, models: (data.models || []).map((m) => String(m.name || '')) };
-      } catch {
-        return { healthy: false, models: null };
+        if (!res.ok) return { healthy: false, models: null, fault: F.fault({ code: 'http_error', detail: String(res.status) }) };
+        let data;
+        try { data = await res.json(); } catch { return { healthy: false, models: null, fault: F.fault({ code: 'malformed' }) }; }
+        if (!data || !Array.isArray(data.models)) return { healthy: false, models: null, fault: F.fault({ code: 'malformed' }) };
+        return { healthy: true, models: data.models.map((m) => String((m && m.name) || '')), fault: null };
+      } catch (err) {
+        return { healthy: false, models: null, fault: F.fault(F.classifyFailure({ err, callerAborted: Boolean(signal && signal.aborted) })) };
       }
     }
 
     // Bounded cloud health probe. Only ever run when the user has ALREADY
     // consented to this request going to the cloud: a saved key alone must
     // not even produce a health check.
-    async function probeCloudHealth(signal) {
+    async function probeCloudHealthDetailed(signal) {
+      const F = faults();
       const key = keyFor();
-      if (!key) return false;
+      if (!key) return { healthy: false, fault: null };
       try {
         const res = await fetchImpl('https://generativelanguage.googleapis.com/v1beta/models', {
           headers: { 'x-goog-api-key': key },
           signal: withTimeouts(signal, cloudTimeoutMs),
         });
-        return res.ok;
-      } catch {
-        return false;
+        if (!res.ok) return { healthy: false, fault: F.fault({ code: 'http_error', detail: String(res.status) }) };
+        return { healthy: true, fault: null };
+      } catch (err) {
+        return { healthy: false, fault: F.fault(F.classifyFailure({ err, callerAborted: Boolean(signal && signal.aborted) })) };
       }
+    }
+    async function probeCloudHealth(signal) {
+      return (await probeCloudHealthDetailed(signal)).healthy;
     }
 
     // What a cloud call would receive, for the per-request confirmation.
@@ -305,10 +345,11 @@
       };
     }
 
-    function refusalError(reason) {
+    function refusalError(reason, faultInfo) {
       const e = new Error(reason);
       e.reason = reason;
       e.code = reason;
+      e.fault = faultInfo || null;
       return e;
     }
 
@@ -329,14 +370,27 @@
       if (!R || !R.routeTask) return { probe: { healthy: false, models: null }, decision: { ok: false, provider: null, model: null, reason: 'router_unavailable', cloudUsed: false } };
       const probe = (ollamaHealth === null)
         ? await probeLocal(signal)
-        : { healthy: ollamaHealth, models: installedModels || [] };
+        : { healthy: ollamaHealth, models: installedModels || [], fault: null };
       const installed = installedModels !== null ? installedModels : (probe.models || []);
       const capabilities = {};
+      const capFaults = {};
       if (probe.healthy && task === 'vision') {
         for (const name of [model, visionModel, localModel]) {
-          if (name && capabilities[name] === undefined) capabilities[name] = await modelCapabilities(name, signal);
+          if (!name || capabilities[name] !== undefined) continue;
+          const det = await modelCapabilitiesDetailed(name, signal);
+          capabilities[name] = det.capabilities;
+          capFaults[name] = det.fault
+            ? { state: 'unknown', fault: det.fault }
+            : (Array.isArray(det.capabilities) && det.capabilities.indexOf('vision') === -1
+              ? { state: 'unsuitable' }
+              : { state: 'ok' });
         }
       }
+      // Diagnostics only: the requested model being absent from the live
+      // list (same isPresent helper the router uses). The router itself
+      // still refuses; this only explains why.
+      const Rr = router();
+      const modelMissing = Boolean(probe.healthy && model && Rr && Rr.isPresent && !Rr.isPresent(model, installed));
       // The cloud model's capability is a registry fact, verified at
       // registry time; per-model, never a family assumption.
       const Reg = registry();
@@ -356,7 +410,7 @@
         localVisionModel: visionModel || null,
         cloudModel,
       });
-      return { probe, decision };
+      return { probe, decision, faults: { probe: probe.fault || null, capabilities: capFaults, modelMissing } };
     }
 
     // Local chat failed AFTER the router picked it (model vanished, Ollama
@@ -385,6 +439,8 @@
         }
         const refused = refusalError(again.decision.reason || 'cloud_provider_down');
         refused.localError = String((localError && localError.message) || localError);
+        const Fc = faults();
+        refused.localFault = Fc ? Fc.fault(Fc.classifyFailure({ err: localError, callerAborted: Boolean(signal && signal.aborted) })) : null;
         throw refused;
       }
       if (!decision.ok && decision.reason === 'no_cloud_consent' && !cloudConsent
@@ -416,6 +472,14 @@
       const { probe, decision } = await routeTask(task, {
         privacyMode, cloudEnabled, cloudConsent, model, visionModel, signal,
       });
+
+      // The caller cancelled while the probes ran: surface that as the
+      // cancellation it is. No retry, no cloud consideration (slice 6).
+      if (probe.fault && probe.fault.code === 'cancelled') {
+        const cancelledErr = refusalError('cancelled');
+        cancelledErr.name = 'AbortError';
+        throw cancelledErr;
+      }
 
       if (decision.ok && decision.provider === 'ollama') {
         try {
@@ -454,9 +518,9 @@
         const localReason = probe.healthy
           ? (task === 'vision' ? 'no_vision_model_local' : 'no_local_model')
           : 'ollama_down';
-        return { needsCloudConsent: true, localError: localReason, cloud: resolveCloudDisclosure(cloudDisclosure) };
+        return { needsCloudConsent: true, localError: localReason, localFault: probe.fault || null, cloud: resolveCloudDisclosure(cloudDisclosure) };
       }
-      throw refusalError(decision.reason);
+      throw refusalError(decision.reason, probe.fault);
     }
 
     // Local-only legacy path. It predates the router and carries no
@@ -470,7 +534,7 @@
       return chatOllama(args);
     }
 
-    return { status, hasModel, chat: chatOllama, chatGemini, complete, completeRouted, routeTask, probeLocal, listModels, modelCapabilities, testGeminiKey, localModel };
+    return { status, hasModel, chat: chatOllama, chatGemini, complete, completeRouted, routeTask, probeLocal, listModels, listModelsDetailed, modelCapabilities, modelCapabilitiesDetailed, probeCloudHealth, probeCloudHealthDetailed, testGeminiKey, localModel };
   }
 
   return createAi;

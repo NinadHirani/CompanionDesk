@@ -151,6 +151,18 @@ claims to literally experience emotions.
   never carries key material (`src/provider-status.js`, `provider:status`).
   Provider HTTP contracts are pinned by scripted-fake-server contract tests
   (M1 fifth slice, 23 Nov 2026, `tests/provider-contracts.test.js`).
+- Typed provider fault diagnostics (M1 sixth slice, 23 Nov 2026): every
+  probe and provider-call failure maps to a fixed sanitized vocabulary
+  (unreachable, timeout, cancelled, http_error, malformed, model_missing,
+  capability_unknown, capability_unsuitable) shared by the ask path, the
+  vision path, routing diagnostics and the Settings status view
+  (`src/provider-faults.js`). Fault text never contains a raw server body,
+  URL, prompt, image, key material or file path. A caller cancellation
+  during routing surfaces as the cancellation it is: no retry and no cloud
+  consideration. Probes stay read-only and on-demand (no polling, no
+  telemetry), the strict router is unchanged (health must be KNOWN true;
+  unknown refuses), and the cloud consent gates are untouched. Settings
+  displays the fault reasons via the shared display map.
 - Push-to-talk voice input via a fixed-path whisper.cpp allowlist, English
   models only (`src/voice.js`, `src/whisper.js`, `src/vad.js`).
 - On-demand single-window screen Q&A with a local vision model
@@ -165,7 +177,7 @@ claims to literally experience emotions.
 - Update policy that never auto-installs unsigned builds; update modes
   disabled/auto/manual-download (`src/update-policy.js`, `src/updater.js`).
 - Health check and onboarding interview (`src/health.js`, `src/onboarding.js`).
-- 390 passing unit/integration tests (258 baseline; model selection +18, conversation history +17, optional key storage +13, M1 provider registry/task router/cloud gate +25, M1 per-ask routing integration +18, M1 review fixes +18, M1 hardware profiles +12, M1 provider status +11, M1 provider contract tests +18); three main-branch CI workflows green
+- 408 passing unit/integration tests (258 baseline; model selection +18, conversation history +17, optional key storage +13, M1 provider registry/task router/cloud gate +25, M1 per-ask routing integration +18, M1 review fixes +18, M1 hardware profiles +12, M1 provider status +11, M1 provider contract tests +18, M1 provider fault diagnostics +18); three main-branch CI workflows green
   (CI, CI macOS + Linux, Android APK; verified this session: only these
   three have ever run on main);
   public Android debug-APK preview release.
@@ -173,8 +185,7 @@ claims to literally experience emotions.
 ## 4. Planned, NOT implemented
 
 A secure credential-vault adapter
-for Android/web key storage; provider health/capability resilience and
-structured diagnostics; agent orchestrator, typed tools,
+for Android/web key storage; agent orchestrator, typed tools,
 approval cards, audit log, emergency stop; proactive scheduler and OS
 notifications; wake word; text-to-speech; multilingual speech; Android
 on-device inference; secure desktop gateway for Android; live session screen

@@ -30,7 +30,7 @@
   // resolved, visionVerified }. secureStore: the masked status object
   // ({ supported, encryptionAvailable, configured }) or null. cloudEnabled:
   // the settings flag. Everything else is derived; nothing throws.
-  function buildProviderStatus({ ollamaUp = null, installed = null, chat = null, vision = null, secureStore = null, cloudEnabled = false } = {}) {
+  function buildProviderStatus({ ollamaUp = null, installed = null, chat = null, vision = null, secureStore = null, cloudEnabled = false, ollamaFault = null, caps = null, capsFaults = null } = {}) {
     const up = ollamaUp === true;
     const down = ollamaUp === false;
     const chatModel = String((chat && chat.model) || '');
@@ -41,7 +41,13 @@
     if (down) capability = 'unreachable';
     else if (!up) capability = 'unknown';
     else if ((vision && vision.visionVerified) === true) capability = 'verified';
+    // Typed capability facts (slice 6): the chosen vision model exists but
+    // /api/show says it cannot do vision at all is 'unsuitable', distinct
+    // from 'unknown' (unreadable or not probed).
+    else if (caps && visionModel && Array.isArray(caps[visionModel]) && caps[visionModel].indexOf('vision') === -1) capability = 'unsuitable';
     else capability = 'unknown';
+    const visionFault = (capsFaults && visionModel && capsFaults[visionModel]) || null;
+    const chatFault = (up && chatInstalled === false) ? { code: 'model_missing', detail: null } : null;
 
     const knownStorage = Boolean(secureStore && typeof secureStore === 'object');
     const supported = Boolean(secureStore && secureStore.supported);
@@ -54,9 +60,9 @@
     else state = supported ? 'armed' : 'no_secure_storage'; // key + enabled but no real vault: fail closed
 
     return {
-      ollama: { reachable: ollamaUp === null ? null : up },
-      chat: { model: chatModel, installed: chatInstalled },
-      vision: { model: visionModel, capability },
+      ollama: { reachable: ollamaUp === null ? null : up, fault: ollamaFault || null },
+      chat: { model: chatModel, installed: chatInstalled, fault: chatFault },
+      vision: { model: visionModel, capability, fault: visionFault },
       cloud: {
         enabled,
         keySaved,

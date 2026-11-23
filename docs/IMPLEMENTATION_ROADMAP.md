@@ -145,10 +145,22 @@ src/ai.js: a router privacy refusal after a local failure now surfaces as
 the named reason instead of the local error masking it, and a malformed
 cloud payload reads as `gemini_bad_response` instead of a raw parser error.
 
-Still planned in M1: provider health/capability resilience and structured
-diagnostics.
+M1 slice 6 (23 Nov 2026): typed, sanitized provider fault diagnostics.
+Every probe and provider-call failure maps to a fixed fault vocabulary
+(unreachable, timeout, cancelled, http_error, malformed, model_missing,
+capability_unknown, capability_unsuitable) in src/provider-faults.js; the
+chat, vision, routing and Settings status paths carry it, and the fault
+text never contains a raw server body, URL, prompt, image, key material or
+file path. A caller cancellation during routing surfaces as the
+cancellation it is: no retry, no cloud consideration. Probe behavior stays
+read-only and on-demand, the strict router is unchanged (health must be
+KNOWN true; unknown refuses), and the per-ask consent gates are untouched.
+
+The M1 planned scope is now implemented; acceptance verification below.
 Acceptance: routing decisions unit-tested; no hardcoded model constants
-in `src/ai.js`; contract tests per provider.
+in `src/ai.js` (defaults come from the provider registry); contract tests
+per provider (scripted fake servers for Ollama chat/vision/tags/show and
+the Gemini REST path).
 
 ## GATE 1 - Android intelligence (3-4 wks, device time)
 

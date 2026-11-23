@@ -232,6 +232,17 @@
     li.textContent = `${label}: ${value}`;
     return li;
   }
+  // Typed fault text (slice 6). The shared module provides the wording; a
+  // missing module degrades to no suffix, never an error.
+  function faultText(f) {
+    const F = (typeof self !== 'undefined' && self.CompanionProviderFaults) || null;
+    if (!F || !f) return '';
+    return F.describeFault(f) || '';
+  }
+  function withFault(value, fault) {
+    const t = faultText(fault);
+    return t ? `${value} (${t})` : value;
+  }
   async function fillProviderStatus() {
     if (!PS.list || !PS.refresh || !PS.msg) return;
     PS.refresh.disabled = true;
@@ -248,14 +259,18 @@
     }
     PS.msg.textContent = '';
     PS.list.appendChild(providerRow('Local model server (Ollama)',
-      res.ollama.reachable === true ? 'Reachable' : res.ollama.reachable === false ? 'Not running' : 'Unknown'));
+      withFault(res.ollama.reachable === true ? 'Reachable' : res.ollama.reachable === false ? 'Not running' : 'Unknown',
+        res.ollama.reachable === false ? res.ollama.fault : null)));
     PS.list.appendChild(providerRow('Chat model',
-      res.chat.installed === true ? `${res.chat.model} (installed)`
+      withFault(res.chat.installed === true ? `${res.chat.model} (installed)`
         : res.chat.installed === false ? `${res.chat.model} (missing)`
-        : `${res.chat.model || 'default'} (unknown, server not reachable)`));
+        : `${res.chat.model || 'default'} (unknown, server not reachable)`,
+        res.chat.fault)));
     PS.list.appendChild(providerRow('Vision model',
-      `${res.vision.model || 'default'} (${res.vision.capability === 'verified' ? 'vision verified'
-        : res.vision.capability === 'unreachable' ? 'unreachable' : 'capability unknown'})`));
+      withFault(`${res.vision.model || 'default'} (${res.vision.capability === 'verified' ? 'vision verified'
+        : res.vision.capability === 'unsuitable' ? 'not a vision model'
+        : res.vision.capability === 'unreachable' ? 'unreachable' : 'capability unknown'})`,
+        res.vision.capability === 'unknown' ? res.vision.fault : null)));
     PS.list.appendChild(providerRow('Cloud fallback (Gemini)', CLOUD_LABELS[res.cloud.state] || 'Unknown'));
     PS.list.appendChild(providerRow('Credential storage',
       res.credentialStorage.available === true ? 'OS-encrypted vault'

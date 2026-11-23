@@ -87,7 +87,7 @@ test('malformed /api/tags reads as "not answering", never a throw', async () => 
   assert.equal(await ai.listModels(), null);
   const st = await ai.status();
   assert.equal(st.ollama, false);
-  assert.deepEqual(await ai.probeLocal(), { healthy: false, models: null });
+  assert.deepEqual(await ai.probeLocal(), { healthy: false, models: null, fault: { code: 'malformed', detail: null } });
 });
 
 test('a timed-out chat is one aborted call and never retried', async () => {

@@ -35,6 +35,12 @@
   // configured: stored setting ('' = use the default). Returns the model to
   // send and how it was decided. 'missing' still sends the fallback, so the
   // existing model-absent error path and its friendly message are unchanged.
+  // Typed provider faults (slice 6): same dual-mode loader pattern as ai.js.
+  function faultsMod() {
+    if (typeof module === 'object' && module.exports) return require('./provider-faults');
+    return (typeof self !== 'undefined' && self.CompanionProviderFaults) || null;
+  }
+
   function resolveChatModel({ configured, fallback = DEFAULT_CHAT_MODEL, installed } = {}) {
     if (configured && isPresent(configured, installed)) return { model: configured, resolved: 'configured' };
     return { model: fallback, resolved: isPresent(fallback, installed) ? 'fallback' : 'missing' };
@@ -70,23 +76,39 @@
   // listModels() (array of {name} or null when Ollama is unreachable) and
   // modelCapabilities(name) (array or null).
   async function resolveModelSelection({ settings = {}, ai, chatFallback = DEFAULT_CHAT_MODEL, visionFallback = DEFAULT_VISION_MODEL, maxProbes = MAX_PROBES } = {}) {
-    const installed = await ai.listModels();
-    if (installed === null) {
+    const F = faultsMod();
+    // Typed probe faults (slice 6) when the ai layer offers them; the plain
+    // listModels/modelCapabilities contract keeps working for older stubs.
+    const list = ai.listModelsDetailed
+      ? await ai.listModelsDetailed()
+      : { models: await ai.listModels(), fault: null };
+    if (list.models === null) {
       return {
         ollama: false,
         installed: null,
         caps: null,
+        fault: list.fault || null,
+        capsFaults: {},
         chat: { model: chatFallback, resolved: 'ollama_down' },
         vision: { model: visionFallback, resolved: 'ollama_down', visionVerified: null },
       };
     }
-    const names = installed.map((m) => String((m && m.name) || '')).filter(Boolean);
+    const names = list.models.map((m) => String((m && m.name) || '')).filter(Boolean);
     const caps = {};
-    await Promise.all(names.slice(0, maxProbes).map(async (n) => { caps[n] = await ai.modelCapabilities(n); }));
+    const capsFaults = {};
+    await Promise.all(names.slice(0, maxProbes).map(async (n) => {
+      const det = ai.modelCapabilitiesDetailed
+        ? await ai.modelCapabilitiesDetailed(n)
+        : { capabilities: await ai.modelCapabilities(n), fault: null };
+      caps[n] = det.capabilities;
+      capsFaults[n] = (F && F.fault(det.fault)) || null;
+    }));
     return {
       ollama: true,
       installed: names,
       caps,
+      fault: null,
+      capsFaults,
       chat: resolveChatModel({ configured: settings.ai_model_local, fallback: chatFallback, installed: names }),
       vision: pickVisionModel({ configured: settings.ai_model_vision, fallback: visionFallback, installed: names, caps }),
     };

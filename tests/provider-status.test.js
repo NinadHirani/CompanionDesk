@@ -22,8 +22,8 @@ const build = (over = {}) => PS.buildProviderStatus({
 test('reachable server reports the selected models as installed', () => {
   const s = build();
   assert.equal(s.ollama.reachable, true);
-  assert.deepEqual(s.chat, { model: 'llama3.2:latest', installed: true });
-  assert.deepEqual(s.vision, { model: 'gemma3:4b', capability: 'verified' });
+  assert.deepEqual(s.chat, { model: 'llama3.2:latest', installed: true, fault: null });
+  assert.deepEqual(s.vision, { model: 'gemma3:4b', capability: 'verified', fault: null });
 });
 
 test('a family name without a tag still matches the installed model', () => {
