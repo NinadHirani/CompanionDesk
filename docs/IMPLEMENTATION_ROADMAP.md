@@ -122,7 +122,31 @@ aria-live so screen readers hear updates. Tests pin the state machine, the
 fail-closed vault rule, malformed-input conservatism, and that no key
 material can appear in the output.
 
-Still planned in M1: provider contract tests against a scripted fake server.
+FIFTH SLICE DONE 23 Nov 2026: provider contract tests against scripted
+fake servers (`tests/provider-contracts.test.js`,
+`tests/fixtures/fake-servers.js`). No sockets, no real Ollama or Gemini:
+the fixture IS the server side of each HTTP contract, replayed through
+createAi's injectable fetch, recording every request so tests assert
+exactly what the providers send. Covered: the exact Ollama chat contract
+(method, URL, headers, body shape, system/history/images placement);
+streaming NDJSON with split lines and malformed lines skipped; non-2xx as
+named one-attempt errors (no retry anywhere); malformed /api/tags as "not
+answering"; timeout and mid-stream abort semantics (tokens already seen are
+kept; an abort never escalates to the cloud); the /api/show capability
+contract and every unreadable shape staying null; the Gemini contract (one
+part, system+prompt only, key in a header and never a URL, history and
+images never sent); malformed/empty cloud payloads as named errors; the
+consent gate (no cloud call and no cloud health probe without explicit
+per-request consent); local_only as the named refusal after a local
+failure; vision (the screen path) never reaching the cloud even fully
+armed; unknown tasks refusing with only the local probe run; and no retry
+after a refusal. Two narrow contract bugs the tests exposed were fixed in
+src/ai.js: a router privacy refusal after a local failure now surfaces as
+the named reason instead of the local error masking it, and a malformed
+cloud payload reads as `gemini_bad_response` instead of a raw parser error.
+
+Still planned in M1: provider health/capability resilience and structured
+diagnostics.
 Acceptance: routing decisions unit-tested; no hardcoded model constants
 in `src/ai.js`; contract tests per provider.
 

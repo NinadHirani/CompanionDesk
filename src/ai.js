@@ -182,7 +182,8 @@
         }
       );
       if (!res.ok) throw new Error(`gemini_http_${res.status}`);
-      const data = await res.json();
+      let data;
+      try { data = await res.json(); } catch { throw new Error('gemini_bad_response'); }
       const parts = data && data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts;
       const text = (parts || []).map((p) => p.text || '').join('');
       if (!text) throw new Error('gemini_empty_response');
@@ -392,6 +393,10 @@
         // missing human step. Nothing has been sent anywhere.
         return { needsCloudConsent: true, localError: String((localError && localError.message) || localError), cloud: resolveCloudDisclosure(cloudDisclosure) };
       }
+      // A privacy refusal is the honest final word: the user's mode blocks
+      // the cloud no matter what local did, so it names the failure, not
+      // the local error underneath it.
+      if (decision && decision.reason === 'privacy_local_only') throw refusalError('privacy_local_only');
       throw localError; // the honest local failure
     }
 
