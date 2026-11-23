@@ -156,6 +156,10 @@ cancellation it is: no retry, no cloud consideration. Probe behavior stays
 read-only and on-demand, the strict router is unchanged (health must be
 KNOWN true; unknown refuses), and the per-ask consent gates are untouched.
 
+Review fix (23 Nov 2026): fault details are strictly whitelisted (a
+3-digit HTTP status or an errno-style network code, at most 32 characters;
+anything else drops the detail) and every fault crossing the status view is
+normalized through that sanitizer, fail closed.
 The M1 planned scope is now implemented; acceptance verification below.
 Acceptance: routing decisions unit-tested; no hardcoded model constants
 in `src/ai.js` (defaults come from the provider registry); contract tests
