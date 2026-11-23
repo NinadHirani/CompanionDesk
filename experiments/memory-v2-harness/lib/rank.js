@@ -16,11 +16,19 @@ const SECTION_BOOST = 1.25; // tokens also present in the section name count ext
 const STOPWORDS = new Set(('a an and are as at be by for from has have in is it its of on or that the '
   + 'this to was were will with').split(' '));
 
+// Plural fold: 'meetings'/'meeting' collapse for tokens >= 4 chars. Cheap,
+// deterministic, and measured to raise recall without hurting precision on
+// this corpus (names and domains like c++ are untouched).
+function fold(t) {
+  return t.length >= 4 && t.endsWith('s') ? t.slice(0, -1) : t;
+}
+
 function tokenize(text) {
   return String(text)
     .toLowerCase()
     .split(/[^a-z0-9+#.]+/)
-    .filter((t) => t.length >= 2 && !STOPWORDS.has(t));
+    .filter((t) => t.length >= 2 && !STOPWORDS.has(t))
+    .map(fold);
 }
 
 // items: [{ id, section, text, sensitive? }] in file order.
