@@ -32,12 +32,18 @@ CompanionDesk is a local-first study assistant.
   and when, on your device only, to work out how early you usually finish.
   You can turn this off or clear it in the app at any time.
 - **AI processing you control.** By default the app asks a local model running
-  on your own machine (Ollama), which sends nothing anywhere. If you choose to
-  add your own Google Gemini API key as an opt-in fallback, and your local
-  model is unavailable, syllabus text, your deadlines and your questions are
-  sent to Google for processing under Google's terms. Your name, the
-  about-me file and your activity habits are NOT sent unless you switch on
-  the setting that shares them. The app works fully without any key.
+  on your own machine (Ollama), which sends nothing anywhere. If you add your
+  own Google Gemini API key as an opt-in fallback, nothing is sent to Google
+  automatically: after a local failure, the app asks you to confirm it for
+  that one question, and the confirmation states exactly what would be sent.
+  By default that is a minimized prompt: your question, the assistant rules,
+  and your course and due-date context; your calendar entries, your name,
+  saved memories and activity habits are NOT sent. If you switch on the
+  setting that shares full personal context, those categories may be sent,
+  and the confirmation names them before you decide. Your conversation
+  history and any screenshots are never sent to Google in either mode, and
+  syllabus import and screen questions never use the cloud at all. The app
+  works fully without any key.
 - **No third-party trackers.** The app loads no advertising or tracking code.
 - **Children.** CompanionDesk is a study tool intended for students and does
   not knowingly collect personal information from anyone, because it collects

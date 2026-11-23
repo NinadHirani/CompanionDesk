@@ -173,7 +173,7 @@ test('P.ask persists the exchange and sends prior turns to the local model', asy
   const db = await fakeAskDb();
   let seen = null;
   const ai = {
-    complete: async (args) => { seen = args; return 'the answer'; },
+    completeRouted: async (args) => { seen = args; return 'the answer'; },
     listModels: async () => null,
     modelCapabilities: async () => null,
     localModel: 'llama3.2:latest',
@@ -193,7 +193,7 @@ test('P.ask persists the exchange and sends prior turns to the local model', asy
 
 test('P.ask without a conversation id keeps the single-shot behavior', async () => {
   const db = await fakeAskDb();
-  const ai = { complete: async () => 'ok' };
+  const ai = { completeRouted: async () => 'ok' };
   const out = await P.ask({ db, ai, meFile: '/nonexistent' }, { prompt: 'hello' }, '2026-11-23');
   assert.deepEqual(out, { ok: true, answer: 'ok' });
   assert.equal(CH.listConversations(db).conversations.length, 0);
@@ -201,14 +201,14 @@ test('P.ask without a conversation id keeps the single-shot behavior', async () 
 
 test('P.ask with a missing conversation id fails cleanly and stores nothing', async () => {
   const db = await fakeAskDb();
-  const ai = { complete: async () => 'should not run' };
+  const ai = { completeRouted: async () => 'should not run' };
   const out = await P.ask({ db, ai, meFile: '/nonexistent' }, { prompt: 'hello', conversation_id: 4242 }, '2026-11-23');
   assert.deepEqual(out, { ok: false, error: 'not_found' });
 });
 
 test('a failed ask still records the question but no answer', async () => {
   const db = await fakeAskDb();
-  const ai = { complete: async () => { throw new Error('ollama_http_404'); } };
+  const ai = { completeRouted: async () => { throw new Error('ollama_http_404'); } };
   const c = CH.createConversation(db, { now: NOW }).conversation;
   const out = await P.ask({ db, ai, meFile: '/nonexistent' }, { prompt: 'will fail', conversation_id: c.id }, '2026-11-23');
   assert.equal(out.ok, false);
@@ -217,25 +217,30 @@ test('a failed ask still records the question but no answer', async () => {
   assert.equal(msgs[0].content, 'will fail');
 });
 
-test('ai.complete strips history and the local model name from the cloud fallback', async () => {
+test('the routed cloud path strips history and the local model name', async () => {
   let localBody = null;
   let cloudBody = null;
   const ai = createAi({
     geminiKey: 'k',
     cloudEnabled: true,
     fetchImpl: mockFetch([
+      ['/api/tags', () => ({ ok: true, json: async () => ({ models: [{ name: 'llama3.2:latest' }] }) })],
       ['/api/chat', (opts) => { localBody = JSON.parse(opts.body); return { ok: false, status: 500 }; }],
-      [(url, opts) => { if (url.includes('generativelanguage')) { cloudBody = opts.body; return true; } return false; },
-       () => ({ ok: true, json: async () => ({ candidates: [{ content: { parts: [{ text: 'cloud ok' }] } }] }) })],
+      [(url, opts) => { if (String(url).includes('generativelanguage')) { cloudBody = opts.body; return true; } return false; },
+       (opts) => {
+         if (String((opts && opts.url) || '').endsWith('/models')) return { ok: true, json: async () => ({ models: [] }) };
+         return { ok: true, json: async () => ({ candidates: [{ content: { parts: [{ text: 'cloud ok' }] } }] }) };
+       }],
     ]),
   });
-  const out = await ai.complete({
+  const out = await ai.completeRouted({
     prompt: 'new question',
     model: 'llama3.2:latest',
     history: [{ role: 'user', content: 'secret earlier question' }],
+    task: 'chat', privacyMode: 'standard', cloudEnabled: true, cloudConsent: true,
   });
   assert.equal(out, 'cloud ok');
-  assert.equal(localBody.messages.length, 2); // history + current prompt
+  assert.equal(localBody.messages.length, 2); // history + current prompt go to the LOCAL model only
   assert.equal(cloudBody.includes('secret earlier question'), false);
   assert.equal(cloudBody.includes('llama3.2'), false);
 });

@@ -138,7 +138,7 @@ test('ask: the local model gets the personal prompt, the cloud gets the minimal 
   P.addMemory(c, { section: 'Constraints', text: 'No studying on Sundays' });
 
   let seen = null;
-  const ai = { complete: async (args) => { seen = args; return 'Problem set 4 is due Wed Nov 4.'; } };
+  const ai = { completeRouted: async (args) => { seen = args; return 'Problem set 4 is due Wed Nov 4.'; } };
   const r = await P.ask({ ...c, ai }, { prompt: 'What is due?' }, '2026-11-02');
   assert.deepEqual(r, { ok: true, answer: 'Problem set 4 is due Wed Nov 4.' });
   assert.match(seen.system, /friendly and encouraging/);
@@ -154,9 +154,40 @@ test('ask: the local model gets the personal prompt, the cloud gets the minimal 
   assert.equal(seen.cloudArgs, undefined, 'explicit opt-in sends the same prompt');
 });
 
+test('ask: the consent disclosure matches the actual payload per cloud_personal', async () => {
+  const c = await ctx();
+  const course = c.db.upsertCourse({ name: 'Quantum Computing', code: 'CS402' });
+  c.db.addAssignment(course, { title: 'Problem set 4', due_date: '2026-11-04' });
+  let seen = null;
+  const ai = { completeRouted: async (args) => { seen = args; return { needsCloudConsent: true, localError: 'no_local_model', cloud: {} }; } };
+
+  // Default (cloud_personal off): the cloud prompt is minimized to the
+  // context pack, so the disclosure must not claim calendar or memory data
+  // would be sent, and must list them as never-sent.
+  await P.ask({ ...c, ai }, { prompt: 'What is due?' }, '2026-11-02');
+  assert.equal(seen.cloudDisclosure.prompt, 'minimized');
+  const min = seen.cloudDisclosure.receives.join(' ');
+  assert.match(min, /course and due-date context pack/);
+  assert.ok(!min.includes('calendar') && !min.includes('memories'), 'minimized disclosure must not overstate');
+  assert.ok(seen.cloudDisclosure.never_sent.some((x) => x.includes('calendar')));
+
+  // cloud_personal on: the FULL personal prompt goes to the cloud, so the
+  // disclosure must say so, naming every category that may ride along.
+  P.saveSettings(c.db, { cloud_personal: true, learn_from_activity: false });
+  await P.ask({ ...c, ai }, { prompt: 'What is due?' }, '2026-11-02');
+  assert.equal(seen.cloudDisclosure.prompt, 'full');
+  const full = seen.cloudDisclosure.receives.join(' ');
+  assert.match(full, /calendar entries/);
+  assert.match(full, /saved memories/);
+  assert.ok(!full.includes('activity patterns'), 'activity patterns only with learn_from_activity on');
+  P.saveSettings(c.db, { cloud_personal: true, learn_from_activity: true });
+  await P.ask({ ...c, ai }, { prompt: 'What is due?' }, '2026-11-02');
+  assert.match(seen.cloudDisclosure.receives.join(' '), /activity patterns/);
+});
+
 test('ask: empty questions and model failures come back as errors, not exceptions', async () => {
   const c = await ctx();
-  const ai = { complete: async () => { throw new Error('ollama_http_500'); } };
+  const ai = { completeRouted: async () => { throw new Error('ollama_http_500'); } };
   assert.deepEqual(await P.ask({ ...c, ai }, { prompt: '   ' }, '2026-11-02'), { ok: false, error: 'empty_prompt' });
   assert.deepEqual(await P.ask({ ...c, ai }, {}, '2026-11-02'), { ok: false, error: 'empty_prompt' });
   assert.deepEqual(await P.ask({ ...c, ai }, { prompt: 'hi' }, '2026-11-02'), { ok: false, error: 'ollama_http_500' });
@@ -175,7 +206,7 @@ test('each person gets their own version: same schedule, different files, differ
   P.addMemory(b, { section: 'Constraints', text: 'No studying on Sundays' });
 
   const seen = {};
-  const spy = (key) => ({ complete: async (args) => { seen[key] = args; return 'ok'; } });
+  const spy = (key) => ({ completeRouted: async (args) => { seen[key] = args; return 'ok'; } });
   await P.ask({ ...a, ai: spy('a') }, { prompt: 'What is due?' }, '2026-11-02');
   await P.ask({ ...b, ai: spy('b') }, { prompt: 'What is due?' }, '2026-11-02');
   assert.match(seen.a.prompt, /Asha/);

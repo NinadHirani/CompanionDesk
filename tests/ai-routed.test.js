@@ -54,6 +54,61 @@ test('a failed health probe with the cloud armed offers consent and sends nothin
   assert.equal(fetch.calls.filter((c) => c.url.includes('googleapis')).length, 0);
 });
 
+test('legacy complete is local-only: even with a key and cloud enabled it never calls the cloud', async () => {
+  const fetch = mockFetch([
+    OLLAMA_UP,
+    ['/api/chat', () => ({ ok: false, status: 500 })],
+    CLOUD_OK,
+  ]);
+  const ai = baseAi(fetch);
+  await assert.rejects(() => ai.complete({ system: 's', prompt: 'p' }), /ollama_http_500/);
+  assert.equal(fetch.calls.filter((c) => c.url.includes('googleapis')).length, 0);
+});
+
+test('the consent disclosure passes through: a minimized payload is disclosed as minimized', async () => {
+  const fetch = mockFetch([OLLAMA_UP, ['/api/chat', () => ({ ok: false, status: 500 })]]);
+  const ai = baseAi(fetch);
+  const res = await ai.completeRouted({
+    system: 's', prompt: 'p',
+    cloudDisclosure: {
+      prompt: 'minimized',
+      receives: ['your current question', 'the course and due-date context pack'],
+      never_sent: ['conversation history', 'your calendar entries'],
+    },
+  });
+  assert.equal(res.needsCloudConsent, true);
+  assert.equal(res.cloud.prompt, 'minimized');
+  assert.deepEqual(res.cloud.receives, ['your current question', 'the course and due-date context pack']);
+  assert.ok(res.cloud.never_sent.includes('your calendar entries'));
+  assert.ok(!res.cloud.receives.join(' ').includes('calendar'), 'minimized mode must not claim calendar data goes out');
+});
+
+test('the consent disclosure passes through: full personal context is disclosed as such', async () => {
+  const fetch = mockFetch([OLLAMA_UP, ['/api/chat', () => ({ ok: false, status: 500 })]]);
+  const ai = baseAi(fetch);
+  const res = await ai.completeRouted({
+    system: 's', prompt: 'p',
+    cloudDisclosure: {
+      prompt: 'full',
+      receives: ['your current question', 'your next 7 days of calendar entries', 'your name and the selected saved memories', 'your activity patterns'],
+    },
+  });
+  assert.equal(res.cloud.prompt, 'full');
+  const joined = res.cloud.receives.join(' ');
+  assert.match(joined, /calendar entries/);
+  assert.match(joined, /saved memories/);
+  assert.match(joined, /activity patterns/);
+  assert.deepEqual(res.cloud.never_sent, ['conversation history', 'screenshots or images']);
+});
+
+test('without a caller disclosure the consent result stays conservative, never understated', async () => {
+  const fetch = mockFetch([OLLAMA_UP, ['/api/chat', () => ({ ok: false, status: 500 })]]);
+  const ai = baseAi(fetch);
+  const res = await ai.completeRouted({ system: 's', prompt: 'p' });
+  assert.equal(res.cloud.prompt, 'full');
+  assert.match(res.cloud.receives[0], /exactly as passed/);
+});
+
 test('a failed health probe with the cloud DISABLED refuses with the local reason', async () => {
   const fetch = mockFetch([['/api/tags', () => ({ ok: false, status: 500 })]]);
   const ai = createAi({ fetchImpl: fetch, geminiKey: () => 'k', cloudEnabled: false });
@@ -97,8 +152,9 @@ test('local failure with cloud armed but unconsented offers confirmation and sen
   const res = await ai.completeRouted({ system: 's', prompt: 'p', history: [{ role: 'user', content: 'earlier turn' }] });
   assert.equal(res.needsCloudConsent, true);
   assert.equal(res.cloud.provider, 'gemini');
-  assert.equal(res.cloud.receives.conversation_history, false);
-  assert.equal(res.cloud.receives.screenshots_or_images, false);
+  assert.ok(!res.cloud.receives.join(' ').includes('conversation history'), 'history is never a receive category');
+  assert.ok(res.cloud.never_sent.includes('conversation history'));
+  assert.ok(res.cloud.never_sent.includes('screenshots or images'));
   assert.equal(res.localError, 'ollama_http_404');
   // Not one byte went to Google, not even a health check.
   assert.equal(fetch.calls.filter((c) => c.url.includes('googleapis')).length, 0);

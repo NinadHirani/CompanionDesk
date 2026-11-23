@@ -104,30 +104,18 @@ test('privacy: by default the cloud prompt carries no name, memory or habits', (
   assert.equal(buildPersona({ settings: { ...DEFAULTS, cloud_personal: true }, memories: MEM, contextPack: pack, question: 'x' }).cloud, null);
 });
 
-test('end to end through ai.complete: local down, cloud receives only the minimal prompt', async () => {
+  const p0 = buildPersona({ settings: { ...DEFAULTS, user_name: 'Asha' }, memories: MEM, contextPack: pack, question: 'What is due?' });
+test('ai.complete is local-only: even with a key and cloud enabled it never reaches the cloud', async () => {
   const sent = [];
   const fetchImpl = async (url, init) => {
+    sent.push(String(url));
     if (String(url).includes('/api/chat')) throw new Error('ollama down');
-    sent.push(JSON.parse(init.body).contents[0].parts[0].text);
-    return { ok: true, json: async () => ({ candidates: [{ content: { parts: [{ text: 'cloud answer' }] } }] }) };
+    return { ok: true, json: async () => ({ models: [] }) };
   };
   const ai = createAi({ fetchImpl, geminiKey: 'test-key', cloudEnabled: true });
-  const p = buildPersona({ settings: { ...DEFAULTS, user_name: 'Asha' }, memories: MEM, contextPack: pack, question: 'What is due?' });
-  const answer = await ai.complete({ system: p.system, prompt: p.prompt, cloudArgs: p.cloud });
-  assert.equal(answer, 'cloud answer');
-  assert.equal(sent.length, 1);
-  assert.ok(!sent[0].includes('Asha') && !sent[0].includes('Aim for a 9'));
-  assert.match(sent[0], /Problem set 4/);
-});
-
-test('ai.complete without cloudArgs behaves exactly as before', async () => {
-  const sent = [];
-  const fetchImpl = async (url, init) => {
-    if (String(url).includes('/api/chat')) throw new Error('ollama down');
-    sent.push(JSON.parse(init.body).contents[0].parts[0].text);
-    return { ok: true, json: async () => ({ candidates: [{ content: { parts: [{ text: 'ok' }] } }] }) };
-  };
-  const ai = createAi({ fetchImpl, geminiKey: 'k', cloudEnabled: true });
-  await ai.complete({ system: 'SYS', prompt: 'PROMPT' });
-  assert.equal(sent[0], 'SYS\n\nPROMPT');
+  await assert.rejects(
+    () => ai.complete({ system: p0.system, prompt: p0.prompt, cloudArgs: p0.cloud }),
+    /ollama down/
+  );
+  assert.equal(sent.filter((u) => u.includes('generativelanguage')).length, 0);
 });

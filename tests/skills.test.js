@@ -86,7 +86,7 @@ test('buildPersona labels the notes block to match the skill', () => {
 test('ask on a fresh install gives the model a general assistant, not a student one', async () => {
   const db = await LocalDb.open();
   let seen = null;
-  const ai = { complete: async (a) => { seen = a; return 'ok'; } };
+  const ai = { completeRouted: async (a) => { seen = a; return 'ok'; } };
   await P.ask({ db, ai, meFile: meFile() }, { prompt: 'Help me plan a trip to Pune' }, '2026-11-02');
   assert.ok(!/student|study/i.test(seen.system + seen.prompt), 'no student framing on a fresh install');
   assert.ok(!seen.prompt.includes('Courses:'));
@@ -97,7 +97,7 @@ test('ask turns the student framing on after an import, and off again with the s
   const db = await LocalDb.open();
   db.upsertCourse({ name: 'Quantum Computing', code: 'CS402' });
   const calls = [];
-  const ai = { complete: async (a) => { calls.push(a); return 'ok'; } };
+  const ai = { completeRouted: async (a) => { calls.push(a); return 'ok'; } };
   const f = meFile();
   await P.ask({ db, ai, meFile: f }, { prompt: 'What is due?' }, '2026-11-02');
   assert.match(calls[0].system, /study assistant/);

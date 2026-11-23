@@ -73,10 +73,16 @@ docs/IMPLEMENTATION_ROADMAP.md.
    paths gather live provider facts per request under bounded timeouts and
    route through the router; the screen path is forced local-only; a failed
    local chat with the cloud armed surfaces a per-request confirmation
-   (disclosing that Google receives the current prompt and system context
-   only, never history or screenshots); a decline is reported as the local
-   failure and nothing retries; asks are cancellable and every network call
-   is bounded; the web bridge routes the same way and fails closed.
+   whose disclosure matches the actual payload for that ask: minimized
+   (question, assistant rules, course/due-date context) with cloud_personal
+   off; full personal context (plus calendar entries, name, selected
+   memories, and activity patterns when learn_from_activity is on) with it
+   on; conversation history and screenshots are never sent in either mode.
+   The legacy ai.complete() path is local-only (review fix, 23 Nov 2026):
+   no key or setting can make it transmit. A decline is reported as the
+   local failure and nothing retries; asks are cancellable and every
+   network call is bounded; the web bridge routes the same way and fails
+   closed.
 5. Reusable step workflows - ABSENT (planned with the workspace UI, M8).
 6. Safe computer assistance (propose-then-confirm OS actions) - PLANNED as
    the Gate 2 agent foundation: typed tool registry, external policy engine,

@@ -278,17 +278,29 @@
 
     // What a cloud call would receive, for the per-request confirmation.
     // Matches exactly what chatGemini sends below.
-    function cloudPreview() {
-      return {
+    // What the user is told Google would receive MUST describe the exact
+    // payload this ask would send. Callers that know their prompt shape
+    // (personal.js) pass cloudDisclosure with the real category list;
+    // anything else gets the conservative generic one.
+    function resolveCloudDisclosure(arg) {
+      const generic = {
         provider: 'gemini',
         model: cloudModel,
-        receives: {
-          system_context: true,
-          current_prompt: true,
-          conversation_history: false,
-          screenshots_or_images: false,
-        },
+        prompt: 'full',
+        receives: ['the current prompt and system context exactly as passed'],
+        never_sent: ['conversation history', 'screenshots or images'],
         note: 'rate limits and possible charges may apply',
+      };
+      if (!arg || typeof arg !== 'object' || !Array.isArray(arg.receives) || !arg.receives.length) return generic;
+      return {
+        provider: arg.provider || 'gemini',
+        model: arg.model || cloudModel,
+        prompt: arg.prompt === 'minimized' ? 'minimized' : 'full',
+        receives: arg.receives.map(String),
+        never_sent: Array.isArray(arg.never_sent) && arg.never_sent.length
+          ? arg.never_sent.map(String)
+          : generic.never_sent,
+        note: arg.note || generic.note,
       };
     }
 
@@ -349,7 +361,7 @@
     // Local chat failed AFTER the router picked it (model vanished, Ollama
     // died mid-call). Reconsider the cloud through the same gates, with
     // local now honestly reported as unable to serve. Never on abort.
-    async function reconsiderCloud({ system, prompt, cloudArgs, task, privacyMode, cloudEnabled, cloudConsent, model, visionModel, signal, localError }) {
+    async function reconsiderCloud({ system, prompt, cloudArgs, task, privacyMode, cloudEnabled, cloudConsent, cloudDisclosure, model, visionModel, signal, localError }) {
       const { decision } = await routeTask(task, {
         privacyMode, cloudEnabled, cloudConsent, model, visionModel, signal,
         ollamaHealth: false, installedModels: [],
@@ -378,7 +390,7 @@
           && cloudEnabled && keyFor() && privacyMode !== 'local_only') {
         // Every other gate is open; consent for THIS request is the only
         // missing human step. Nothing has been sent anywhere.
-        return { needsCloudConsent: true, localError: String((localError && localError.message) || localError), cloud: cloudPreview() };
+        return { needsCloudConsent: true, localError: String((localError && localError.message) || localError), cloud: resolveCloudDisclosure(cloudDisclosure) };
       }
       throw localError; // the honest local failure
     }
@@ -392,6 +404,7 @@
         privacyMode = 'standard',
         cloudEnabled = cloudArmed,
         cloudConsent = false,
+        cloudDisclosure = null,
         signal = null,
       } = args || {};
 
@@ -404,7 +417,7 @@
           return await chatOllama({ system, prompt, images, history, onToken, model: decision.model, signal });
         } catch (err) {
           if (isAbort(err) || (signal && signal.aborted)) throw err;
-          return reconsiderCloud({ system, prompt, cloudArgs, task, privacyMode, cloudEnabled, cloudConsent, model, visionModel, signal, localError: err });
+          return reconsiderCloud({ system, prompt, cloudArgs, task, privacyMode, cloudEnabled, cloudConsent, cloudDisclosure, model, visionModel, signal, localError: err });
         }
       }
       if (decision.ok && decision.provider === 'gemini') {
@@ -436,30 +449,20 @@
         const localReason = probe.healthy
           ? (task === 'vision' ? 'no_vision_model_local' : 'no_local_model')
           : 'ollama_down';
-        return { needsCloudConsent: true, localError: localReason, cloud: cloudPreview() };
+        return { needsCloudConsent: true, localError: localReason, cloud: resolveCloudDisclosure(cloudDisclosure) };
       }
       throw refusalError(decision.reason);
     }
 
-    // Local first; cloud only when the user explicitly enabled cloud use
-    // AND a key exists, and the local call failed. Policy details in
-    // src/task-router.js. args.cloudArgs, when given, REPLACES system/
-    // prompt for the cloud call only. Callers that put personal context in
-    // the local prompt use it to send a minimal prompt to the cloud
-    // instead. Without it the cloud gets exactly what the local model got
-    // (unchanged behavior).
+    // Local-only legacy path. It predates the router and carries no
+    // per-request cloud consent, so it must NEVER transmit: with the key
+    // and cloud_enabled both present, a local failure stays a local
+    // failure. The routed path (completeRouted) is the only route to the
+    // cloud, and it requires the human per-request confirmation. Callers
+    // that legitimately need the cloud must migrate to it. (Review fix,
+    // 23 Nov 2026.)
     async function complete(args) {
-      try {
-        return await chatOllama(args);
-      } catch (err) {
-        if (cloudEnabled && keyFor()) {
-          // The local model name must never reach the cloud call: cloud has
-          // its own model setting, and an Ollama id is not a Gemini id.
-          const { cloudArgs, model, history, ...rest } = args || {};
-          return chatGemini(cloudArgs ? { ...rest, ...cloudArgs } : rest);
-        }
-        throw err;
-      }
+      return chatOllama(args);
     }
 
     return { status, hasModel, chat: chatOllama, chatGemini, complete, completeRouted, routeTask, probeLocal, listModels, modelCapabilities, testGeminiKey, localModel };

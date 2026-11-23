@@ -173,10 +173,45 @@ async function ask({ db, ai, meFile }, payload, todayIso, { onToken, model, sign
   // facts. cloudEnabled is read per request (settings can change between
   // asks), and cloudConsent must be true FOR THIS REQUEST: a saved key or
   // the settings flag alone never sends anything anywhere.
+  //
+  // Accurate per-request disclosure (review fix, 23 Nov 2026): the
+  // confirmation must describe what Google would ACTUALLY receive on the
+  // exact cloudArgs path this ask would take. With cloud_personal off,
+  // persona.cloud minimizes the cloud prompt to the context pack and the
+  // question. With cloud_personal on, persona.cloud is null, so the cloud
+  // call gets the full personal prompt: calendar, name, selected memories
+  // and (when learn_from_activity is on) activity patterns.
+  const cloudDisclosure = persona.cloud ? {
+    prompt: 'minimized',
+    receives: [
+      'your current question',
+      'the assistant rules and style settings',
+      'the course and due-date context pack',
+    ],
+    never_sent: [
+      'conversation history',
+      'your calendar entries',
+      'your name and saved memories',
+      'your activity patterns',
+      'screenshots or images',
+    ],
+  } : {
+    prompt: 'full',
+    receives: [
+      'your current question',
+      'the assistant rules and style settings',
+      'the course and due-date context pack',
+      'your next 7 days of calendar entries',
+      'your name and the selected saved memories',
+      ...(settings.learn_from_activity ? ['your activity patterns'] : []),
+    ],
+    never_sent: ['conversation history', 'screenshots or images'],
+  };
   const routedArgs = {
     system: persona.system,
     prompt: persona.prompt,
     cloudArgs: persona.cloud || undefined,
+    cloudDisclosure,
     onToken, model,
     history: history && history.length ? history : undefined,
     task: 'chat',
@@ -186,9 +221,7 @@ async function ask({ db, ai, meFile }, payload, todayIso, { onToken, model, sign
     signal: signal || null,
   };
   try {
-    const answer = (typeof ai.completeRouted === 'function')
-      ? await ai.completeRouted(routedArgs)
-      : await ai.complete(routedArgs);
+    const answer = await ai.completeRouted(routedArgs);
     if (answer && answer.needsCloudConsent) {
       // Per-request cloud gate. Nothing has been sent anywhere yet; the
       // renderer shows what Google would receive. A decline simply never

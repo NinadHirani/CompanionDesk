@@ -59,13 +59,16 @@ function cloudRoutes() {
   ];
 }
 
-test('complete falls back to the cloud only when enabled AND a key exists', async () => {
-  const ai = createAi({
-    geminiKey: 'test-key',
-    cloudEnabled: true,
-    fetchImpl: mockFetch(cloudRoutes()),
-  });
-  assert.equal(await ai.complete({ prompt: 'q' }), 'cloud answer');
+test('complete is local-only: even with a key and cloud enabled it never calls the cloud', async () => {
+  let cloudCalled = 0;
+  const routes = cloudRoutes();
+  const counting = async (url, opts) => {
+    if (String(url).includes('generativelanguage')) cloudCalled += 1;
+    return routes.find(([m]) => String(url).includes(m))[1](opts || {});
+  };
+  const ai = createAi({ geminiKey: 'test-key', cloudEnabled: true, fetchImpl: counting });
+  await assert.rejects(() => ai.complete({ prompt: 'q' }));
+  assert.equal(cloudCalled, 0); // the legacy path carries no consent, so it never transmits
 });
 
 test('a key alone routes nothing: cloudEnabled defaults false', async () => {

@@ -107,10 +107,17 @@ claims to literally experience emotions.
   cloud model's capability from the registry. The screen path forces
   local-only mode, so screenshots never leave the device. When the local
   call fails and the router finds the cloud eligible, the app asks once,
-  per request, and states exactly what Google would receive (the current
-  prompt and system context, never history or screenshots) before anything
-  is sent; a decline keeps the question local and is reported as the local
-  failure, and nothing retries. Asks are cancellable and every network call
+  per request, and states exactly what that ask would send: with
+  cloud_personal off, the minimized cloud prompt (question, assistant rules,
+  course/due-date context) with calendar, name, memories and activity
+  patterns listed as never sent; with cloud_personal on, the full personal
+  prompt, with calendar entries, name, selected memories and (when
+  learn_from_activity is on) activity patterns named as categories that may
+  be sent. Conversation history and screenshots are never sent in either
+  mode. A decline keeps the question local and is reported as the local
+  failure, and nothing retries. The legacy `complete()` path is local-only,
+  so no caller can bypass the router and consent (review fix, 23 Nov 2026).
+  Asks are cancellable and every network call
   has a bounded timeout; the web/mobile bridge routes identically and fails
   closed (it holds no key, so the cloud cannot arm there).
 - Local conversation history in the ask view: conversations with rename and
@@ -139,7 +146,7 @@ claims to literally experience emotions.
 - Update policy that never auto-installs unsigned builds; update modes
   disabled/auto/manual-download (`src/update-policy.js`, `src/updater.js`).
 - Health check and onboarding interview (`src/health.js`, `src/onboarding.js`).
-- 345 passing unit/integration tests (258 baseline; model selection +18, conversation history +17, optional key storage +13, M1 provider registry/task router/cloud gate +25, M1 per-ask routing integration +14); three main-branch CI workflows green
+- 349 passing unit/integration tests (258 baseline; model selection +18, conversation history +17, optional key storage +13, M1 provider registry/task router/cloud gate +25, M1 per-ask routing integration +18, M1 review fixes +18); three main-branch CI workflows green
   (CI, CI macOS + Linux, Android APK; verified this session: only these
   three have ever run on main);
   public Android debug-APK preview release.

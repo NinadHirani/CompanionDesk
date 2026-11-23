@@ -75,7 +75,7 @@ test('ask includes imported calendar events in what the local model sees', async
   const meFile = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'companiondesk-cal-')), 'me.md');
   C.importCalendar(db, { name: 'term.ics', text: ICS }, 'now');
   let seen = null;
-  const ai = { complete: async (a) => { seen = a; return 'ok'; } };
+  const ai = { completeRouted: async (a) => { seen = a; return 'ok'; } };
   await P.ask({ db, ai, meFile }, { prompt: 'What is on this week?' }, '2026-11-02');
   assert.match(seen.prompt, /2026-11-04 09:30-10:45 Quantum lecture \(Hall 4\)/);
   assert.ok(!(seen.cloudArgs.system + seen.cloudArgs.prompt).includes('Quantum lecture'));

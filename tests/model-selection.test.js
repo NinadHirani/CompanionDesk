@@ -101,20 +101,19 @@ test('ai.modelCapabilities reports the capability list, or null when unreadable'
   assert.equal(await none.modelCapabilities('gemma3:4b'), null);
 });
 
-test('ai.complete keeps the local model name away from the cloud fallback', async () => {
-  let cloudModel = null;
+test('ai.complete is local-only: the cloud is never called, so the local model name cannot leak', async () => {
+  let cloudCalled = 0;
   const ai = createAi({
     geminiKey: 'k',
     cloudEnabled: true,
     fetchImpl: mockFetch([
       ['/api/chat', () => ({ ok: false, status: 500 })],
-      [(url) => { if (url.includes('generativelanguage')) { cloudModel = url; return true; } return false; },
+      [(url) => { if (url.includes('generativelanguage')) { cloudCalled += 1; return true; } return false; },
        () => ({ ok: true, json: async () => ({ candidates: [{ content: { parts: [{ text: 'ok' }] } }] }) })],
     ]),
   });
-  const out = await ai.complete({ prompt: 'hi', model: 'llama3.2:latest' });
-  assert.equal(out, 'ok');
-  assert.ok(!cloudModel.includes('llama3.2'), 'the Ollama model name must not reach the Gemini URL');
+  await assert.rejects(() => ai.complete({ prompt: 'hi', model: 'llama3.2:latest' }), /ollama_http_500/);
+  assert.equal(cloudCalled, 0);
 });
 
 // ---- end-to-end resolution ---------------------------------------------------

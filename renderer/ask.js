@@ -90,7 +90,17 @@
       // question is never sent, and nothing retries on its own.
       btn.disabled = false;
       entry.appendChild(el('p', `The local model could not answer this one (${res.local_error || 'local failure'}). Send it to Google ${res.cloud && res.cloud.provider === 'gemini' ? 'Gemini' : 'Gemini'}?`, 'hint'));
-      entry.appendChild(el('p', 'Google receives the question and the assistant instructions only. Your conversation history and any screenshots are never sent. Rate limits and possible charges may apply.', 'hint'));
+      // The disclosure must match the actual payload for THIS ask
+      // (minimized vs full personal context, per the app's settings).
+      const c = res.cloud || {};
+      const receives = Array.isArray(c.receives) && c.receives.length
+        ? c.receives
+        : ['the current prompt and system context'];
+      const never = Array.isArray(c.never_sent) && c.never_sent.length
+        ? c.never_sent
+        : ['conversation history', 'screenshots or images'];
+      const note = c.note ? c.note.charAt(0).toUpperCase() + c.note.slice(1) + '.' : 'Rate limits and possible charges may apply.';
+      entry.appendChild(el('p', `Google would receive (may include): ${receives.join('; ')}. Never sent: ${never.join(', ')}. ${note}`, 'hint'));
       const row = el('div', null, 'row');
       const sendBtn = el('button', 'Send to Google', 'primary');
       const stayBtn = el('button', 'No, stay local', '');

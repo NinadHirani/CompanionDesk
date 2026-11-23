@@ -55,9 +55,12 @@ cloud routes need the task to be cloud-eligible, privacy mode to allow it,
 explicit cloud_enabled in settings (default false), explicit consent, a key,
 a provider known healthy (unknown health refuses), and a verified cloud
 capability; a saved key alone routes nothing; uninstalled models are never
-auto-downloaded. `src/ai.js` now carries the explicit
-`cloudEnabled` gate (default false): the cloud fallback runs only when
-enabled AND a key exists, replacing the implicit key-presence fallback.
+auto-downloaded. `src/ai.js` carries the explicit
+`cloudEnabled` gate (default false), and since the 23 Nov 2026 review fix
+the legacy `complete()` path is local-only: it predates the router and
+carries no per-request consent, so it never transmits even with a key and
+cloud_enabled present. The routed path (`completeRouted`) is the only route
+to the cloud.
 SECOND SLICE DONE 23 Nov 2026: deeper per-ask routing integration. The ask
 and screen paths now route through the router with LIVE facts gathered per
 request, under bounded timeouts (`src/ai.js` `completeRouted`/`routeTask`):
@@ -65,9 +68,17 @@ Ollama health and the installed-model list from one `/api/tags` probe, vision
 capabilities from `/api/show`, the cloud model's capability from the
 registry. The screen path forces privacy mode `local_only`, so a screenshot
 can never reach the cloud. When the local call fails and the router says the
-cloud may serve the ask, the UI shows a per-request confirmation naming what
-Google would receive (the current prompt and system context only, never
-history or screenshots, with rate limits and possible charges); nothing is
+cloud may serve the ask, the UI shows a per-request confirmation whose
+disclosure describes the EXACT payload that ask would send (review fix,
+23 Nov 2026): with `cloud_personal` off the cloud prompt is minimized, so
+the confirmation names the question, the assistant rules and the course/
+due-date context pack and lists calendar, name, memories, activity patterns
+as never sent; with `cloud_personal` on the cloud call receives the full
+personal prompt, so the disclosure names calendar entries, the name and
+selected memories, and activity patterns (when learn_from_activity is on)
+as categories that may be sent. Conversation history and screenshots are
+never sent in either mode, and the note about rate limits and possible
+charges is always shown. Nothing is
 sent until the user confirms, a decline leaves the question local and is
 reported as the local failure, and nothing retries after a decline. Chat,
 cloud and probe calls are cancellable (per-request abort reaches the network
