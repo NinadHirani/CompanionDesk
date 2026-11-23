@@ -72,6 +72,12 @@ claims to literally experience emotions.
   pull with progress and cancel, disk check (`src/ollama-setup.js`).
 - Local About-me memory with single-bullet edits and propose-then-confirm
   memory cards (`src/memory.js`, `src/proposals.js`, `memory_proposals` table).
+- User-configurable model selection: the chat and screen-vision models are
+  separate settings (`ai_model_local`, `ai_model_vision`), offered only from
+  models Ollama already has installed (nothing is pulled from settings), with
+  validated ids and a safe fallback to `llama3.2:latest` / `gemma3:4b` when a
+  chosen model is absent; the cloud fallback never receives a local model
+  name (`src/model-selection.js`, `src/settings.js`).
 - Push-to-talk voice input via a fixed-path whisper.cpp allowlist, English
   models only (`src/voice.js`, `src/whisper.js`, `src/vad.js`).
 - On-demand single-window screen Q&A with a local vision model
@@ -86,7 +92,7 @@ claims to literally experience emotions.
 - Update policy that never auto-installs unsigned builds; update modes
   disabled/auto/manual-download (`src/update-policy.js`, `src/updater.js`).
 - Health check and onboarding interview (`src/health.js`, `src/onboarding.js`).
-- 258 passing unit/integration tests; three main-branch CI workflows green
+- 276 passing unit/integration tests (was 258; model selection added 18); three main-branch CI workflows green
   (CI, CI macOS + Linux, Android APK; verified this session: only these
   three have ever run on main);
   public Android debug-APK preview release.

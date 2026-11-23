@@ -9,6 +9,7 @@ const IPC_CHANNELS = Object.freeze([
   'state:get',
   'syllabus:import',
   'ai:ask',
+  'ai:models',
   'brief:today',
   'assignment:setDone',
   'settings:get',

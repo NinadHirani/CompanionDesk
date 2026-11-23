@@ -235,11 +235,28 @@
     const prompt = payload && typeof payload.prompt === 'string' ? payload.prompt.trim() : '';
     if (!prompt) return { ok: false, error: 'empty_prompt' };
     try {
-      const answer = await ai.complete({ system: composeVoice(), prompt: buildContextPack() + '\n\nQuestion: ' + prompt });
+      const settings = CompanionSettings.normalizeSettings(db.allSettings());
+      const installed = await ai.listModels();
+      const chat = installed
+        ? CompanionModelSelection.resolveChatModel({ configured: settings.ai_model_local, fallback: ai.localModel, installed: installed.map((m) => m.name) })
+        : { model: ai.localModel };
+      const answer = await ai.complete({ system: composeVoice(), prompt: buildContextPack() + '\n\nQuestion: ' + prompt, model: chat.model });
       return { ok: true, answer };
     } catch (err) {
       return { ok: false, error: String((err && err.message) || err) };
     }
+  }
+
+  // Which installed model answers; mirrors the desktop ai:models handler.
+  async function ai_models() {
+    await readyPromise;
+    const settings = CompanionSettings.normalizeSettings(db.allSettings());
+    const res = await CompanionModelSelection.resolveModelSelection({
+      settings, ai,
+      chatFallback: ai.localModel,
+      visionFallback: CompanionModelSelection.DEFAULT_VISION_MODEL,
+    });
+    return { ok: true, ...res, defaults: { chat: ai.localModel, vision: CompanionModelSelection.DEFAULT_VISION_MODEL } };
   }
 
   function localNowIso() {
@@ -432,7 +449,7 @@
 
   window.companiondesk = {
     bridgeMode: 'web',
-    state_get, syllabus_import, ai_ask,
+    state_get, syllabus_import, ai_ask, ai_models,
     brief_today, assignment_setDone,
     settings_get, settings_save,
     grades_get, grades_setScore, grades_setTarget,

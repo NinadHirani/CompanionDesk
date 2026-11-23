@@ -138,7 +138,7 @@ function removeDeadline({ db }, payload) {
 
 // ---- the personalized answer -----------------------------------------------------------
 
-async function ask({ db, ai, meFile }, payload, todayIso, { onToken } = {}) {
+async function ask({ db, ai, meFile }, payload, todayIso, { onToken, model } = {}) {
   const question = payload && typeof payload.prompt === 'string' ? payload.prompt.trim() : '';
   if (!question) return { ok: false, error: 'empty_prompt' };
   const settings = getSettings(db);
@@ -159,7 +159,7 @@ async function ask({ db, ai, meFile }, payload, todayIso, { onToken } = {}) {
     question,
   });
   try {
-    const answer = await ai.complete({ system: persona.system, prompt: persona.prompt, cloudArgs: persona.cloud || undefined, onToken });
+    const answer = await ai.complete({ system: persona.system, prompt: persona.prompt, cloudArgs: persona.cloud || undefined, onToken, model });
     return { ok: true, answer };
   } catch (err) {
     return { ok: false, error: String((err && err.message) || err) };

@@ -20,6 +20,7 @@ const { collectHealth } = require('./health');
 const path = require('path');
 const LocalDb = require('./db');
 const { createAi } = require('./ai');
+const { resolveModelSelection } = require('./model-selection');
 const OllamaSetup = require('./ollama-setup');
 const { ingestSyllabus } = require('./ingest');
 const { humanizeImportError } = require('./import-errors');
@@ -69,6 +70,18 @@ function savedHotkey() {
 
 function ctx() {
   return { db, ai, meFile: meFile() };
+}
+
+// Which models actually answer: the user's saved choice when it is still
+// installed, the built-in default otherwise. Nothing is pulled from here;
+// the settings UI only ever offers models Ollama reports as installed.
+async function modelSelection() {
+  return resolveModelSelection({
+    settings: P.getSettings(db),
+    ai,
+    chatFallback: ai.localModel,
+    visionFallback: SCREEN.DEFAULT_VISION_MODEL,
+  });
 }
 
 async function init() {
@@ -165,7 +178,16 @@ function registerIpc() {
 
   ipcMain.handle('brief:today', async () => getBrief(db, todayIso()));
   ipcMain.handle('assignment:setDone', async (_e, payload) => setDone(db, payload, localNowIso()));
-  ipcMain.handle('ai:ask', async (_e, payload) => P.ask(ctx(), payload, todayIso()));
+  ipcMain.handle('ai:ask', async (_e, payload) => {
+    const sel = await modelSelection();
+    return P.ask(ctx(), payload, todayIso(), { model: sel.chat.model });
+  });
+
+  ipcMain.handle('ai:models', async () => ({
+    ok: true,
+    ...(await modelSelection()),
+    defaults: { chat: ai.localModel, vision: SCREEN.DEFAULT_VISION_MODEL },
+  }));
 
   ipcMain.handle('settings:get', async () => ({ ok: true, settings: P.getSettings(db) }));
   ipcMain.handle('settings:save', async (_e, payload) => P.saveSettings(db, payload));
@@ -205,8 +227,10 @@ function registerIpc() {
   ipcMain.handle('calendar:upcoming', async (_e, payload) => CAL.upcoming(db, payload, todayIso()));
   ipcMain.handle('calendar:remove', async (_e, payload) => CAL.removeCalendar(db, payload));
 
-  ipcMain.handle('overlay:ask', async (_e, payload) =>
-    P.ask(ctx(), payload, todayIso(), { onToken: (t) => overlay.send('overlay:token', t) }));
+  ipcMain.handle('overlay:ask', async (_e, payload) => {
+    const sel = await modelSelection();
+    return P.ask(ctx(), payload, todayIso(), { model: sel.chat.model, onToken: (t) => overlay.send('overlay:token', t) });
+  });
   ipcMain.handle('overlay:show', async () => { overlay.show(); return { ok: true }; });
   ipcMain.handle('overlay:hide', async () => { overlay.hide(); return { ok: true }; });
   ipcMain.handle('overlay:status', async () => ({ ok: true, hotkey: savedHotkey(), registered: overlay.getHotkey() !== null }));
@@ -224,20 +248,20 @@ function registerIpc() {
     voice.transcribe(payload, { modelsDir: modelsDir(), language: process.env.WHISPER_LANG || 'en' }));
 
   ipcMain.handle('screen:status', async () => {
-    const model = SCREEN.visionModel();
-    return { ok: true, model, available: await ai.hasModel(model) };
+    const sel = await modelSelection();
+    return { ok: true, model: sel.vision.model, available: await ai.hasModel(sel.vision.model) };
   });
   ipcMain.handle('screen:windows', async () => listWindows({ desktopCapturer, systemPreferences }));
   ipcMain.handle('screen:ask', async (_e, payload) =>
     askAboutScreen(ctx(), payload, todayIso(), {
-      visionModel: SCREEN.visionModel(),
+      visionModel: (await modelSelection()).vision.model,
       capture: (windowId) => captureWindow({ desktopCapturer, systemPreferences, windowId }),
       onToken: (t) => overlay.send('overlay:token', t),
     }));
 
   ipcMain.handle('health:check', async () =>
     collectHealth({
-      ai, voice, modelsDir: modelsDir(), visionModel: SCREEN.visionModel(), systemPreferences,
+      ai, voice, modelsDir: modelsDir(), visionModel: (await modelSelection()).vision.model, systemPreferences,
       hotkey: savedHotkey(), hotkeyRegistered: overlay.getHotkey() !== null, platform: process.platform,
     }));
   ipcMain.handle('app:docs', async () => readDocs(path.join(__dirname, '..')));

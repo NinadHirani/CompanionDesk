@@ -110,6 +110,8 @@
     learn: document.getElementById('s-learn'),
     suggest: document.getElementById('s-suggest'),
     cloud: document.getElementById('s-cloud'),
+    aimodel: document.getElementById('s-aimodel'),
+    visionmodel: document.getElementById('s-visionmodel'),
   };
 
   function fillSettings(s) {
@@ -122,6 +124,48 @@
     F.learn.checked = s.learn_from_activity;
     F.suggest.checked = s.suggest_memories;
     F.cloud.checked = s.cloud_personal;
+    F.aimodel.value = s.ai_model_local || '';
+    F.visionmodel.value = s.ai_model_vision || '';
+  }
+
+  // Model choices come only from what Ollama already has installed; nothing
+  // is pulled from here. A saved model that has disappeared resets to Default.
+  async function fillModels(s) {
+    const res = await api.ai_models();
+    const note = document.getElementById('models-note');
+    if (!res.ok || !res.ollama) {
+      F.aimodel.innerHTML = '<option value="">Default</option>';
+      F.visionmodel.innerHTML = '<option value="">Default</option>';
+      if (note) note.textContent = res.ok ? 'Ollama is not running right now; the default models are used.' : '';
+      return;
+    }
+    const addDefault = (sel, label) => {
+      sel.innerHTML = '';
+      const o = document.createElement('option');
+      o.value = '';
+      o.textContent = `Default (${label})`;
+      sel.appendChild(o);
+    };
+    addDefault(F.aimodel, res.defaults.chat);
+    for (const name of res.installed || []) {
+      const o = document.createElement('option');
+      o.value = name;
+      o.textContent = name;
+      F.aimodel.appendChild(o);
+    }
+    F.aimodel.value = s.ai_model_local || '';
+    if (F.aimodel.selectedIndex === -1) F.aimodel.value = '';
+    addDefault(F.visionmodel, res.defaults.vision);
+    for (const name of res.installed || []) {
+      const o = document.createElement('option');
+      o.value = name;
+      const st = res.caps && res.caps[name];
+      o.textContent = name + (Array.isArray(st) ? (st.includes('vision') ? '' : ' (not a vision model)') : ' (vision unverified)');
+      F.visionmodel.appendChild(o);
+    }
+    F.visionmodel.value = s.ai_model_vision || '';
+    if (F.visionmodel.selectedIndex === -1) F.visionmodel.value = '';
+    if (note) note.textContent = '';
   }
 
   document.getElementById('settings-save').addEventListener('click', async () => {
@@ -136,6 +180,8 @@
       learn_from_activity: F.learn.checked,
       suggest_memories: F.suggest.checked,
       cloud_personal: F.cloud.checked,
+      ai_model_local: F.aimodel.value,
+      ai_model_vision: F.visionmodel.value,
     });
     if (res.ok) { fillSettings(res.settings); msg.textContent = 'Saved.'; msg.className = 'hint'; UI.today.refresh(); }
     else { msg.textContent = UI.friendlyError(res.error); msg.className = 'hint error'; }
@@ -224,7 +270,7 @@
     const [mem, pat, set] = await Promise.all([api.memory_list(), api.patterns_get(), api.settings_get()]);
     if (mem.ok) { renderItems(mem); renderProposals(mem.proposals); }
     if (pat.ok) renderPatterns(pat);
-    if (set.ok) fillSettings(set.settings);
+    if (set.ok) { fillSettings(set.settings); fillModels(set.settings); }
   }
 
   UI.about = { renderProposals, refreshProposals, refresh };

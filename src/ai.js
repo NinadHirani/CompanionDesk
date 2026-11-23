@@ -134,6 +134,35 @@
       return text;
     }
 
+    // Models actually installed right now. null means Ollama did not answer.
+    async function listModels() {
+      try {
+        const res = await fetchImpl(`${ollamaUrl}/api/tags`, { signal: AbortSignal.timeout(STATUS_TIMEOUT_MS) });
+        if (!res.ok) return null;
+        return (await res.json()).models || [];
+      } catch {
+        return null;
+      }
+    }
+
+    // What a model can do, per Ollama's /api/show. null when unreadable
+    // (the model is absent, or Ollama is too old to report capabilities).
+    async function modelCapabilities(name) {
+      try {
+        const res = await fetchImpl(`${ollamaUrl}/api/show`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ model: name }),
+          signal: AbortSignal.timeout(STATUS_TIMEOUT_MS),
+        });
+        if (!res.ok) return null;
+        const data = await res.json();
+        return Array.isArray(data.capabilities) ? data.capabilities : null;
+      } catch {
+        return null;
+      }
+    }
+
     // Local first; cloud only when a key exists and the local call failed.
     // args.cloudArgs, when given, REPLACES system/prompt for the cloud call
     // only. Callers that put personal context in the local prompt use it to
@@ -144,14 +173,16 @@
         return await chatOllama(args);
       } catch (err) {
         if (geminiKey) {
-          const { cloudArgs, ...rest } = args || {};
+          // The local model name must never reach the cloud call: cloud has
+          // its own model setting, and an Ollama id is not a Gemini id.
+          const { cloudArgs, model, ...rest } = args || {};
           return chatGemini(cloudArgs ? { ...rest, ...cloudArgs } : rest);
         }
         throw err;
       }
     }
 
-    return { status, hasModel, chat: chatOllama, chatGemini, complete };
+    return { status, hasModel, chat: chatOllama, chatGemini, complete, listModels, modelCapabilities, localModel };
   }
 
   return createAi;

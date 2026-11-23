@@ -21,16 +21,19 @@ OnePlus 12R (Android) and MacBook Air M1 (macOS) are validation targets, not
 validated results. Nothing has been tested on them yet. Windows and Linux are
 CI-verified only until real-machine testing happens.
 
-## M0 - Product foundation (this PR, docs only)
+## M0 - Product foundation
 
-Scope: PRODUCT_BLUEPRINT.md, IMPLEMENTATION_ROADMAP.md, RISK_REGISTER.md,
-ARCHITECTURE_DECISIONS.md. Then, in later M0 PRs: refresh the stale
-`FEATURE_GAP.md` and `COMPANIONDESK_ROADMAP.md`; add the missing Gemini key
-entry UI and settings (finishing the currently dormant cloud fallback,
-`src/main.js:76`, `src/web/bridge.js:25,428`); add conversation history to
-the ask flow; make the local model a setting instead of a constant.
-Acceptance: existing 258 tests stay green; new tests for the key flow and
-history; no existing feature changes behavior.
+Done: the docs baseline (PR #10, main 2d349c5) and the stale-docs refresh
+(`FEATURE_GAP.md`, `COMPANIONDESK_ROADMAP.md`, main c351aa3). Done 23 Nov
+2026: user-configurable local model selection — separate `ai_model_local` /
+`ai_model_vision` settings, selection only from models Ollama reports as
+installed (no pull from settings), validated ids, safe fallback to the
+defaults, and the cloud fallback never receives a local model name
+(`src/model-selection.js`). Remaining M0: the Gemini key entry UI behind
+secure storage (Electron safeStorage / OS keychain; web and Android
+constraints designed first, never plaintext) and conversation history in the
+ask flow. Acceptance: the suite stays green; no existing feature changes
+behavior.
 
 ## M1 - Intelligence core (2-3 wks, estimate)
 

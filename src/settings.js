@@ -16,6 +16,8 @@ const DEFAULTS = Object.freeze({
   suggest_memories: true, // offer "remember this?" cards after a question
   cloud_personal: false, // send personal context to the cloud fallback (off)
   onboarding_done: false,
+  ai_model_local: '', // Ollama chat model; '' = the built-in default
+  ai_model_vision: '', // Ollama vision model for screen questions; '' = default
 });
 
 const ENUMS = Object.freeze({
@@ -25,6 +27,15 @@ const ENUMS = Object.freeze({
 });
 const BOOLEANS = ['learn_from_activity', 'suggest_memories', 'cloud_personal', 'onboarding_done'];
 const TEXT_MAX = Object.freeze({ user_name: 40, assistant_name: 40, language: 30 });
+
+// Ollama model ids, e.g. "llama3.2:latest" or "hf.co/org/model:Q4_K_M":
+// letters, digits, dots, dashes and slashes, then one optional :tag.
+// Whitespace and anything else are refused. '' means "use the default".
+const MODEL_KEYS = Object.freeze(['ai_model_local', 'ai_model_vision']);
+const MODEL_RE = /^[A-Za-z0-9][A-Za-z0-9._/-]{0,99}(:[A-Za-z0-9._-]{1,64})?$/;
+function isValidModelId(value) {
+  return typeof value === 'string' && MODEL_RE.test(value);
+}
 
 // One line, no control characters, collapsed spaces, capped. Returns '' when
 // nothing usable is left.
@@ -46,6 +57,9 @@ function normalizeSettings(raw = {}) {
   for (const key of BOOLEANS) {
     if (raw[key] === 'true') out[key] = true;
     else if (raw[key] === 'false') out[key] = false;
+  }
+  for (const key of MODEL_KEYS) {
+    if (typeof raw[key] === 'string' && isValidModelId(raw[key])) out[key] = raw[key];
   }
   for (const [key, max] of Object.entries(TEXT_MAX)) {
     if (raw[key] === undefined) continue;
@@ -71,6 +85,13 @@ function validatePatch(patch) {
     } else if (BOOLEANS.includes(key)) {
       if (typeof value === 'boolean') clean[key] = String(value);
       else errors.push(`invalid_value:${key}`);
+    } else if (MODEL_KEYS.includes(key)) {
+      if (typeof value !== 'string') errors.push(`invalid_value:${key}`);
+      else {
+        const v = String(value).trim();
+        if (v === '' || isValidModelId(v)) clean[key] = v;
+        else errors.push(`invalid_value:${key}`);
+      }
     } else {
       const v = cleanLine(value, TEXT_MAX[key]);
       if (typeof value !== 'string') errors.push(`invalid_value:${key}`);
@@ -81,4 +102,4 @@ function validatePatch(patch) {
   return { ok: errors.length === 0, clean, errors };
 }
 
-module.exports = { DEFAULTS, ENUMS, normalizeSettings, validatePatch, cleanLine };
+module.exports = { DEFAULTS, ENUMS, normalizeSettings, validatePatch, cleanLine, isValidModelId };
