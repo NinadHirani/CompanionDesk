@@ -34,7 +34,7 @@
     unsupported: 'Cloud AI setup is not available in this build.',
     invalid_key_format: 'That does not look like a Gemini API key. Keys start with AIza.',
     missing_key: 'Paste a key first.',
-    encryption_unavailable: 'This computer cannot encrypt the key (no OS credential vault), so nothing was saved and the cloud stays off.',
+    encryption_unavailable: 'This computer cannot encrypt the key securely (no OS credential vault; on Linux a real secret service such as GNOME Keyring or KWallet is required), so nothing was saved and the cloud stays off.',
     key_file_write_failed: 'The key file could not be written. Check the app folder permissions.',
     key_file_remove_failed: 'The key file could not be removed. Check the app folder permissions.',
     gemini_network_error: 'Could not reach Google to check the key. Check your connection and try again.',

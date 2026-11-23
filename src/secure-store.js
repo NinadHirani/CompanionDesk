@@ -22,10 +22,28 @@ function normalizeKey(value) {
   return { ok: true, key };
 }
 
-function createSecureStore({ safeStorage, fs = require('fs'), filePath, log = () => {} } = {}) {
+// Linux backends Electron's safeStorage considers secure. 'basic_text'
+// encrypts with a HARDCODED plaintext password (no real vault), and
+// getSelectedStorageBackend() reports 'unknown' when it cannot identify a
+// backend; Electron's own docs treat both as not secure, so we fail closed
+// on them even when isEncryptionAvailable() says yes.
+const SECURE_LINUX_BACKENDS = new Set(['gnome_libsecret', 'kwallet', 'kwallet5', 'kwallet6']);
+
+function createSecureStore({ safeStorage, fs = require('fs'), filePath, log = () => {}, platform = process.platform } = {}) {
   function available() {
     try {
-      return Boolean(safeStorage && typeof safeStorage.isEncryptionAvailable === 'function' && safeStorage.isEncryptionAvailable());
+      if (!safeStorage || typeof safeStorage.isEncryptionAvailable !== 'function' || !safeStorage.isEncryptionAvailable()) {
+        return false;
+      }
+      if (platform !== 'linux') return true; // macOS Keychain / Windows DPAPI
+      // Linux: only a real OS secret service counts. No backend query API
+      // (very old Electron) also fails closed rather than trusting the
+      // optimistic default.
+      if (typeof safeStorage.getSelectedStorageBackend !== 'function') return false;
+      const backend = safeStorage.getSelectedStorageBackend();
+      const ok = SECURE_LINUX_BACKENDS.has(backend);
+      if (!ok) log(`secure-store: linux backend ${String(backend)} is not a secure vault; key not saved`);
+      return ok;
     } catch {
       return false;
     }

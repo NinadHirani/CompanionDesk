@@ -54,8 +54,10 @@ docs/IMPLEMENTATION_ROADMAP.md.
 
 1. Gemini key-entry UI - DONE 23 Nov 2026 (encrypted-at-rest via safeStorage,
    masked status, fail-closed, explicit opt-in wording; src/secure-store.js).
-   Android/web key setup is unsupported by design until a secure platform
-   vault adapter exists; no insecure fallback.
+   On Linux only real secret services are accepted: the basic_text and
+   unknown safeStorage backends fail closed, as does a missing backend query
+   API. Android/web key setup is unsupported by design until a secure
+   platform vault adapter exists; no insecure fallback.
 2. Conversation history in the ask flow - DONE 23 Nov 2026 (local-only,
    rename, confirmed delete; src/chat-history.js).
 3. Model-as-setting instead of hardcoded constants - DONE 23 Nov 2026

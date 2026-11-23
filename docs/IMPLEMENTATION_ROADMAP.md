@@ -37,7 +37,9 @@ single-shot behavior (`src/chat-history.js`). Done 23 Nov 2026: the
 optional Gemini key behind secure storage — Electron safeStorage in the OS
 credential vault, 0600 ciphertext file under userData, main-process-only
 decryption via a lazy key getter, header-based key transport (never a URL),
-masked status across IPC, fail-closed when OS encryption is unavailable,
+masked status across IPC, fail-closed when OS encryption is unavailable or
+(on Linux) the safeStorage backend is not a real secret service (basic_text,
+unknown, or no backend query API all fail closed),
 explicit save/test/remove UI with clear opt-in wording, and web/Android key
 setup reported unsupported instead of insecure fallback
 (`src/secure-store.js`). M0 is COMPLETE. Acceptance: the suite stays green;

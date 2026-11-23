@@ -27,8 +27,12 @@ function fakeFs() {
     files, calls,
   };
 }
-function fakeSafeStorage({ available = true, encryptThrows = false } = {}) {
+function fakeSafeStorage({ available = true, encryptThrows = false, backend = 'gnome_libsecret', noBackendApi = false } = {}) {
   return {
+    // A Linux-decision backend, as Electron reports it via
+    // safeStorage.getSelectedStorageBackend(). Omitted entirely for the
+    // "API absent" case.
+    ...(noBackendApi ? {} : { getSelectedStorageBackend: () => backend }),
     isEncryptionAvailable: () => available,
     // A sentinel models a real vault: undecryptable bytes throw.
     encryptString: (s) => { if (encryptThrows) throw new Error('boom'); return Buffer.from('enc:' + String(s).split('').reverse().join('')); },
@@ -115,6 +119,50 @@ test('removeKey clears the key and tolerates a missing file', () => {
   assert.equal(res.configured, false);
   assert.equal(store.readKey(), null);
   assert.equal(store.removeKey().ok, true);
+});
+
+// ---- Linux: only a real secret service counts ------------------------------------
+
+test('linux: basic_text and unknown backends fail closed even when availability says yes', () => {
+  for (const backend of ['basic_text', 'unknown']) {
+    const f = fakeFs();
+    const store = createSecureStore({ safeStorage: fakeSafeStorage({ backend }), fs: f, filePath: PATH_, platform: 'linux' });
+    assert.deepEqual(store.status(), { supported: true, encryptionAvailable: false, configured: false });
+    assert.deepEqual(store.saveKey(KEY), { ok: false, error: 'encryption_unavailable' });
+    assert.equal(f.files.size, 0);
+    assert.equal(store.readKey(), null);
+  }
+});
+
+test('linux: real secret services (gnome_libsecret, kwallet, kwallet5, kwallet6) work', () => {
+  for (const backend of ['gnome_libsecret', 'kwallet', 'kwallet5', 'kwallet6']) {
+    const f = fakeFs();
+    const store = createSecureStore({ safeStorage: fakeSafeStorage({ backend }), fs: f, filePath: PATH_, platform: 'linux' });
+    assert.equal(store.status().encryptionAvailable, true);
+    assert.equal(store.saveKey(KEY).ok, true);
+    assert.equal(store.readKey(), KEY);
+  }
+});
+
+test('linux: a safeStorage without the backend query API fails closed', () => {
+  const f = fakeFs();
+  const store = createSecureStore({ safeStorage: fakeSafeStorage({ noBackendApi: true }), fs: f, filePath: PATH_, platform: 'linux' });
+  assert.equal(store.status().encryptionAvailable, false);
+  assert.equal(store.saveKey(KEY).ok, false);
+  assert.equal(f.files.size, 0);
+});
+
+test('non-linux: OS provider availability decides; a Linux-only backend label is irrelevant', () => {
+  for (const platform of ['darwin', 'win32']) {
+    const f = fakeFs();
+    const store = createSecureStore({ safeStorage: fakeSafeStorage({ backend: 'basic_text', noBackendApi: true }), fs: f, filePath: PATH_, platform });
+    assert.equal(store.status().encryptionAvailable, true);
+    assert.equal(store.saveKey(KEY).ok, true);
+    assert.equal(store.readKey(), KEY);
+  }
+  const f = fakeFs();
+  const off = createSecureStore({ safeStorage: fakeSafeStorage({ available: false }), fs: f, filePath: PATH_, platform: 'darwin' });
+  assert.equal(off.saveKey(KEY).ok, false);
 });
 
 // ---- ai.js: the key is read lazily and never leaks ------------------------------

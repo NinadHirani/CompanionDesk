@@ -1,9 +1,11 @@
 # CompanionDesk Product Blueprint
 
-Status: **proposed** (M0 baseline, branch `companiondesk/m0-product-foundation`).
+Status: **proposed**; M0 complete on main (baseline docs via PR #10, model
+selection, conversation history, and secure key setup landed 23 Nov 2026).
 This document states the agreed product vision and the verified current state.
 No decision here is accepted until Ninad approves it. Every feature is marked
-**implemented** (verified against main `6423985`) or **planned** (not built; do
+**implemented** (verified against main, most recently the secure-key slice
+`3ce8a0b`) or **planned** (not built; do
 not assume otherwise).
 
 ## 1. What CompanionDesk is
@@ -63,7 +65,7 @@ claims to literally experience emotions.
     screenshots, and tool output are data, never instructions; prompt-injection
     defenses are architectural, not prompts.
 
-## 3. Implemented today (verified against main 6423985)
+## 3. Implemented today (verified against main, Nov 23 2026)
 
 - General-assistant persona with the student stack as one optional skill
   (`src/skills.js`, `src/persona.js`).
@@ -81,7 +83,10 @@ claims to literally experience emotions.
   off. Setup UI saves, tests (one GET, no prompt) and removes the key, and
   states what enabling the cloud sends. The web/Android build has no secure
   vault adapter, so key setup is reported unsupported there, never stored
-  insecurely (`src/secure-store.js`, `cloud:*` IPC channels).
+  insecurely (`src/secure-store.js`, `cloud:*` IPC channels). On Linux only a
+  real secret service counts: `basic_text` (hardcoded-password encryption)
+  and `unknown` backends fail closed even when Electron reports encryption
+  available, and a missing backend-query API fails closed too.
 - Local conversation history in the ask view: conversations with rename and
   confirmed delete, stored only in the device database, never synced and
   never sent to the cloud; the local model sees the last ten turns of the
@@ -112,12 +117,6 @@ claims to literally experience emotions.
   (CI, CI macOS + Linux, Android APK; verified this session: only these
   three have ever run on main);
   public Android debug-APK preview release.
-
-Known dormant: the Gemini cloud fallback exists in code (`src/ai.js`) but no
-key-entry UI exists on desktop or web, so it cannot currently be used.
-
-Known stale: `docs/FEATURE_GAP.md` and `docs/COMPANIONDESK_ROADMAP.md` predate
-shipped overlay/voice/memory/screen work and are scheduled for refresh in M0.
 
 ## 4. Planned, NOT implemented
 

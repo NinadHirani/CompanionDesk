@@ -93,7 +93,7 @@ async function init() {
   // The optional Gemini key lives in the OS credential vault, decrypted in
   // this process only when a cloud call needs it. Without a saved key the
   // cloud fallback is off.
-  secureStore = createSecureStore({ safeStorage, filePath: path.join(app.getPath('userData'), 'gemini.key.bin') });
+  secureStore = createSecureStore({ safeStorage, filePath: path.join(app.getPath('userData'), 'gemini.key.bin'), platform: process.platform });
   ai = createAi({ geminiKey: () => secureStore.readKey() });
 }
 

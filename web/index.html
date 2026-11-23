@@ -163,7 +163,7 @@
       <div class="field" id="cloud-key-wrap">
         <label for="cloud-key">Gemini API key (optional)</label>
         <input id="cloud-key" type="password" maxlength="80" autocomplete="off" spellcheck="false" />
-        <p class="hint">Stored only on this computer, encrypted by the operating system's credential vault. It is never shown again and never leaves the app's main process.</p>
+        <p class="hint">Stored only on this computer, encrypted by the operating system's credential vault (on Linux a real secret service such as GNOME Keyring or KWallet is required; without one the key is not saved and the cloud stays off). It is never shown again and never leaves the app's main process.</p>
         <div class="actions">
           <button id="cloud-save" class="primary">Save key</button>
           <button id="cloud-test">Test key</button>
