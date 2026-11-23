@@ -60,7 +60,9 @@ while :; do
   POLL=$((POLL + 1))
   if [ "$POLL" -ge "$MAXPOLL" ]; then
     echo "timeout after ~${MAXSEC}s; killing remote pid ${PID:-?}" >&2
-    [ -n "$PID" ] && adb shell "kill $PID 2>/dev/null || true" >/dev/null || true
+    if [ -n "$PID" ]; then
+      adb shell "kill $PID 2>/dev/null || true" >/dev/null || true
+    fi
     RC="timeout"
     break
   fi
