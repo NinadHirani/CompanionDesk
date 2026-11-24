@@ -209,7 +209,7 @@ test('appendAudit is durable without an explicit save: a restart after acknowled
   assert.equal(anchor.last_seq, 2);
 });
 
-test('a persist failure during append reports failure, keeps the entry in memory, and the next save converges', async () => {
+test('a persist failure during append reports failure and rolls the entry back: the log holds acknowledged entries only', async () => {
   let w = await world();
   // Proxy that breaks exactly the audit-row insert, the way a failing disk
   // would; BEGIN/COMMIT/ROLLBACK pass through so rollback semantics run.
@@ -222,17 +222,21 @@ test('a persist failure during append reports failure, keeps the entry in memory
   const failed = w.p.appendAudit({ actor: 'system', action: 'x.willfail' });
   assert.equal(failed.ok, false);
   assert.equal(failed.reason, 'persist_failure');
-  // The entry stayed in memory for convergence.
-  assert.equal(w.audit.snapshot().entries.length, 1);
+  // The unacknowledged entry rolled back: the log holds acknowledged
+  // entries only, so no false record of a transition that did not commit
+  // can ever converge to disk.
+  assert.equal(w.audit.snapshot().entries.length, 0);
   breakAuditInserts = false;
-  const saved = w.p.save();
-  assert.equal(saved.ok, true, 'the next save must converge');
-  assert.ok(saved.entries >= 1);
+  // The seq is reused on the next clean append; the chain verifies.
+  const retried = w.p.appendAudit({ actor: 'system', action: 'x.willfail' });
+  assert.equal(retried.ok, true);
+  assert.equal(retried.seq, 1);
 
   w = await restart(w);
   assert.equal(w.loaded.ok, true, JSON.stringify(w.loaded.problems));
   const entries = w.audit.snapshot().entries;
-  assert.ok(entries.some((e) => e.action === 'x.willfail'), 'the converged entry survives the restart');
+  assert.equal(entries.length, 1);
+  assert.equal(entries[0].action, 'x.willfail');
 });
 
 test('desk hydrate refuses an overflow whole and refuses duplicate or malformed records', async () => {
