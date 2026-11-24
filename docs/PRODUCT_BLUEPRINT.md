@@ -1,24 +1,27 @@
 # CompanionDesk Product Blueprint
 
 Status: **proposed** in direction; M0 and M1 are COMPLETE on main, verified
-24 Nov 2026. The current verified baseline is main `e0fa026` with 512
+24 Nov 2026. The current verified baseline is main `05cea22` with 544
 passing tests, Fo-reported from a full `npm test` run at that head
-(512/512, selftest included). CI and CI macOS + Linux are green on that
-head (runs 45317499561 and 45317499508); Android APK was explicitly
-dispatched (run 45317767361). Gate 2 slices 1-3 (agent safety foundation,
-hardening, persistence, orchestrator) are pure, isolated modules with NO
-product wiring, NO tools registered beyond test fixtures and NO UI or IPC;
-slice 2 persists the audit log and slice 3 adds the orchestrator (see 3d),
-still with no wiring. The M1 slice 6 diagnostics were independently
-re-audited on 24 Nov 2026 and hardened (strict errno allowlist and strict
-status normalization in classifyFailure itself; every diagnostic path was
-verified to pass through the shared fault() sanitizer). Earlier
-prep/harness work (slice-6 sanitizer hardening, Gate 1 repo-only benchmark
-scripts + selftest and comparison assembler, M4 memory-v2 harness) remains
-harness only, NOT product memory-v2 wiring. No actual OnePlus device
-measurements exist; the OnePlus 12R and MacBook Air M1 are validation
-targets only. Doc-only commits after the baseline do not change these
-numbers. This document states the agreed product vision and the
+(544/544, selftest included). CI, CI macOS + Linux and Android APK are all
+green on that head (runs 45319482959, 45319482716 and 45319501624, the APK
+explicitly dispatched). Gate 2 slices 1-4 (agent safety foundation,
+hardening, persistence, orchestrator, first harmless tools) are pure,
+isolated modules with NO product wiring, NO UI and NO IPC; slice 2
+persists the audit log, slice 3 adds the orchestrator and slice 4 adds the
+notifications/reminders/ics tools (see 3d and 3e), still unwired. The
+orchestrator was hardened after Ninad's review (commit e699c64): every
+audit append result is checked, ANY refusal or throwing sink poisons the
+instance, and every transition is log-before-commit. The M1 slice 6
+diagnostics were independently re-audited on 24 Nov 2026 and hardened
+(strict errno allowlist and strict status normalization in classifyFailure
+itself; every diagnostic path was verified to pass through the shared
+fault() sanitizer). Earlier prep/harness work (slice-6 sanitizer
+hardening, Gate 1 repo-only benchmark scripts + selftest and comparison
+assembler, M4 memory-v2 harness) remains harness only, NOT product
+memory-v2 wiring. No actual OnePlus device measurements exist; the OnePlus
+12R and MacBook Air M1 are validation targets only. Doc-only commits after
+the baseline do not change these numbers. This document states the agreed product vision and the
 verified current state. No decision here is accepted until Ninad approves
 it. Every feature is marked **implemented** (verified against the
 current baseline named in the Status header) or **planned** (not built; do not assume otherwise).
@@ -196,9 +199,10 @@ claims to literally experience emotions.
 - Update policy that never auto-installs unsigned builds; update modes
   disabled/auto/manual-download (`src/update-policy.js`, `src/updater.js`).
 - Health check and onboarding interview (`src/health.js`, `src/onboarding.js`).
-- 512 passing unit/integration tests (258 baseline; model selection +18, conversation history +17, optional key storage +13, M1 provider registry/task router/cloud gate +25, M1 per-ask routing integration +18, M1 review fixes +18, M1 hardware profiles +12, M1 provider status +11, M1 provider contract tests +18, M1 provider fault diagnostics +18, fault-detail sanitization review fix +3, offline memory-v2 retrieval harness +12, memory-v2 harness slice 4 fold fix and bridges +5, memory-v2 store contract tests +9, Gate 2 agent safety foundation +35, Gate 2 security hardening +8, Gate 2 persistence +17, M1 diagnostics hardening +2, Gate 2 orchestrator +13); CI and CI macOS + Linux green on the
-  current baseline `e0fa026` (runs 45317499561 and 45317499508; Android
-  APK explicitly dispatched, run 45317767361);
+- 544 passing unit/integration tests (258 baseline; model selection +18, conversation history +17, optional key storage +13, M1 provider registry/task router/cloud gate +25, M1 per-ask routing integration +18, M1 review fixes +18, M1 hardware profiles +12, M1 provider status +11, M1 provider contract tests +18, M1 provider fault diagnostics +18, fault-detail sanitization review fix +3, offline memory-v2 retrieval harness +12, memory-v2 harness slice 4 fold fix and bridges +5, memory-v2 store contract tests +9, Gate 2 agent safety foundation +35, Gate 2 security hardening +8, Gate 2 persistence +17, M1 diagnostics hardening +2, Gate 2 orchestrator +13, orchestrator audit hardening +13, first
+  harmless tools +18); CI, CI macOS + Linux and Android APK all green on
+  the current baseline `05cea22` (runs 45319482959, 45319482716 and
+  45319501624, the APK explicitly dispatched);
   public Android debug-APK preview release.
 
 ## 3b. Gate 2 slice 1 (implemented as pure modules, 24 Nov 2026)
@@ -295,6 +299,47 @@ wrong/fabricated/expired/used approvals refused, consumed approvals never
 reused on retry, stop pause and explicit resume, bounded retries, skip vs
 abort recovery, malformed results failing closed, verify hooks, and the
 single-active-run rule.
+
+## 3d.1. Orchestrator audit hardening (24 Nov 2026, commit e699c64)
+
+Ninad's review found the acceptance gap the slice 3 code had: log()
+returned the audit.append result but every call site ignored it, so a
+refusing or throwing audit sink would have let every transition proceed
+un-audited, and several sites committed state BEFORE logging. Contract
+verified: audit.append returns { ok: true, seq, hash } or
+{ ok: false, errors } and never throws on bad input, but a broken sink can
+throw. Hardened semantics: audited() checks every append result; ANY
+refusal or throw poisons the instance (every further startRun, step and
+resume returns audit_failed, even after the sink recovers; recovery is a
+new instance, which is what a restart gives the wiring layer; read-only
+getRun/activeRun stay available); and every transition is now
+log-before-commit, so a run is never registered, paused, resumed,
+advanced, skipped or finished without its entry, the tool closure is never
+invoked without its step_started entry, and a refused terminal entry
+leaves the run unfinished and holds the active slot. 13 new adversarial
+tests cover every transition class with a refusing or throwing sink.
+
+## 3e. Gate 2 slice 4 (implemented as the first harmless tools, 24 Nov
+2026)
+
+Three pure, isolated modules with the standing Gate 2 boundary (no
+wiring, no UI, no IPC, no OS calls, no model-driven execution), admitted
+only after the capability boundary and approval design were made
+explicit: agent-notifications is a bounded (100) in-memory queue of
+notification RECORDS that never sends, delivers, displays or schedules
+anything (registry class reversible_write); agent-reminders is a bounded
+(100) in-memory book of reminder RECORDS with a future dueAt that never
+wakes, fires or holds timers (reversible_write); agent-ics is a pure RFC
+5545 VEVENT generator (UTC Z-form times, TEXT escaping per 3.3.11, 75
+octet folding per 3.1) that returns a string and never writes a file or
+touches a calendar application (read_only). Approval design: none is
+sensitive, so a standing grant suffices and no per-call approval is ever
+required; the gate test proves end to end that each tool is denied
+without a grant, authorized with valid args and no approvalId with one,
+and that a full three-step orchestrator run creates real records and
+audits every transition, with a tool-level refusal inside a run stored as
+nothing and handled by skip recovery. Delivery, scheduling and file
+output stay unwired and are separate, explicitly-reviewed gates.
 
 ## 4. Planned, NOT implemented
 

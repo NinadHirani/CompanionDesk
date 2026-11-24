@@ -1,16 +1,22 @@
 # CompanionDesk Implementation Roadmap
 
 Status: M0 and M1 are COMPLETE on main (verified 24 Nov 2026; current
-baseline `e0fa026`, 512 passing tests, Fo-reported from a full `npm test`
-run at that head (512/512, selftest included). CI and CI macOS + Linux
-green on that head (runs 45317499561, 45317499508); Android APK explicitly
-dispatched (run 45317767361). Gate 2 slice 1 (agent safety foundation) and
-its hardening are pure, isolated modules with NO product wiring, NO tools
-registered beyond test fixtures and NO UI or IPC. Slice 2 (persistence) is
-additive-only storage, same boundary. Slice 3 (orchestrator) is a pure
-declarative run loop over the slice 1/2 modules with approval pauses,
-stop pauses, bounded retries, skip/abort recovery and a full audit trail,
-still with no wiring and in-memory run state only. The M1 slice 6
+baseline `05cea22`, 544 passing tests, Fo-reported from a full `npm test`
+run at that head (544/544, selftest included). CI, CI macOS + Linux and
+Android APK green on that head (runs 45319482959, 45319482716,
+45319501624, the APK explicitly dispatched). Gate 2 slice 1 (agent safety
+foundation) and its hardening are pure, isolated modules with NO product
+wiring, NO tools registered beyond test fixtures and NO UI or IPC. Slice 2
+(persistence) is additive-only storage, same boundary. Slice 3
+(orchestrator) is a pure declarative run loop over the slice 1/2 modules
+with approval pauses, stop pauses, bounded retries, skip/abort recovery
+and a full audit trail, still with no wiring and in-memory run state only;
+hardened after Ninad's review (e699c64) so ANY audit append failure
+poisons the instance and every transition is log-before-commit. Slice 4
+(24 Nov 2026) adds the first harmless tools: notifications, reminders and
+ics as pure, unwired modules (reversible_write/reversible_write/read_only,
+never sensitive; a standing grant suffices, no per-call approval; nothing
+sends, delivers, schedules, wakes or writes files). The M1 slice 6
 diagnostics were independently re-audited and hardened on 24 Nov 2026
 (strict errno allowlist and strict status normalization in
 classifyFailure; every diagnostic path verified to pass through the shared
@@ -267,11 +273,23 @@ malformed results and throwing steps failing closed, bounded retries
 (0-3) with used approvals never reused, skip/abort recovery, and a full
 transition audit. Documented limits: in-memory run state only (no
 persistence surface, nothing resumes after restart) and synchronous steps
-(per-step wall-clock budgets belong to the wiring slice). Remaining Gate
-2 work: the first harmless tools (notifications, reminders, ICS events;
-NO shell or filesystem tools in this phase), the prompt-injection corpus
-before any grant widening, and UI/IPC wiring (which will bind the
-persistence and orchestrator surfaces together).
+(per-step wall-clock budgets belong to the wiring slice). SLICE 4 (first harmless tools) is IMPLEMENTED on main (24 Nov 2026,
+`05cea22`), still with NO product wiring: agent-notifications (a bounded
+in-memory queue of notification records; never sends or delivers),
+agent-reminders (a bounded in-memory book of reminder records with future
+dueAt; never wakes, fires or holds timers) and agent-ics (a pure RFC 5545
+VEVENT generator returning text; never writes a file or touches a calendar
+application). Registry classes are reversible_write, reversible_write and
+read_only respectively; nothing is sensitive, so a standing grant
+suffices and no per-call approval is required, proven end to end through
+the real registry, policy engine and orchestrator (denied without a
+grant, authorized with no approvalId with one, full three-step run
+creates real records and audits every transition, a tool-level refusal
+stores nothing and follows skip recovery). Remaining Gate 2 work: the
+prompt-injection corpus before any grant widening, and UI/IPC wiring
+(which will bind the persistence and orchestrator surfaces together and
+owns delivery/scheduling/file output as separate, explicitly-reviewed
+gates).
 Acceptance: policy
 engine refuses ungranted calls (tested); payments, purchases, destructive
 deletion, and legal or binding submissions are denied unless fresh,
