@@ -44,11 +44,25 @@
   const RUN_STATES = ['running', 'succeeded', 'failed', 'aborted'];
   const APPROVAL_STATES = ['pending', 'used', 'cancelled', 'invalidated'];
   const BODY_FIELDS = ['at', 'actor', 'action', 'tool', 'decision', 'reason', 'grantId', 'approvalId', 'detail'];
+  // Schema version of the agent persistence store. Bump only with an
+  // explicit, additive migration; a newer version on disk fails closed.
+  const SCHEMA_VERSION = 1;
+  // Hard cap on a persisted audit detail blob. The sanitizer already
+  // bounds every entry; this protects load() from parsing unbounded text.
+  const MAX_DETAIL_JSON = 4096;
   const AUDIT_COLUMNS = 'seq, at, actor, action, tool, decision, reason, grant_id, approval_id, detail_json, hash';
 
-  function createAgentPersistence({ db, clock, registry, audit, approvals, engine, emergencyStop } = {}) {
+  function createAgentPersistence({ db, clock, registry, audit, approvals, engine, emergencyStop, notifications, reminders } = {}) {
     if (!db || typeof db.run !== 'function' || typeof db.all !== 'function') {
       throw new TypeError('agent persistence needs a db adapter with run() and all()');
+    }
+    if (notifications !== undefined && notifications !== null
+      && (typeof notifications.exportAll !== 'function' || typeof notifications.hydrate !== 'function')) {
+      throw new TypeError('agent persistence needs a notifications desk with exportAll() and hydrate()');
+    }
+    if (reminders !== undefined && reminders !== null
+      && (typeof reminders.exportAll !== 'function' || typeof reminders.hydrate !== 'function')) {
+      throw new TypeError('agent persistence needs a reminder book with exportAll() and hydrate()');
     }
     const nowIso = clock ? () => new Date(clock()).toISOString() : () => new Date().toISOString();
     let status = { ok: true, problems: [] };
@@ -111,6 +125,31 @@
       status = { ok: true, problems: [] };
       const problems = [];
 
+      // 0. Schema version, checked before anything else is read. A database
+      //    written by a NEWER build is never downgraded, read or repaired
+      //    here: the app must be updated instead. An unversioned database is
+      //    stamped additively (CREATE TABLE IF NOT EXISTS already ran) and
+      //    no existing row is touched.
+      const schemaRows = db.all("SELECT value FROM agent_schema WHERE key = 'version'");
+      if (schemaRows.length) {
+        const v = Number(schemaRows[0].value);
+        if (!Number.isInteger(v)) {
+          fail('invalid_schema_version');
+          problems.push('invalid_schema_version');
+        } else if (v > SCHEMA_VERSION) {
+          fail('schema_from_newer_build');
+          problems.push('schema_from_newer_build');
+          return { ok: false, problems, invalidatedApprovals: 0 };
+        }
+      } else {
+        try {
+          tx(() => db.run("INSERT OR REPLACE INTO agent_schema (key, value) VALUES ('version', ?)", [String(SCHEMA_VERSION)]));
+        } catch (err) {
+          fail('persist_failure');
+          problems.push('persist_failure:schema_init');
+        }
+      }
+
       // 1. Audit chain and anchor, verified from the stored base.
       const anchorRow = readAnchor();
       const auditRows = db.all('SELECT ' + AUDIT_COLUMNS + ' FROM agent_audit ORDER BY seq');
@@ -128,6 +167,11 @@
 
       const entries = [];
       for (const row of auditRows) {
+        if (row.detail_json !== null && row.detail_json !== undefined && row.detail_json.length > MAX_DETAIL_JSON) {
+          fail('invalid_audit_row');
+          problems.push('invalid_audit_row:' + row.seq);
+          continue;
+        }
         let e;
         try {
           e = reconstruct(row);
@@ -228,6 +272,18 @@
         resetCount: stopRows[0].reset_count,
       } : null;
 
+      // 4b. Notifications and reminders: rows are projected into record shape
+      //     and strictly validated by the desks' own hydrate() when we reach
+      //     step 5. A bad row fails closed; nothing is truncated or dropped.
+      const notificationRows = db.all('SELECT id, title, body, priority, created_at, read FROM agent_notifications ORDER BY id').map((r) => ({
+        id: r.id, title: r.title, body: r.body, priority: r.priority, createdAt: r.created_at, read: !!r.read,
+      }));
+      const reminderRows = db.all('SELECT id, title, due_at, notes, created_at, cancelled, acknowledged FROM agent_reminders ORDER BY id').map((r) => ({
+        id: r.id, title: r.title, dueAt: r.due_at,
+        notes: r.notes === null || r.notes === undefined ? null : r.notes,
+        createdAt: r.created_at, cancelled: !!r.cancelled, acknowledged: !!r.acknowledged,
+      }));
+
       // 5. Hydrate the pure modules only when everything verified.
       let invalidatedApprovals = 0;
       if (status.ok) {
@@ -247,6 +303,14 @@
         if (emergencyStop && stopSnap) {
           const h = emergencyStop.hydrate(stopSnap);
           if (!h.ok) { fail('invalid_stop_row'); problems.push('invalid_stop_row'); }
+        }
+        if (notifications) {
+          const h = notifications.hydrate(notificationRows);
+          if (!h.ok) { fail('notification_hydrate_refused'); problems.push('notification_hydrate_refused:' + h.reason); }
+        }
+        if (reminders) {
+          const h = reminders.hydrate(reminderRows);
+          if (!h.ok) { fail('reminder_hydrate_refused'); problems.push('reminder_hydrate_refused:' + h.reason); }
         }
       }
       lastPersistedSeq = status.ok ? last.seq : 0;
@@ -283,6 +347,8 @@
       const grants = engine ? engine.listGrants() : [];
       const approvalRecords = approvals ? approvals.exportAll() : [];
       const stopSnap = emergencyStop ? emergencyStop.snapshot() : null;
+      const notificationRecords = notifications ? notifications.exportAll() : [];
+      const reminderRecords = reminders ? reminders.exportAll() : [];
       try {
         const lastEntry = snap.entries.length ? snap.entries[snap.entries.length - 1] : null;
         const lastSeq = lastEntry ? lastEntry.seq : snap.base.seq;
@@ -300,6 +366,14 @@
           }
           if (stopSnap) {
             db.run('INSERT OR REPLACE INTO agent_emergency_stop (id, active, reason, activated_at, activated_by, reset_count) VALUES (1, ?, ?, ?, ?, ?)', [stopSnap.active ? 1 : 0, stopSnap.reason === undefined || stopSnap.reason === null ? null : stopSnap.reason, stopSnap.activatedAt === undefined ? null : stopSnap.activatedAt, stopSnap.activatedBy === undefined ? null : stopSnap.activatedBy, stopSnap.resetCount]);
+          }
+          db.run('DELETE FROM agent_notifications');
+          for (const n of notificationRecords) {
+            db.run('INSERT INTO agent_notifications (id, title, body, priority, created_at, read) VALUES (?, ?, ?, ?, ?, ?)', [n.id, n.title, n.body, n.priority, n.createdAt, n.read ? 1 : 0]);
+          }
+          db.run('DELETE FROM agent_reminders');
+          for (const r of reminderRecords) {
+            db.run('INSERT INTO agent_reminders (id, title, due_at, notes, created_at, cancelled, acknowledged) VALUES (?, ?, ?, ?, ?, ?, ?)', [r.id, r.title, r.dueAt, r.notes === undefined ? null : r.notes, r.createdAt, r.cancelled ? 1 : 0, r.acknowledged ? 1 : 0]);
           }
         });
         lastPersistedSeq = lastSeq;
@@ -448,6 +522,36 @@
       return { ok: status.ok, problems: [...status.problems] };
     }
 
+    // Wraps the real audit log so every append is persisted and acknowledged
+    // before the caller may treat a transition as committed: append() returns
+    // success only after the entry and the anchor were written in one
+    // transaction. A persist leg failure reports failure (the entry stays in
+    // memory for the next save() to converge; the caller must NOT treat the
+    // transition as durable), an integrity failure refuses, and the audit's
+    // own validation result passes through untouched. Reads and verification
+    // pass through to the real log.
+    function durableAudit() {
+      if (!audit) throw new Error('no audit configured');
+      return {
+        append(entry) {
+          const r = appendAudit(entry);
+          if (r.ok) return { ok: true, seq: r.seq, hash: r.hash };
+          if (r.reason === 'persist_failure' || r.reason === 'integrity_failure' || r.reason === 'no_audit') {
+            return { ok: false, reason: r.reason };
+          }
+          return r;
+        },
+        snapshot() { return audit.snapshot(); },
+        read(f) { return audit.read(f); },
+        hydrate(h) { return audit.hydrate(h); },
+        verify(a, b) { return audit.verify(a, b); },
+        pruneBase(beforeSeq, baseHash) { return audit.pruneBase(beforeSeq, baseHash); },
+        exportAll() { return audit.exportAll(); },
+        get lastHash() { return audit.lastHash; },
+        get length() { return audit.length; },
+      };
+    }
+
     return {
       load,
       save,
@@ -459,6 +563,7 @@
       finishRun,
       listRuns,
       status: getAuditStatus,
+      durableAudit,
       // NOTE: intentionally no resume API. A 'running' agent_runs row after a
       // restart stays exactly as it is; resuming a run is an explicit
       // orchestrator decision, never an automatic one.

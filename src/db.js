@@ -160,6 +160,30 @@ CREATE TABLE IF NOT EXISTS agent_runs (
   ended_at TEXT,
   summary TEXT
 );
+CREATE TABLE IF NOT EXISTS agent_notifications (
+  id TEXT PRIMARY KEY,
+  title TEXT NOT NULL,
+  body TEXT NOT NULL,
+  priority TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  read INTEGER NOT NULL DEFAULT 0
+);
+CREATE TABLE IF NOT EXISTS agent_reminders (
+  id TEXT PRIMARY KEY,
+  title TEXT NOT NULL,
+  due_at INTEGER NOT NULL,
+  notes TEXT,
+  created_at INTEGER NOT NULL,
+  cancelled INTEGER NOT NULL DEFAULT 0,
+  acknowledged INTEGER NOT NULL DEFAULT 0
+);
+-- Schema version stamp (agent persistence). One row, key 'version'. An
+-- unversioned database is stamped additively on load; a database written by
+-- a NEWER build is never read, downgraded or repaired by an older one.
+CREATE TABLE IF NOT EXISTS agent_schema (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL
+);
 `;
 
   // Filesystem saver: the desktop default. Writes only on flush, never on

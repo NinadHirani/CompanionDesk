@@ -62,6 +62,44 @@
         return queue.filter((r) => !r.read).map((r) => ({ ...r }));
       },
 
+      // Bounded export for persistence: plain copies, oldest first. The
+      // records are the desk's own shape; nothing is added here.
+      exportAll() {
+        return queue.map((r) => ({ ...r }));
+      },
+
+      // Restore persisted records. Strict and all-or-nothing: every record
+      // must match the exact shape create() produces (same caps), ids must
+      // be unique, and an overflow is refused whole, never truncated.
+      // Unknown fields are dropped: the desk's records carry no such fields,
+      // so anything extra is not this desk's data and must not come back in.
+      hydrate(records) {
+        const list = Array.isArray(records) ? records : [];
+        if (list.length > MAX_QUEUE) return { ok: false, reason: 'queue_overflow' };
+        const restored = [];
+        for (const r of list) {
+          if (!r || typeof r !== 'object') return { ok: false, reason: 'invalid_record' };
+          if (typeof r.id !== 'string' || !/^ntf-\d{6}$/.test(r.id)) return { ok: false, reason: 'invalid_record' };
+          if (!validText(r.title, MAX_TITLE) || !validText(r.body, MAX_BODY)) return { ok: false, reason: 'invalid_record' };
+          if (!PRIORITIES.includes(r.priority)) return { ok: false, reason: 'invalid_record' };
+          if (!Number.isFinite(r.createdAt)) return { ok: false, reason: 'invalid_record' };
+          if (typeof r.read !== 'boolean') return { ok: false, reason: 'invalid_record' };
+          restored.push({ id: r.id, title: r.title, body: r.body, priority: r.priority, createdAt: r.createdAt, read: r.read });
+        }
+        const ids = new Set();
+        let maxSeq = 0;
+        for (const r of restored) {
+          if (ids.has(r.id)) return { ok: false, reason: 'duplicate_id' };
+          ids.add(r.id);
+          const s = parseInt(r.id.slice(4), 10);
+          if (s > maxSeq) maxSeq = s;
+        }
+        queue.length = 0;
+        for (const r of restored) queue.push(r);
+        seq = maxSeq;
+        return { ok: true, restored: restored.length };
+      },
+
       markRead(id) {
         if (typeof id !== 'string' || id.length === 0 || id.length > MAX_ID) return { ok: false, reason: 'id_invalid' };
         const rec = queue.find((r) => r.id === id);

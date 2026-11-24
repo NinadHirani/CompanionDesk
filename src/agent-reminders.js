@@ -55,6 +55,47 @@
           .map((r) => ({ ...r }));
       },
 
+      // Bounded export for persistence: copies sorted by due time.
+      exportAll() {
+        return [...book.values()].sort((a, b) => a.dueAt - b.dueAt).map((r) => ({ ...r }));
+      },
+
+      // Restore persisted records. Strict and all-or-nothing: exact shape
+      // (same caps as create), unique ids, cap overflow refused whole, never
+      // truncated. Unknown fields are dropped; acknowledged survives when
+      // present. A past dueAt is accepted: hydrate restores history, it does
+      // not re-run create()'s future-only rule.
+      hydrate(records) {
+        const list = Array.isArray(records) ? records : [];
+        if (list.length > MAX_BOOK) return { ok: false, reason: 'book_overflow' };
+        const restored = [];
+        for (const r of list) {
+          if (!r || typeof r !== 'object') return { ok: false, reason: 'invalid_record' };
+          if (typeof r.id !== 'string' || !/^rem-\d{6}$/.test(r.id)) return { ok: false, reason: 'invalid_record' };
+          if (typeof r.title !== 'string' || r.title.length === 0 || r.title.length > MAX_TITLE) return { ok: false, reason: 'invalid_record' };
+          if (!Number.isInteger(r.dueAt)) return { ok: false, reason: 'invalid_record' };
+          if (r.notes !== null && (typeof r.notes !== 'string' || r.notes.length > MAX_NOTES)) return { ok: false, reason: 'invalid_record' };
+          if (!Number.isFinite(r.createdAt)) return { ok: false, reason: 'invalid_record' };
+          if (typeof r.cancelled !== 'boolean') return { ok: false, reason: 'invalid_record' };
+          if (r.acknowledged !== undefined && typeof r.acknowledged !== 'boolean') return { ok: false, reason: 'invalid_record' };
+          const rec = { id: r.id, title: r.title, dueAt: r.dueAt, notes: r.notes, createdAt: r.createdAt, cancelled: r.cancelled };
+          if (typeof r.acknowledged === 'boolean') rec.acknowledged = r.acknowledged;
+          restored.push(rec);
+        }
+        const ids = new Set();
+        let maxSeq = 0;
+        for (const r of restored) {
+          if (ids.has(r.id)) return { ok: false, reason: 'duplicate_id' };
+          ids.add(r.id);
+          const s = parseInt(r.id.slice(4), 10);
+          if (s > maxSeq) maxSeq = s;
+        }
+        book.clear();
+        for (const r of restored) book.set(r.id, r);
+        seq = maxSeq;
+        return { ok: true, restored: restored.length };
+      },
+
       // Reminders whose time has come (dueAt <= at) and that are not
       // cancelled or already acknowledged. Pure read: nothing fires here.
       due(at) {
