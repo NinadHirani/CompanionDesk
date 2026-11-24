@@ -740,6 +740,26 @@ Per Ninad's requirement that CompanionDesk offer broad device/app access rather 
   before any capability claim), the workspace views, and companion
   move/resize/remember.
 
+### M8 slice 3: workspace-views groundwork (landed 24 Nov 2026)
+
+`src/workspace-views.js` is the decision-independent groundwork for the
+workspace surface: the fixed catalog of the eleven roadmap views
+(conversations, tasks, memory, tools, files, workflows, settings,
+permissions, activity, models, integrations), a `resolve()` door so only a
+catalog view can be active, and a fail-closed shaper in the
+schedules-view pattern: at most 10 records per call (cap only lowerable),
+allowlisted fields only (symbol keys, accessor properties, exotic
+prototypes, unknown fields all refuse the record), malformed records
+skipped and counted, inputs never mutated. Exactly one schema is wired
+today, conversations, matching `chat-history.listConversations` rows
+exactly; every other view exists in the catalog but refuses to shape
+anything (`view_not_wired`) until its record schema is reviewed and
+wired, so no view can ever guess another module's shape. The module
+requires no other app module (wiring-lock test). Verified by
+tests/workspace-views.test.js (11 tests); full suite 937/937, selftest
+PASS. Deliberately NOT in this slice: any renderer UI, any IPC channel,
+any DB read, and the wiring of the other ten view schemas.
+
 Plugin API with connect/disconnect, least-privilege scopes, revocation;
 connectors chosen by Ninad and verified against official APIs before any
 capability claim; workspace views (conversations, tasks, memory, tools,
