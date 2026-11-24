@@ -6,7 +6,7 @@
 // sent. There is no cloud fallback: a screenshot never leaves the machine, and
 // a fallback would answer without seeing the picture.
 
-const memory = require('./memory');
+const session = require('./memory-session');
 const { computePatterns } = require('./patterns');
 const { buildPersona, renderContextPack, renderCalendarBlock } = require('./persona');
 const calendar = require('./calendar');
@@ -54,7 +54,7 @@ async function askAboutScreen({ db, ai, meFile }, payload, todayIso, deps) {
     settings,
     skills,
     task: 'vision',
-    memories: memory.listMemories(meFile),
+    memories: session.get(meFile).list(),
     patterns: computePatterns(db.listEvents('assignment_done')),
     contextPack: renderContextPack({ today: todayIso, courses: db.listCourses(), due: db.listDue(todayIso, addDaysIso(todayIso, 7)), student: skills.includes('student') }),
     calendarBlock: renderCalendarBlock(calendar.upcoming(db, { days: 7 }, todayIso).occurrences),

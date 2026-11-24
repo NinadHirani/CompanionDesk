@@ -7,6 +7,7 @@
 // them with no Electron and no network.
 
 const memory = require('./memory');
+const session = require('./memory-session');
 const { normalizeSettings, validatePatch, cleanLine } = require('./settings');
 const { computePatterns, describePatterns } = require('./patterns');
 const { buildPersona, renderContextPack, renderCalendarBlock } = require('./persona');
@@ -35,17 +36,17 @@ function saveSettings(db, patch) {
 // ---- about-me memory ----------------------------------------------------------
 
 function listMemory({ db, meFile }) {
-  return { ok: true, file: meFile, sections: memory.SECTIONS, items: memory.listMemories(meFile), proposals: db.listProposals() };
+  return { ok: true, file: meFile, sections: memory.SECTIONS, items: session.get(meFile).list(), proposals: db.listProposals() };
 }
 
 function addMemory({ meFile }, payload) {
   if (!payload || typeof payload.section !== 'string' || typeof payload.text !== 'string') return { ok: false, error: 'bad_request' };
-  return memory.addMemory(meFile, payload.section, payload.text);
+  return session.get(meFile).add(payload.section, payload.text);
 }
 
 function forgetMemory({ meFile }, payload) {
   if (!payload || typeof payload.section !== 'string' || typeof payload.text !== 'string') return { ok: false, error: 'bad_request' };
-  return memory.forgetMemory(meFile, payload.section, payload.text);
+  return session.get(meFile).forget(payload.section, payload.text);
 }
 
 // Ask the local model whether the student's message holds anything worth
@@ -53,7 +54,7 @@ function forgetMemory({ meFile }, payload) {
 async function suggest({ db, ai, meFile }, payload, nowIso) {
   if (!payload || typeof payload.message !== 'string') return { ok: false, error: 'bad_request' };
   if (!getSettings(db).suggest_memories) return { ok: true, proposals: db.listProposals() };
-  const existing = [...memory.listMemories(meFile).map((m) => m.text), ...db.listProposals().map((p) => p.text)];
+  const existing = [...session.get(meFile).list().map((m) => m.text), ...db.listProposals().map((p) => p.text)];
   const found = await proposals.suggest({ ai, message: payload.message, existing });
   for (const p of found) db.addProposal({ section: p.section, text: p.text, created_at: nowIso });
   return { ok: true, proposals: db.listProposals() };
@@ -65,7 +66,7 @@ function decide({ db, meFile }, payload) {
   if (!p) return { ok: false, error: 'not_found' };
   if (p.status !== 'pending') return { ok: false, error: 'already_decided' };
   if (payload.approve) {
-    const r = memory.addMemory(meFile, p.section, p.text);
+    const r = session.get(meFile).add(p.section, p.text);
     if (!r.ok && r.error !== 'duplicate') return { ok: false, error: r.error };
   }
   db.decideProposal(p.id, payload.approve ? 'approved' : 'rejected');
@@ -96,7 +97,7 @@ function answerOnboarding({ db, meFile }, payload) {
   if (!r.ok) return r;
   if (r.skipped) return { ok: true, applied: 'skipped' };
   if (r.memory) {
-    const m = memory.addMemory(meFile, r.memory.section, r.memory.text);
+    const m = session.get(meFile).add(r.memory.section, r.memory.text);
     if (!m.ok && m.error !== 'duplicate') return { ok: false, error: m.error };
     return { ok: true, applied: 'memory' };
   }
@@ -164,7 +165,7 @@ async function ask({ db, ai, meFile }, payload, todayIso, { onToken, model, sign
     settings,
     skills,
     task: 'chat',
-    memories: memory.listMemories(meFile),
+    memories: session.get(meFile).list(),
     patterns: computePatterns(db.listEvents('assignment_done')),
     contextPack,
     calendarBlock: renderCalendarBlock(calendar.upcoming(db, { days: 7 }, todayIso).occurrences),

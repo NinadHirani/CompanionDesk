@@ -4,8 +4,8 @@
 // retrieval core (src/memory-retrieval.js), ported from the measured
 // harness ranker. Retrieval quality cases reuse the harness corpus so the
 // port is provably the same ranker. No product file may require this
-// module yet (wiring is gated on the four open decisions; the lock test
-// lives in tests/memory-store.test.js).
+// module outside the authorized scope (persona.js and the M4 pair; the
+// lock test lives in tests/memory-store.test.js).
 
 const test = require('node:test');
 const assert = require('node:assert');

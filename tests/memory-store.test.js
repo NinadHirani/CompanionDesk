@@ -3,8 +3,10 @@
 // M4 memory v2, independent slice: store-contract tests for the UNWIRED
 // src/memory-store.js, pinned against the CURRENT product memory module
 // (src/memory.js) so later wiring cannot silently diverge. Also carries
-// the wiring lock: no product file outside the M4 pair may require the
-// new modules while the four open decisions gate implementation.
+// the wiring lock: pins the AUTHORIZED wiring scope after the owner's
+// 24 Nov 2026 decisions (docs/M4_MEMORY_DECISIONS.md). memory-retrieval
+// runs in persona.js (and inside the M4 pair); the store contract runs in
+// memory-session.js ONLY, and never reaches a surface or registry file.
 
 const test = require('node:test');
 const assert = require('node:assert');
@@ -20,9 +22,10 @@ const RET = path.join(__dirname, '..', 'src', 'memory-retrieval.js');
 // --- wiring lock ------------------------------------------------------------
 
 // Wiring scope as of 24 Nov 2026: src/memory-retrieval.js is wired into
-// persona.js only (per-task budgeted selection). src/memory-store.js (the
-// v2 store contract) stays UNWIRED: the product still runs the file-backed
-// src/memory.js flow until a later reviewed slice replaces it.
+// persona.js (per-task budgeted selection) and lives inside the M4 pair.
+// src/memory-store.js (the v2 store contract) is wired into
+// src/memory-session.js ONLY: the session view layer in front of the
+// canonical About-me file. No surface or registry file may reference it.
 const WIRED_RETRIEVAL = new Set(['memory-store.js', 'persona.js']);
 
 test('WIRING LOCK: memory-retrieval is required only by persona.js and the M4 pair', () => {
@@ -40,16 +43,24 @@ test('WIRING LOCK: memory-retrieval is required only by persona.js and the M4 pa
   assert.deepEqual(offenders, []);
 });
 
-test('WIRING LOCK: the v2 store contract stays unwired in product code', () => {
+test('WIRING LOCK: memory-store is required only by memory-session.js', () => {
   const dir = path.join(__dirname, '..', 'src');
   const offenders = [];
   for (const f of fs.readdirSync(dir)) {
-    if (!f.endsWith('.js') || f === 'memory-store.js') continue;
+    if (!f.endsWith('.js') || f === 'memory-store.js' || f === 'memory-session.js') continue;
     if (/require\([^)]*memory-store['"]/.test(fs.readFileSync(path.join(dir, f), 'utf8'))) {
       offenders.push(`${f} requires memory-store`);
     }
   }
   assert.deepEqual(offenders, []);
+});
+
+test('WIRING LOCK: memory-session is the only store consumer and is not a surface', () => {
+  for (const f of ['src/main.js', 'src/ai.js', 'src/skills.js', 'src/agent-tools.js']) {
+    const p = path.join(__dirname, '..', f);
+    if (!fs.existsSync(p)) continue;
+    assert.ok(!/memory-session/.test(fs.readFileSync(p, 'utf8')), `${f} must not reference the session layer`);
+  }
 });
 
 test('WIRING LOCK: memory-store is not registered in any surface or registry file', () => {

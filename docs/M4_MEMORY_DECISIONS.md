@@ -134,8 +134,13 @@ real-content recall is measured, and on what threshold."
   format is the owner's remaining sub-decision.
 - Any embeddings work (decision 4): revisits only through the measured
   70%/0.5 gate, and even then a model download needs separate approval.
-- Replacing the file-backed `src/memory.js` flow with the v2 store
-  contract remains a later reviewed slice (roadmap M4).
+- The v2 store contract itself is NOW WIRED (24 Nov 2026, later the same
+  day): `src/memory-session.js` runs it as the product's in-session view
+  in front of the canonical About-me file, which keeps its single-bullet
+  write semantics and is never rewritten whole. The sensitive gate is
+  unchanged: marks stay session-only, `persistSensitive()` refuses, no
+  product surface passes sensitive entries, and the on-disk format that
+  would let a marked entry persist remains the owner's open sub-decision.
 
 Gate 1 device validation is unaffected: the desktop runbook matrix stands
 in the roadmap; no device validation is claimed here.
