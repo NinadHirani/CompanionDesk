@@ -70,7 +70,29 @@
         + ' recent entries, chain verified=' + (auditData.verified === true ? 'yes' : 'unknown')));
       const provList = count(providers && providers.ok && providers.data, 'providers');
       panel.appendChild(line('providers: ' + (provList.length ? provList.length + ' listed' : 'none')));
-      panel.appendChild(line('notifications: ' + count(notifications && notifications.ok && notifications.data, 'notifications').length + ' queued'));
+      const notifRecords = count(notifications && notifications.ok && notifications.data, 'notifications');
+      panel.appendChild(line('notifications: ' + notifRecords.length + ' queued'));
+      // Display only: the pure shaper turns the channel's records into
+      // bounded plain-text lines (cap 10, newest first, malformed records
+      // skipped). Everything below renders with textContent, so no record
+      // can become markup. Nothing here marks a notification read and no
+      // new channel is used: this is the same read-only notifications:read
+      // response the count above always came from.
+      const view = (typeof window !== 'undefined' && window.CompanionNotificationsView)
+        ? window.CompanionNotificationsView
+        : null;
+      if (view && typeof view.shape === 'function') {
+        const shaped = view.shape(notifRecords);
+        if (shaped && shaped.ok === true) {
+          for (const text of shaped.lines) panel.appendChild(line(text));
+          if (shaped.hidden > 0) {
+            panel.appendChild(line('notifications: ' + shaped.hidden + ' older not shown'));
+          }
+          if (shaped.skipped > 0) {
+            panel.appendChild(line('notifications: ' + shaped.skipped + ' malformed record(s) not shown'));
+          }
+        }
+      }
       panel.appendChild(line('reminders: ' + count(reminders && reminders.ok && reminders.data, 'reminders').length + ' scheduled'));
     } catch (e) {
       // Refusals and absences keep the panel quiet; nothing retries here.

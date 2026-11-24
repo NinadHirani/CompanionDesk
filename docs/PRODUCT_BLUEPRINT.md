@@ -205,7 +205,7 @@ claims to literally experience emotions.
 - Update policy that never auto-installs unsigned builds; update modes
   disabled/auto/manual-download (`src/update-policy.js`, `src/updater.js`).
 - Health check and onboarding interview (`src/health.js`, `src/onboarding.js`).
-- 660 passing unit/integration tests (258 baseline; model selection +18, conversation history +17, optional key storage +13, M1 provider registry/task router/cloud gate +25, M1 per-ask routing integration +18, M1 review fixes +18, M1 hardware profiles +12, M1 provider status +11, M1 provider contract tests +18, M1 provider fault diagnostics +18, fault-detail sanitization review fix +3, offline memory-v2 retrieval harness +12, memory-v2 harness slice 4 fold fix and bridges +5, memory-v2 store contract tests +9, Gate 2 agent safety foundation +35, Gate 2 security hardening +8, Gate 2 persistence +17, M1 diagnostics hardening +2, Gate 2 orchestrator +13, orchestrator audit hardening +13, first harmless tools +18, ICS
+- 672 passing unit/integration tests (258 baseline; model selection +18, conversation history +17, optional key storage +13, M1 provider registry/task router/cloud gate +25, M1 per-ask routing integration +18, M1 review fixes +18, M1 hardware profiles +12, M1 provider status +11, M1 provider contract tests +18, M1 provider fault diagnostics +18, fault-detail sanitization review fix +3, offline memory-v2 retrieval harness +12, memory-v2 harness slice 4 fold fix and bridges +5, memory-v2 store contract tests +9, Gate 2 agent safety foundation +35, Gate 2 security hardening +8, Gate 2 persistence +17, M1 diagnostics hardening +2, Gate 2 orchestrator +13, orchestrator audit hardening +13, first harmless tools +18, ICS
   hardening +5, injection corpus +27, IPC contract +5, IPC contract review hardening +11, agent surface
   wiring +21, persistence hardening +6 (strict records, acknowledged
   appends flush to disk immediately, unacknowledged appends roll back),
@@ -215,7 +215,9 @@ claims to literally experience emotions.
   saver fail-closed hardening +5 (rename failure proven per error code
   with the old file byte-for-byte intact, sanitized errors, startup
   exception proof), delivery bridge +16 (fail-closed drain to a
-  wiring-supplied sink), +38 total since the 622 count above); CI,
+  wiring-supplied sink), notifications display +12 (read-only record
+  rendering, display cap 10, malformed records skipped), +50 total since
+  the 622 count above); CI,
   CI macOS + Linux and Android APK all green on the
   current baseline `9addfdb` (runs 45323544121, 45323543975, 45323765018)
   and re-proven on the delivery gate commit `d84b1aa` (CI 45331634733,
@@ -634,6 +636,34 @@ delivery into a live surface) do not exist in an unwired state, and the
 read-only surface the blocker rests on is already pinned by the existing
 contract tests (allowlist equality, strict validation, refusals).
 Scheduling and file output remain unwired gates.
+
+## 3j.2. Renderer notification display: read-only record rendering (24 Nov 2026)
+
+The first unblocking step from 3j.1 is implemented: the agent panel now renders the
+notification RECORDS themselves, not just the queued count, using only the
+already-existing read-only notifications:read channel. The shaping lives in a new pure
+module, src/agent-notifications-view.js (UMD; renderer/index.html loads it before
+agent-panel.js): display cap 10, newest first (the channel's list is oldest first),
+title shown whole (source cap 200) and body truncated to 140 characters, low/high
+priority tags, a (read) marker, and hostile records (arrays, exotic prototypes,
+accessor, symbol-keyed or extra-keyed records, malformed fields) skipped and counted,
+never displayed; property descriptors are inspected before any value is read. Inputs
+are never mutated and the output is fresh plain strings; the panel renders the lines
+with textContent, so no record can become markup (no escaping is attempted and none is
+needed). Nothing here marks a notification read, no new channel exists, the renderer
+still cannot send anything, and no acknowledgement, markRead, timer, scheduling,
+network delivery, OS notification, approval, grant or file output is added; if the view
+module is absent the panel keeps its previous count-only behavior. The display slice
+changes nothing about the 3j.1 acknowledgement decision, which stays with the user:
+nothing is marked read merely because it was rendered. 12 tests cover the cap and
+ordering, truncation at the source caps (a title beyond the source cap is skipped, not
+truncated), malformed-record skipping, frozen-input non-mutation, verbatim plain-text
+handling of hostile markup, empty and non-array inputs, real desk records raw and
+channel-clipped, a source scan proving the panel file has no markup-setting or
+write-path surface (comments stripped before scanning so the documented prohibitions do
+not trip it), the index.html include order and unchanged CSP, and the shaper's export
+surface. Desktop renderer only: the web build does not include agent-panel.js and gains
+nothing. Full suite 672/672.
 
 ## 4. Planned, NOT implemented
 
