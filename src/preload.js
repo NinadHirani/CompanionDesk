@@ -85,6 +85,7 @@ const IPC_CHANNELS = [
   'schedules:pause',
   'schedules:resume',
   'schedules:cancel',
+  'schedules:update',
 
   'status:get',
   'runs:get',

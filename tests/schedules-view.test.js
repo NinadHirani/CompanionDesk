@@ -25,10 +25,10 @@ test('shape: bounded lines with a local due time and state markers', () => {
   assert.equal(s.ok, true);
   assert.equal(s.lines.length, 1);
   assert.match(s.lines[0], /^sch-000001 reminder: Call the dentist — due \d{4}-\d{2}-\d{2} \d{2}:\d{2} \[active\]$/);
-  assert.deepEqual(s.actions, [{ id: 'sch-000001', kind: 'pause' }, { id: 'sch-000001', kind: 'cancel' }]);
+  assert.deepEqual(s.actions, [{ id: 'sch-000001', kind: 'edit' }, { id: 'sch-000001', kind: 'pause' }, { id: 'sch-000001', kind: 'cancel' }]);
   const p = view.shape([rec({ paused: true })]);
   assert.match(p.lines[0], /\[paused\]$/);
-  assert.deepEqual(p.actions.map((a) => a.kind), ['resume', 'cancel']);
+  assert.deepEqual(p.actions.map((a) => a.kind), ['edit', 'resume', 'cancel']);
   const f = view.shape([rec({ firedAt: 1_700_000_100_000 })]);
   assert.match(f.lines[0], /\[fired \d{4}-\d{2}-\d{2} \d{2}:\d{2}\]$/);
   assert.deepEqual(f.actions, [], 'a fired record offers no actions');
@@ -37,7 +37,7 @@ test('shape: bounded lines with a local due time and state markers', () => {
   assert.deepEqual(c.actions, []);
   const d = view.shape([rec({ deferredTo: 1_700_030_000_000 })]);
   assert.match(d.lines[0], /\[deferred until \d{4}-\d{2}-\d{2} \d{2}:\d{2}\]$/);
-  assert.deepEqual(d.actions.map((a) => a.kind), ['pause', 'cancel'], 'a deferred record can still be paused or cancelled');
+  assert.deepEqual(d.actions.map((a) => a.kind), ['edit', 'pause', 'cancel'], 'a deferred record can still be edited, paused or cancelled');
 });
 
 test('shape: caps at 10, counts hidden and skipped separately', () => {

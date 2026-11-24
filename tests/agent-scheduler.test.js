@@ -422,8 +422,8 @@ test('settings: proactive keys default to opt-in off, quiet hours on', () => {
 test('wiring lock: the scheduler is user-surface only; the agent contract never widens', () => {
   // The Gate 2 agent contract stays read-only: no schedules channel in it.
   for (const ch of RENDERER_CHANNELS) assert.ok(!ch.startsWith('schedules:'), ch);
-  // The product allowlist carries the five channels.
-  for (const ch of ['schedules:create', 'schedules:list', 'schedules:pause', 'schedules:resume', 'schedules:cancel']) {
+  // The product allowlist carries the six channels.
+  for (const ch of ['schedules:create', 'schedules:list', 'schedules:update', 'schedules:pause', 'schedules:resume', 'schedules:cancel']) {
     assert.ok(IPC_CHANNELS.includes(ch), ch);
   }
   // Only agent-runtime.js builds the book; only main.js builds the surface.
@@ -453,4 +453,82 @@ test('stack: createAgentStack wires the scheduler into persistence and returns i
   assert.equal(stack2.persistence.load().ok, true, JSON.stringify(stack2.persistence.load().problems || []));
   assert.equal(stack2.schedules.list().length, 1);
   assert.equal(stack2.schedules.list()[0].id, made.id);
+});
+
+test('book update: edits title and due time of an active schedule only', () => {
+  let n = 1_000_000;
+  const clock = () => n;
+  const book = createScheduleBook({ clock });
+  const made = book.create({ title: 'Call the dentist', scope: 'reminder', dueAt: 2_000_000 });
+  assert.equal(made.ok, true);
+  const upd = book.update({ id: made.schedule.id, title: 'Call the optician', dueAt: 3_000_000 });
+  assert.equal(upd.ok, true);
+  assert.equal(upd.schedule.title, 'Call the optician');
+  assert.equal(upd.schedule.dueAt, 3_000_000);
+  assert.equal(upd.schedule.scope, 'reminder', 'the scope does not change');
+  // refusals
+  assert.equal(book.update({ id: 'sch-999999', title: 'x' }).reason, 'schedule_unknown');
+  assert.equal(book.update({ id: made.schedule.id }).reason, 'nothing_to_update');
+  assert.equal(book.update({ id: made.schedule.id, title: '' }).reason, 'title_invalid');
+  assert.equal(book.update({ id: made.schedule.id, title: 'x'.repeat(121) }).reason, 'title_invalid');
+  assert.equal(book.update({ id: made.schedule.id, dueAt: 999_999 }).reason, 'due_at_past');
+  assert.equal(book.update({ id: made.schedule.id, dueAt: 'soon' }).reason, 'due_at_invalid');
+  // fired and cancelled schedules refuse edits
+  const r2 = book.create({ title: 'second', scope: 'deadline', dueAt: 2_500_000 });
+  book.cancel(r2.schedule.id);
+  assert.equal(book.update({ id: r2.schedule.id, title: 'x' }).reason, 'schedule_cancelled');
+  const r3 = book.create({ title: 'third', scope: 'reminder', dueAt: 2_600_000 });
+  n = 2_600_001;
+  const fired = book.tick(n);
+  assert.ok(fired.due.some((d) => d.id === r3.schedule.id), 'tick fires the due schedule');
+  assert.equal(book.update({ id: r3.schedule.id, title: 'x' }).reason, 'already_fired');
+  // list re-sorts after a due-time move
+  book.update({ id: made.schedule.id, dueAt: 4_000_000 });
+  const listed = book.list();
+  assert.ok(listed[0].dueAt <= listed[listed.length - 1].dueAt);
+});
+
+test('surface schedules:update: validated, durable, rolled back on failure', async () => {
+  const { createSchedulerSurface } = require('../src/scheduler-surface');
+  let n = 1_000_000;
+  const clock = () => n;
+  const registry = createRegistry();
+  const stop = createEmergencyStop();
+  const state = { bytes: null };
+  const storage = { load: async () => state.bytes, save: async (b) => { state.bytes = b; } };
+  const db = await LocalDb.open({ storage });
+  const schedules = createScheduleBook({ clock });
+  const p = createAgentPersistence({ db, clock, registry, audit: createAuditLog({ clock }), approvals: createApprovalDesk({ clock }), engine: createPolicyEngine({ registry, approvals: createApprovalDesk({ clock }), emergencyStop: stop, clock }), emergencyStop: stop, notifications: createNotificationDesk({ clock }), reminders: createReminderBook({ clock }), schedules });
+  const s = createSchedulerSurface({ schedules, persistence: p });
+  const made = await s.handlers['schedules:create']({ title: 'Call the dentist', scope: 'reminder', dueAt: 2_000_000 });
+  assert.equal(made.ok, true);
+  const upd = await s.handlers['schedules:update']({ id: made.schedule.id, title: 'Call the optician' });
+  assert.equal(upd.ok, true);
+  assert.equal(upd.schedule.title, 'Call the optician');
+  assert.equal(upd.schedule.dueAt, 2_000_000);
+  // payload discipline
+  assert.equal((await s.handlers['schedules:update']({ id: made.schedule.id, extra: 1 })).reason, 'unknown_field:extra');
+  assert.equal((await s.handlers['schedules:update']({ id: made.schedule.id })).reason, 'nothing_to_update');
+  assert.equal((await s.handlers['schedules:update']({ id: 'sch-999999', title: 'x' })).reason, 'schedule_unknown');
+  assert.equal((await s.handlers['schedules:update']({ id: made.schedule.id, dueAt: 1_000_000 })).reason, 'due_at_past');
+  // The audit trail carries the edit, and a failed save rolls the edit back:
+  // the same fake-persistence pattern the create/pause tests use.
+  const appended = [];
+  const fake = {
+    appendAudit: (e) => { appended.push(e); return { ok: true, seq: appended.length, hash: 'h' }; },
+    save: () => (saveOk ? { ok: true } : { ok: false, reason: 'persist_failure' }),
+  };
+  let saveOk = true;
+  const book2 = createScheduleBook({ clock: () => clock.n });
+  const s2 = createSchedulerSurface({ schedules: book2, persistence: fake });
+  const made2 = await s2.handlers['schedules:create']({ title: 'orig', scope: 'reminder', dueAt: NOW + 1000 });
+  assert.equal(made2.ok, true);
+  const upd2 = await s2.handlers['schedules:update']({ id: made2.schedule.id, title: 'edited', dueAt: NOW + 2000 });
+  assert.equal(upd2.ok, true);
+  assert.ok(appended.some((e) => e.action === 'schedules.updated'), 'edit audited');
+  saveOk = false;
+  const failed = await s2.handlers['schedules:update']({ id: made2.schedule.id, title: 'lost' });
+  assert.equal(failed.ok, false);
+  assert.equal(failed.reason, 'persist_failure');
+  assert.equal(book2.list()[0].title, 'edited', 'a failed save leaves the last durable state, not the phantom');
 });

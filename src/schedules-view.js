@@ -79,6 +79,7 @@
       else if (r.deferredTo !== null) state = 'deferred until ' + when(r.deferredTo);
       lines.push(r.id + ' ' + r.scope + ': ' + r.title + ' — due ' + when(r.dueAt) + ' [' + state + ']');
       if (r.firedAt === null && !r.cancelled) {
+        actions.push({ id: r.id, kind: 'edit' });
         if (r.paused) actions.push({ id: r.id, kind: 'resume' });
         else actions.push({ id: r.id, kind: 'pause' });
         actions.push({ id: r.id, kind: 'cancel' });

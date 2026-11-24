@@ -2,9 +2,9 @@
 
 // M5 slice 1 (wiring): the proactive scheduler's USER surface.
 //
-// The renderer reaches the scheduler through five product channels, exactly
+// The renderer reaches the scheduler through six product channels, exactly
 // like settings:*: an explicit user gesture in the UI creates, pauses,
-// resumes or cancels a schedule, or reads the list. This is NOT the Gate 2
+// resumes, cancels or edits a schedule, or reads the list. This is NOT the Gate 2
 // agent contract: ipc-contract.js RENDERER_CHANNELS stays read-only, the
 // agent registry never sees the scheduler, and no agent path can create,
 // pause or fire a schedule. "Proactive actions run only on schedules the
@@ -118,6 +118,11 @@ function createSchedulerSurface({ schedules, persistence } = {}) {
   };
   const ID_RULES = { id: { type: 'string', max: MAX_ID } };
   const LIST_RULES = { limit: { type: 'int', min: 1, max: 500, optional: true } };
+  const UPDATE_RULES = {
+    id: { type: 'string', max: MAX_ID },
+    title: { type: 'string', max: MAX_TITLE, optional: true },
+    dueAt: { type: 'int', min: 0, max: Number.MAX_SAFE_INTEGER, optional: true },
+  };
 
   function audit(entry) {
     return persistence.appendAudit(entry);
@@ -129,7 +134,7 @@ function createSchedulerSurface({ schedules, persistence } = {}) {
     if (!made.ok) return made;
     const dur = durableWrite(
       persistence,
-      { actor: 'user', action: 'schedules.created', detail: { id: made.schedule.id, scope: made.schedule.scope, dueAt: made.schedule.dueAt } },
+      { actor: 'user', action: 'schedules.created', detail: { id: made.schedule.id, scope: made.schedule.scope, due_at: made.schedule.dueAt } },
       () => ({ ok: true }),
       () => { schedules.remove(made.schedule.id); }
     );
@@ -146,6 +151,15 @@ function createSchedulerSurface({ schedules, persistence } = {}) {
     );
     if (!dur.ok) return dur;
     return { ok: true, schedule: projectRecord(dur.schedule) };
+  }
+
+  // The audit log validates detail keys (lowercase) and values (no
+  // undefined), so the edit entry carries only what the caller changed.
+  function updateDetail(payload) {
+    const d = { id: payload.id };
+    if (payload.title !== undefined) d.title = payload.title;
+    if (payload.dueAt !== undefined) d.due_at = payload.dueAt;
+    return d;
   }
 
   const handlers = {
@@ -176,6 +190,23 @@ function createSchedulerSurface({ schedules, persistence } = {}) {
       const v = validatePayload(payload, ID_RULES);
       if (!v.ok) return v;
       try { return scopeOp(v.payload, (id) => schedules.cancel(id), 'schedules.cancelled'); } catch (e) { return bad('refused'); }
+    },
+    'schedules:update': async (payload) => {
+      const v = validatePayload(payload, UPDATE_RULES);
+      if (!v.ok) return v;
+      if (v.payload.title === undefined && v.payload.dueAt === undefined) return bad('nothing_to_update');
+      try {
+        const before = schedules.list().find((s) => s.id === v.payload.id);
+        if (!before) return bad('schedule_unknown');
+        const dur = durableWrite(
+          persistence,
+          { actor: 'user', action: 'schedules.updated', detail: updateDetail(v.payload) },
+          () => schedules.update(v.payload),
+          () => schedules.update({ id: v.payload.id, title: before.title, dueAt: before.dueAt })
+        );
+        if (!dur.ok) return dur;
+        return { ok: true, schedule: projectRecord(dur.schedule) };
+      } catch (e) { return bad('refused'); }
     },
   };
 

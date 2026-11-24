@@ -468,9 +468,22 @@ is the pure fail-closed shaper (allowlisted fields only, display cap 10 that a
 caller may only lower, malformed records skipped and counted, no mutation).
 The About settings card gained the proactive controls (master delivery toggle
 off by default, per-scope reminder/deadline toggles, quiet hours with time
-inputs, all carried through `settings:save` and normalizeSettings). Next M5
-slice: OPEN — per-scope tuning and deadline-scope UX polish; conservative
-defaults stand until reviewed.
+inputs, all carried through `settings:save` and normalizeSettings). **Slice 3 (landed 24 Nov 2026): per-scope delivery visibility and editing.**
+The schedules panel now shows, read-only, what each scope's delivery actually
+does: if the master proactive toggle or a scope toggle is off in settings, a
+state line says so in plain language, so a listed schedule that will not
+notify is never a mystery. Active (not fired, not cancelled) schedules can be
+edited in place: a sixth user-facing channel `schedules:update` changes title
+and/or due time only (the scope of an existing schedule does not change;
+changing it is a different commitment, cancel and recreate), validated and
+audited like every other write with rollback on a failed save. The audit
+log's detail charset (lowercase keys, no undefined values) is now honoured by
+the surface's audit entries, a latent slice-1 mismatch the new tests caught:
+the create path against the real audit log had been refused, hidden by the
+fake-persistence tests. The panel edit affordance prefills the creation form,
+disables the scope field while editing, and restores "Add schedule" after.
+Conservative defaults remain working defaults (delivery off, quiet hours
+23:30-08:00, nothing fires until the user enables it) until reviewed.
 
 ## M6 - Voice v2 (2-3 wks)
 

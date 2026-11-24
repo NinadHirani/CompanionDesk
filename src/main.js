@@ -773,6 +773,7 @@ app.whenReady().then(async () => {
     ipcMain.handle('schedules:pause', schedulerSurface.handlers['schedules:pause']);
     ipcMain.handle('schedules:resume', schedulerSurface.handlers['schedules:resume']);
     ipcMain.handle('schedules:cancel', schedulerSurface.handlers['schedules:cancel']);
+    ipcMain.handle('schedules:update', schedulerSurface.handlers['schedules:update']);
   } catch (e) {
     console.error('[agent] read-only surface unavailable:', e && e.message);
   }

@@ -87,6 +87,7 @@ const IPC_CHANNELS = Object.freeze([
   'schedules:pause',
   'schedules:resume',
   'schedules:cancel',
+  'schedules:update',
 
   'status:get',
   'runs:get',

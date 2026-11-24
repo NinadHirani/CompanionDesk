@@ -127,6 +127,27 @@
         return { ok: true, schedule: { ...rec } };
       },
 
+      // Edit the title and/or due time of an ACTIVE schedule. The scope is
+      // immutable here (a scope change is a different commitment; cancel and
+      // recreate it), and a fired, cancelled or unknown schedule is refused.
+      update({ id, title, dueAt } = {}) {
+        const rec = get(id);
+        if (!rec) return { ok: false, reason: 'schedule_unknown' };
+        if (rec.cancelled) return { ok: false, reason: 'schedule_cancelled' };
+        if (rec.firedAt !== null) return { ok: false, reason: 'already_fired' };
+        if (title !== undefined) {
+          if (typeof title !== 'string' || title.length === 0 || title.length > MAX_TITLE) return { ok: false, reason: 'title_invalid' };
+        }
+        if (dueAt !== undefined) {
+          if (!Number.isSafeInteger(dueAt)) return { ok: false, reason: 'due_at_invalid' };
+          if (dueAt <= now()) return { ok: false, reason: 'due_at_past' };
+        }
+        if (title === undefined && dueAt === undefined) return { ok: false, reason: 'nothing_to_update' };
+        if (title !== undefined) rec.title = title;
+        if (dueAt !== undefined) rec.dueAt = dueAt;
+        return { ok: true, schedule: { ...rec } };
+      },
+
       // A copy of the book sorted by due time, soonest first.
       list() {
         return [...book.values()]
