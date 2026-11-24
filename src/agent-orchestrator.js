@@ -20,8 +20,17 @@
 // - Authorization is re-checked before every attempt; a denied authorization
 //   aborts the run (denied access is never skippable).
 // - An uninterpretable step result is a failure, not a success.
-// - Every transition is audited; nothing is ever resumed automatically after
-//   a restart (this module has no persistence surface at all).
+// - Every transition is audited with log-before-commit ordering: the audit
+//   entry is accepted FIRST and the in-memory state moves only after. A run
+//   is never registered, paused, resumed, advanced, skipped or finished
+//   without its audit entry on record.
+// - ANY audit append failure (a refused entry or a throwing sink) poisons
+//   the orchestrator: every further operation returns audit_failed and
+//   nothing at all executes while the sink is unhealthy. Recovery is a new
+//   orchestrator instance, which is what a restart gives the wiring layer;
+//   this module never continues on an unverified trail.
+// - Nothing is ever resumed automatically after a restart (this module has
+//   no persistence surface at all).
 //
 // Dual-mode: require() in Electron/Node, plain <script> in the web/mobile
 // build (window.CompanionAgentOrchestrator).
@@ -89,22 +98,44 @@
 
     const runs = new Map(); // runId -> run record (in-memory only, this slice)
     let activeRunId = null;
+    // Once any append is refused or throws, the audit trail can no longer be
+    // trusted to record what happens next. The orchestrator poisons itself:
+    // every further operation refuses with audit_failed until a new instance
+    // (a restart) replaces it. There is no in-process recovery.
+    let auditHealthy = true;
 
-    // The audit log carries bounded, typed detail objects only (the audit
-    // sanitizer's schema: lowercase keys, at most 8, string values capped).
-    // Anything that would not fit is clipped or dropped here, never passed
-    // raw. An append refusal is returned to the caller, never swallowed.
-    function log(action, detail) {
+    // Write one audit entry and CHECK the result. The audit log carries
+    // bounded, typed detail objects only (the sanitizer's schema: lowercase
+    // keys, at most 8, string values capped); anything that would not fit is
+    // clipped or dropped here, never passed raw. A refused entry or a
+    // throwing sink poisons the orchestrator and is reported to the caller,
+    // never swallowed.
+    function audited(action, detail) {
       const d = {};
       if (detail) {
         for (const [k, v] of Object.entries(detail)) {
-          if (v === undefined) continue;
+          if (v === undefined || v === null) continue;
           if (typeof v === 'string') d[k] = v.length > MAX_SUMMARY ? v.slice(0, MAX_SUMMARY) : v;
           else if (typeof v === 'number' && Number.isFinite(v)) d[k] = v;
           else if (typeof v === 'boolean') d[k] = v;
         }
       }
-      return audit.append({ actor: 'agent', action, detail: d });
+      let res;
+      try {
+        res = audit.append({ actor: 'agent', action, detail: d });
+      } catch (err) {
+        auditHealthy = false;
+        return { ok: false, reason: 'audit_append_threw' };
+      }
+      if (!res || res.ok !== true) {
+        auditHealthy = false;
+        return { ok: false, reason: 'audit_append_refused', errors: res && res.errors };
+      }
+      return { ok: true };
+    }
+
+    function poisoned() {
+      return !auditHealthy ? { ok: false, reason: 'audit_failed' } : null;
     }
 
     function runState(run) {
@@ -121,16 +152,21 @@
       };
     }
 
+    // Terminal transition, log-before-commit: the run is marked finished and
+    // releases the active slot ONLY after the entry was accepted. On an
+    // append failure the run keeps its prior state (and, for an active run,
+    // holds the slot) and the caller sees audit_failed.
     function finish(run, state, action, body) {
+      if (!audited(action, body || {}).ok) return false;
       run.state = state;
       run.finishedAt = now();
-      // A finished run releases the single active slot.
       if (activeRunId === run.runId) activeRunId = null;
-      // The caller supplies run_id in the detail body; the log adds nothing.
-      log(action, body || {});
+      return true;
     }
 
     function startRun({ runId, goal, plan } = {}) {
+      const p = poisoned();
+      if (p) return p;
       if (typeof runId !== 'string' || runId.length === 0 || runId.length > MAX_RUN_ID) return { ok: false, reason: 'run_id_invalid' };
       if (activeRunId !== null) return { ok: false, reason: 'active_run_exists', activeRunId };
       if (runs.has(runId)) return { ok: false, reason: 'duplicate_run_id' };
@@ -138,7 +174,9 @@
       if (goal !== undefined && (typeof goal !== 'string' || goal.length > MAX_GOAL)) return { ok: false, reason: 'goal_invalid' };
       const issue = planIssue(plan);
       if (issue) return { ok: false, reason: issue };
-      const run = {
+      // A shaped preview of the run, used for the audit entry; the run is
+      // registered only after the entry was accepted.
+      const shaped = {
         runId,
         goal: clip(goal, MAX_GOAL),
         plan: plan.map((s) => ({
@@ -158,10 +196,12 @@
         finishedAt: null,
         pendingApproval: null,
       };
-      runs.set(runId, run);
+      if (!audited('run.started', { run_id: runId, goal: shaped.goal, steps: shaped.plan.length }).ok) {
+        return { ok: false, reason: 'audit_failed' };
+      }
+      runs.set(runId, shaped);
       activeRunId = runId;
-      log('run.started', { run_id: runId, goal: run.goal || null, steps: run.plan.length });
-      return { ok: true, run: runState(run) };
+      return { ok: true, run: runState(shaped) };
     }
 
     function getRun(runId) {
@@ -170,15 +210,17 @@
     }
 
     function pauseForApproval(run, step) {
+      if (!audited('run.awaiting_approval', { run_id: run.runId, step_id: step.id, tool: step.tool }).ok) return false;
       run.state = 'awaiting_approval';
       run.pendingApproval = { stepId: step.id, tool: step.tool, args: step.args };
-      log('run.awaiting_approval', { run_id: run.runId, step_id: step.id, tool: step.tool });
+      return true;
     }
 
     function pauseForStop(run, step) {
+      if (!audited('run.paused_stop', { run_id: run.runId, step_id: step ? step.id : null }).ok) return false;
       run.state = 'paused_stop';
       run.pendingApproval = null;
-      log('run.paused_stop', { run_id: run.runId, step_id: step ? step.id : null });
+      return true;
     }
 
     // Explicit resume. For an approval pause, the caller must hand in an
@@ -186,6 +228,8 @@
     // tool + args through the policy engine) and only consumed immediately
     // before the step executes. For a stop pause, the stop must be inactive.
     function resume(runId, { approvalId } = {}) {
+      const p = poisoned();
+      if (p) return p;
       const run = runs.get(runId);
       if (!run) return { ok: false, reason: 'run_unknown' };
       if (run.state === 'awaiting_approval') {
@@ -198,15 +242,19 @@
           // rejected) instead of flattening it away.
           return { ok: false, reason: check.reason || 'approval_rejected', approvalReason: check.approvalReason };
         }
+        if (!audited('run.resumed', { run_id: run.runId, step_id: step.id, via: 'approval' }).ok) {
+          return { ok: false, reason: 'audit_failed' };
+        }
         run.pendingApproval.approvalId = approvalId;
         run.state = 'running';
-        log('run.resumed', { run_id: run.runId, step_id: step.id, via: 'approval' });
         return { ok: true, run: runState(run) };
       }
       if (run.state === 'paused_stop') {
         if (emergencyStop.isActive()) return { ok: false, reason: 'stop_active' };
+        if (!audited('run.resumed', { run_id: run.runId, step_id: run.plan[run.stepIndex] ? run.plan[run.stepIndex].id : null, via: 'stop' }).ok) {
+          return { ok: false, reason: 'audit_failed' };
+        }
         run.state = 'running';
-        log('run.resumed', { run_id: run.runId, step_id: run.plan[run.stepIndex] ? run.plan[run.stepIndex].id : null, via: 'stop' });
         return { ok: true, run: runState(run) };
       }
       return { ok: false, reason: 'run_not_paused', state: run.state };
@@ -214,8 +262,12 @@
 
     // Drive exactly one transition: execute the next step, or surface the
     // pause/complete state. The caller keeps calling step() until the run is
-    // completed or aborted.
+    // completed or aborted. Every transition is log-before-commit: an append
+    // failure leaves the state exactly as it was and the caller sees
+    // audit_failed; nothing further runs on this instance.
     function step(runId) {
+      const p = poisoned();
+      if (p) return p;
       const run = runs.get(runId);
       if (!run) return { ok: false, reason: 'run_unknown' };
       if (run.state === 'completed' || run.state === 'aborted') return { ok: false, reason: 'run_finished', state: run.state };
@@ -223,21 +275,21 @@
       if (run.state === 'awaiting_approval') return { ok: true, state: 'awaiting_approval', stepId: run.pendingApproval ? run.pendingApproval.stepId : null };
 
       if (run.stepIndex >= run.plan.length) {
-        finish(run, 'completed', 'run.completed', { run_id: run.runId });
+        if (!finish(run, 'completed', 'run.completed', { run_id: run.runId })) return { ok: false, reason: 'audit_failed' };
         return { ok: true, state: 'completed' };
       }
       const step = run.plan[run.stepIndex];
 
       // The stop outranks everything, checked before every step.
       if (emergencyStop.isActive()) {
-        pauseForStop(run, step);
+        if (!pauseForStop(run, step)) return { ok: false, reason: 'audit_failed' };
         return { ok: true, state: 'paused_stop', stepId: step.id };
       }
 
       // An approval-gated step pauses until the user's yes arrives through
       // resume(). It never authorizes or executes on its own.
       if (step.needsApproval && !run.pendingApproval) {
-        pauseForApproval(run, step);
+        if (!pauseForApproval(run, step)) return { ok: false, reason: 'audit_failed' };
         return { ok: true, state: 'awaiting_approval', stepId: step.id, tool: step.tool };
       }
 
@@ -247,8 +299,12 @@
         // Denied authorization is never skippable: the run aborts. The
         // denial is its own audit entry, and the terminal transition is
         // always audited as run.aborted.
-        log('run.step_denied', { run_id: run.runId, step_id: step.id, tool: step.tool, reason: check.reason || 'denied' });
-        finish(run, 'aborted', 'run.aborted', { run_id: run.runId, step_id: step.id, summary: 'authorization_denied' });
+        if (!audited('run.step_denied', { run_id: run.runId, step_id: step.id, tool: step.tool, reason: check.reason || 'denied' }).ok) {
+          return { ok: false, reason: 'audit_failed' };
+        }
+        if (!finish(run, 'aborted', 'run.aborted', { run_id: run.runId, step_id: step.id, summary: 'authorization_denied' })) {
+          return { ok: false, reason: 'audit_failed' };
+        }
         return { ok: false, state: 'aborted', stepId: step.id, reason: check.reason || 'denied' };
       }
 
@@ -256,16 +312,23 @@
       if (approvalId) {
         const used = approvals.consume(approvalId, { tool: step.tool, args: step.args });
         if (!used.ok) {
-          log('run.step_denied', { run_id: run.runId, step_id: step.id, tool: step.tool, reason: used.reason || 'approval_consume_failed' });
-          finish(run, 'aborted', 'run.aborted', { run_id: run.runId, step_id: step.id, summary: 'approval_consume_failed' });
+          if (!audited('run.step_denied', { run_id: run.runId, step_id: step.id, tool: step.tool, reason: used.reason || 'approval_consume_failed' }).ok) {
+            return { ok: false, reason: 'audit_failed' };
+          }
+          if (!finish(run, 'aborted', 'run.aborted', { run_id: run.runId, step_id: step.id, summary: 'approval_consume_failed' })) {
+            return { ok: false, reason: 'audit_failed' };
+          }
           return { ok: false, state: 'aborted', stepId: step.id, reason: used.reason || 'approval_consume_failed' };
         }
         run.pendingApproval = null;
       }
 
+      if (!audited('run.step_started', { run_id: run.runId, step_id: step.id, tool: step.tool }).ok) {
+        // The tool closure is never invoked without its step_started entry.
+        return { ok: false, reason: 'audit_failed' };
+      }
       const attempt = (run.attempts[step.id] || 0) + 1;
       run.attempts[step.id] = attempt;
-      log('run.step_started', { run_id: run.runId, step_id: step.id, tool: step.tool, attempt });
 
       let observed = null;
       let threw = null;
@@ -285,14 +348,18 @@
           observed = { ok: false, summary: 'verify_failed' };
         }
       }
-      if (threw) log('run.step_failed', { run_id: run.runId, step_id: step.id, attempt, summary: 'step_threw' });
-      else if (!observed.ok) log('run.step_failed', { run_id: run.runId, step_id: step.id, attempt, summary: observed.summary });
-      else log('run.step_succeeded', { run_id: run.runId, step_id: step.id, attempt, summary: observed.summary });
+      const outcomeAction = threw || !observed.ok ? 'run.step_failed' : 'run.step_succeeded';
+      const outcomeSummary = threw ? 'step_threw' : observed.summary;
+      if (!audited(outcomeAction, { run_id: run.runId, step_id: step.id, attempt, summary: outcomeSummary }).ok) {
+        // The result is discarded, not committed: the run does not advance
+        // and nothing further runs on this instance.
+        return { ok: false, reason: 'audit_failed' };
+      }
 
       if (observed.ok) {
         run.stepIndex += 1;
         run.state = 'running';
-        return { ok: true, state: run.stepIndex >= run.plan.length ? 'running' : 'running', stepId: step.id, result: observed };
+        return { ok: true, state: 'running', stepId: step.id, result: observed };
       }
 
       if (attempt <= step.retries) {
@@ -300,18 +367,22 @@
         // cannot retry without a fresh one: it goes back to the approval
         // pause, never re-executes on a used approval.
         if (step.needsApproval) {
-          pauseForApproval(run, step);
+          if (!pauseForApproval(run, step)) return { ok: false, reason: 'audit_failed' };
           return { ok: true, state: 'awaiting_approval', stepId: step.id, tool: step.tool, retrying: true };
         }
         return { ok: true, state: 'running', stepId: step.id, retrying: true, result: observed };
       }
 
       if (step.recovery === 'skip') {
-        log('run.step_skipped', { run_id: run.runId, step_id: step.id, summary: observed.summary });
+        if (!audited('run.step_skipped', { run_id: run.runId, step_id: step.id, summary: observed.summary }).ok) {
+          return { ok: false, reason: 'audit_failed' };
+        }
         run.stepIndex += 1;
         return { ok: true, state: 'running', stepId: step.id, skipped: true };
       }
-      finish(run, 'aborted', 'run.aborted', { step_id: step.id, summary: observed.summary || 'step_failed' });
+      if (!finish(run, 'aborted', 'run.aborted', { run_id: run.runId, step_id: step.id, summary: observed.summary || 'step_failed' })) {
+        return { ok: false, reason: 'audit_failed' };
+      }
       return { ok: false, state: 'aborted', stepId: step.id, result: observed };
     }
 

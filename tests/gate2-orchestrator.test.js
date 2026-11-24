@@ -327,3 +327,183 @@ test('only one run is active at a time; a finished run cannot step again', () =>
   assert.equal(w.orch.step('nope').reason, 'run_unknown');
   assert.equal(w.orch.resume('nope', {}).reason, 'run_unknown');
 });
+
+// ---------------------------------------------------------------------------
+// Audit sink failures fail closed. The orchestrator must CHECK every
+// audit.append result and treat a refusal or a throwing sink as fatal: no
+// transition commits without its entry, the tool closure never runs without
+// its step_started entry, and once unhealthy every further operation refuses.
+// Recovery is a new orchestrator instance (a restart), never in-process.
+
+function sinkWorld(sink) {
+  const state = { now: 1_700_000_000_000 };
+  const registry = fixtures();
+  const audit = createAuditLog({ clock: () => state.now });
+  const approvals = createApprovalDesk({ clock: () => state.now });
+  const stop = createEmergencyStop();
+  const engine = createPolicyEngine({ registry, approvals, emergencyStop: stop, clock: () => state.now });
+  const wrapped = {
+    append(entry) {
+      const verdict = sink(entry, (e) => audit.append(e));
+      return verdict === true ? audit.append(entry) : verdict;
+    },
+    snapshot: () => audit.snapshot(),
+  };
+  const orch = createOrchestrator({ engine, approvals, emergencyStop: stop, audit: wrapped, clock: () => state.now });
+  return { state, registry, audit, approvals, stop, engine, orch };
+}
+
+const REFUSED = () => ({ ok: false, errors: ['sink_refused'] });
+
+function refuseActions(...names) {
+  return (entry, pass) => (names.includes(entry.action) ? REFUSED() : pass(entry));
+}
+
+function grantedSearchWorld(sink) {
+  const w = sinkWorld(sink);
+  w.engine.grantTool({ tool: 'notes.search', ttlMs: 60_000 });
+  return w;
+}
+
+const SEARCH_STEP = (counter) => ({
+  id: 'a',
+  tool: 'notes.search',
+  args: { query: 'q' },
+  run: () => { counter.calls += 1; return { ok: true, summary: 'fine' }; },
+});
+
+test('a passthrough sink still completes a healthy run', () => {
+  const counter = { calls: 0 };
+  const w = grantedSearchWorld((entry, pass) => pass(entry));
+  assert.equal(w.orch.startRun({ runId: 'r1', plan: [SEARCH_STEP(counter)] }).ok, true);
+  w.orch.step('r1');
+  assert.equal(w.orch.step('r1').state, 'completed');
+  assert.equal(counter.calls, 1);
+});
+
+test('a refused run.started entry registers nothing', () => {
+  const w = grantedSearchWorld(refuseActions('run.started'));
+  assert.equal(w.orch.startRun({ runId: 'r1', plan: [SEARCH_STEP({ calls: 0 })] }).reason, 'audit_failed');
+  assert.equal(w.orch.getRun('r1'), null);
+});
+
+test('a refused run.started entry poisons even after the sink recovers', () => {
+  let refused = false;
+  const w = grantedSearchWorld((entry, pass) => {
+    if (!refused && entry.action === 'run.started') { refused = true; return REFUSED(); }
+    return pass(entry);
+  });
+  assert.equal(w.orch.startRun({ runId: 'r1', plan: [SEARCH_STEP({ calls: 0 })] }).reason, 'audit_failed');
+  // The sink is healthy from here on; the instance stays poisoned.
+  assert.equal(w.orch.startRun({ runId: 'r2', plan: [SEARCH_STEP({ calls: 0 })] }).reason, 'audit_failed');
+  assert.equal(w.orch.getRun('r2'), null);
+});
+
+test('a refused step_started entry never invokes the tool closure', () => {
+  const counter = { calls: 0 };
+  const w = grantedSearchWorld(refuseActions('run.step_started'));
+  assert.equal(w.orch.startRun({ runId: 'r1', plan: [SEARCH_STEP(counter)] }).ok, true);
+  assert.equal(w.orch.step('r1').reason, 'audit_failed');
+  assert.equal(counter.calls, 0);
+  assert.equal(w.orch.getRun('r1').stepIndex, 0);
+});
+
+test('a refused step_succeeded entry discards the result and does not advance', () => {
+  const counter = { calls: 0 };
+  const w = grantedSearchWorld(refuseActions('run.step_succeeded'));
+  assert.equal(w.orch.startRun({ runId: 'r1', plan: [SEARCH_STEP(counter)] }).ok, true);
+  assert.equal(w.orch.step('r1').reason, 'audit_failed');
+  assert.equal(counter.calls, 1, 'the closure ran, but its outcome is not committed');
+  assert.equal(w.orch.getRun('r1').stepIndex, 0);
+  assert.equal(w.orch.step('r1').reason, 'audit_failed');
+});
+
+test('a refused step_failed entry prevents skip recovery from advancing', () => {
+  const counter = { calls: 0 };
+  const step = { ...SEARCH_STEP(counter), run: () => { counter.calls += 1; return { ok: false, summary: 'nope' }; }, retries: 0, recovery: 'skip' };
+  const w = grantedSearchWorld(refuseActions('run.step_failed'));
+  assert.equal(w.orch.startRun({ runId: 'r1', plan: [step] }).ok, true);
+  assert.equal(w.orch.step('r1').reason, 'audit_failed');
+  assert.equal(w.orch.getRun('r1').stepIndex, 0);
+  assert.equal(w.orch.step('r1').reason, 'audit_failed');
+});
+
+test('a refused step_skipped entry does not advance the run', () => {
+  const counter = { calls: 0 };
+  const step = { ...SEARCH_STEP(counter), run: () => { counter.calls += 1; return { ok: false }; }, retries: 0, recovery: 'skip' };
+  const w = grantedSearchWorld(refuseActions('run.step_skipped'));
+  assert.equal(w.orch.startRun({ runId: 'r1', plan: [step] }).ok, true);
+  assert.equal(w.orch.step('r1').reason, 'audit_failed');
+  assert.equal(w.orch.getRun('r1').stepIndex, 0);
+});
+
+test('a refused awaiting_approval entry never executes the gated step', () => {
+  const counter = { calls: 0 };
+  const w = grantedSearchWorld(refuseActions('run.awaiting_approval'));
+  w.engine.grantTool({ tool: 'payments.charge', ttlMs: 60_000 });
+  const step = { id: 'c', tool: 'payments.charge', args: { amount: 5, currency: 'INR' }, needsApproval: true, run: () => { counter.calls += 1; return { ok: true }; } };
+  assert.equal(w.orch.startRun({ runId: 'r1', plan: [step] }).ok, true);
+  assert.equal(w.orch.step('r1').reason, 'audit_failed');
+  assert.equal(counter.calls, 0);
+  assert.equal(w.orch.getRun('r1').state, 'running');
+});
+
+test('a refused resumed entry leaves the run paused', () => {
+  const w = grantedSearchWorld(refuseActions('run.resumed'));
+  w.engine.grantTool({ tool: 'payments.charge', ttlMs: 60_000 });
+  const step = { id: 'c', tool: 'payments.charge', args: { amount: 5, currency: 'INR' }, needsApproval: true, run: () => ({ ok: true }) };
+  assert.equal(w.orch.startRun({ runId: 'r1', plan: [step] }).ok, true);
+  assert.equal(w.orch.step('r1').state, 'awaiting_approval');
+  const a = w.approvals.request({ tool: 'payments.charge', args: { amount: 5, currency: 'INR' } }).approval;
+  assert.equal(w.orch.resume('r1', { approvalId: a.id }).reason, 'audit_failed');
+  assert.equal(w.orch.getRun('r1').state, 'awaiting_approval');
+  assert.equal(w.orch.step('r1').reason, 'audit_failed');
+});
+
+test('a refused paused_stop entry leaves the run running', () => {
+  const counter = { calls: 0 };
+  const w = grantedSearchWorld(refuseActions('run.paused_stop'));
+  assert.equal(w.orch.startRun({ runId: 'r1', plan: [SEARCH_STEP(counter)] }).ok, true);
+  w.stop.activate('test', { by: 'user' });
+  assert.equal(w.orch.step('r1').reason, 'audit_failed');
+  assert.equal(counter.calls, 0);
+  assert.equal(w.orch.getRun('r1').state, 'running');
+});
+
+test('a refused step_denied entry aborts nothing and poisons', () => {
+  const counter = { calls: 0 };
+  const w = grantedSearchWorld(refuseActions('run.step_denied'));
+  // notes.search is granted, so use an ungranted tool for the denial.
+  const step = { id: 'b', tool: 'notes.rename_tag', args: { from: 'a', to: 'b' }, run: () => { counter.calls += 1; return { ok: true }; } };
+  assert.equal(w.orch.startRun({ runId: 'r1', plan: [step] }).ok, true);
+  assert.equal(w.orch.step('r1').reason, 'audit_failed');
+  assert.equal(counter.calls, 0);
+  assert.equal(w.orch.getRun('r1').state, 'running');
+});
+
+test('a refused terminal aborted entry keeps the run unfinished and the slot held', () => {
+  const counter = { calls: 0 };
+  const w = grantedSearchWorld(refuseActions('run.aborted'));
+  const step = { id: 'b', tool: 'notes.rename_tag', args: { from: 'a', to: 'b' }, run: () => { counter.calls += 1; return { ok: true }; } };
+  assert.equal(w.orch.startRun({ runId: 'r1', plan: [step] }).ok, true);
+  assert.equal(w.orch.step('r1').reason, 'audit_failed');
+  assert.equal(counter.calls, 0);
+  assert.equal(w.orch.getRun('r1').state, 'running', 'the terminal state is not committed without its entry');
+  assert.notEqual(w.orch.activeRun(), null, 'the active slot is not released without the terminal entry');
+});
+
+test('a refused terminal completed entry keeps the run running and the slot held', () => {
+  const counter = { calls: 0 };
+  const w = grantedSearchWorld(refuseActions('run.completed'));
+  assert.equal(w.orch.startRun({ runId: 'r1', plan: [SEARCH_STEP(counter)] }).ok, true);
+  w.orch.step('r1');
+  assert.equal(w.orch.step('r1').reason, 'audit_failed');
+  assert.equal(w.orch.getRun('r1').state, 'running');
+  assert.notEqual(w.orch.activeRun(), null);
+});
+
+test('a throwing audit sink is handled like a refusal', () => {
+  const w = grantedSearchWorld(() => { throw new Error('sink down'); });
+  assert.equal(w.orch.startRun({ runId: 'r1', plan: [SEARCH_STEP({ calls: 0 })] }).reason, 'audit_failed');
+  assert.equal(w.orch.getRun('r1'), null);
+});
