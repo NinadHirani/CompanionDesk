@@ -17,8 +17,8 @@ table below was refreshed in the next commit, which is docs-only.
 
 Verified state: full `npm test` on 24 Nov 2026: 950/950 pass,
 selftest PASS (937/937 at `2ca99d4`, CI runs 45426721777, 45426721768;
-950/950 from the M4 store-contract session slice, run ids in its commit
-message). The same day also landed, each with both workflows green: M4
+950/950 from the M4 store-contract session slice, CI runs 45430221369
+and 45430221679). The same day also landed, each with both workflows green: M4
 wiring slice `189e3a7`, wake milestones `4547f7a`, `a624d5e` and
 `0125061`, the docs-accuracy refresh, and the M4 store-contract slice.
 Earlier verified snapshot: `897b5d0` 735/735 (runs 45353283588,
@@ -489,8 +489,10 @@ prompt-injection corpus passes before any grant widening.
 
 ## M4 - Memory v2 (1-2 wks)
 
-STATUS: unimplemented in product; offline design + harness complete
-(23 Nov 2026). Prerequisite answered by measurement: sql.js's WASM build
+STATUS: WIRED IN PRODUCT as slices 1-2 (24 Nov 2026; the owner resolved
+the four decisions and authorized wiring the same day). Background:
+offline design + harness complete as of 23 Nov 2026. Prerequisite answered
+by measurement: sql.js's WASM build
 has NO FTS5, so the route is a pure-JS index over the existing markdown
 About-me file (which stays canonical, the only memory store). Selective
 per-task retrieval; Remember/Forget commands; consent gate for sensitive
@@ -498,10 +500,10 @@ entries; embeddings stay deferred. Measured keyword baseline and slice
 results (recall 38.0% -> 97.2%, MRR 0.395 -> 0.793 on the 18-query harness;
 no zero-hit queries remain; what is left is ranking quality, not
 vocabulary) and the full design: see `docs/M2_MEMORY_V2_DESIGN.md` and
-`experiments/memory-v2-harness/`. A pure store-contract slice (5) is
-drafted and contract-tested against the current memory module, still
-with NO product wiring; the four open decisions gate implementation.
-see `docs/M2_MEMORY_V2_DESIGN.md` and `experiments/memory-v2-harness/`.
+`experiments/memory-v2-harness/`. The store contract (drafted offline as slice 5, contract-tested against
+the current memory module) is now WIRED in product as slice 2; see the
+24 Nov 2026 note below, `docs/M2_MEMORY_V2_DESIGN.md` and
+`experiments/memory-v2-harness/`.
 No automatic extraction, no inferred-fact auto-saving, no background
 monitoring in this phase.
 
@@ -515,9 +517,13 @@ selection now runs on the measured ranker with the decided budgets
 zero); the vision ask path retrieves ZERO memory; the frozen synonym
 map is test-pinned; the storage gate keeps sensitive entries
 session-only (never written to the About-me file, no on-disk format,
-`persistSensitive` fail-closed). The v2 store contract itself remains
-unwired (the product still runs the file-backed `src/memory.js` flow);
-replacing that flow is a later reviewed slice. No automatic extraction,
+`persistSensitive` fail-closed). WIRED SLICE 2 (`e9b9b7f`): the v2
+store contract now runs as the product's in-session memory view
+(`src/memory-session.js`); personal.js and screen-service.js route every
+memory operation through it, the About-me file stays canonical via
+single-bullet writes, and sync-on-demand stat freshness keeps view and
+file in step. STILL GATED: the on-disk format for sensitive marks (owner
+sub-decision) and a UI for the mark/persist interfaces. No automatic extraction,
 no inferred-fact auto-saving, no background monitoring in this phase.
 
 ## M5 - Proactive behavior (1-2 wks)

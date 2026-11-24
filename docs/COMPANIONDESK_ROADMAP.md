@@ -78,9 +78,14 @@ propose-then-confirm principle is unchanged.
     implemented (blueprint section 3i: notifications and reminders persist
     with strict all-or-nothing hydrate, a versioned schema stamp, bounded
     loads, secret exclusion, acknowledged append durability, 8 new tests,
-    622 total). Main-process wiring of the persistence layer (startup load,
-    durable audit for the orchestrator, save before quit) is the next
-    explicitly-reviewed gate.
+    622 total). Main-process wiring of the persistence layer is IMPLEMENTED (slice P2:
+    six agent tables in the db.js schema, a narrow parameterized storage
+    adapter, hydrate/export surfaces, audit-plus-anchor written in one
+    transaction, startup chain verification, interrupted-run
+    reconciliation, and save-on-tick plus quit hooks in main.js).
+    Remaining reviewed gates: the scheduling and file-output tool gates
+    and the run-driver Stage B/C, which stay paused at the proposal per
+    Ninad's 24 Nov direction.
 
 Risks unchanged: per-OS permissions (Accessibility, Screen Recording,
 Android foreground-service types) must fail closed; privacy expectations are
