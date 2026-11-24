@@ -46,10 +46,29 @@ test('push events: preload mirrors the event allowlist exactly', () => {
   assert.deepEqual([...m[1].matchAll(/'([^']+)'/g)].map((x) => x[1]).sort(), [...IPC_EVENTS].sort());
 });
 
+// Sends to the hidden wake-listener window go to a separate preload with its
+// own channel allowlist (wake-listener-preload.js), so they are checked
+// against that mirror instead of the main window's IPC_EVENTS.
+function listenerSentEvents() {
+  return [...read('main.js').matchAll(/wakeListenerWin\.webContents\.send\(\s*'([^']+)'/g)].map((x) => x[1]);
+}
+
+function listenerPreloadEvents() {
+  return [...read('wake-listener-preload.js').matchAll(/ipcRenderer\.on\(\s*'([^']+)'/g)].map((x) => x[1]);
+}
+
 test('push events: only allowlisted events are sent, and each one is sent somewhere', () => {
   const sent = new Set();
   for (const f of ['main.js', 'overlay.js']) for (const m of read(f).matchAll(/\bsend\(\s*'([^']+)'/g)) sent.add(m[1]);
+  for (const e of listenerSentEvents()) assert.ok(e.startsWith('wake:listener:'), `listener-window sends must stay on wake:listener:* channels, got ${e}`);
+  for (const e of listenerSentEvents()) sent.delete(e);
   assert.deepEqual([...sent].sort(), [...IPC_EVENTS].sort());
+});
+
+test('wake listener: preload mirrors the listener channel set exactly', () => {
+  // Preload exposes a tiny on* surface; the stop event is delivered on a
+  // send with no payload, so both the start/mic payloads and stop are here.
+  assert.deepEqual([...new Set(listenerSentEvents())].sort(), [...new Set(listenerPreloadEvents())].sort());
 });
 
 test('event names never collide with invoke channels', () => {

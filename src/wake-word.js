@@ -166,6 +166,21 @@
       return { ok: true, state: state() };
     }
 
+    // A hard runtime failure in the listener (runtime missing, model failed
+    // to load, mic refused) lands the session on 'off' WITH the reason
+    // recorded, so the About card can show the honest cause instead of a
+    // bare "off". The reason is a short, caller-provided machine string.
+    function fail(reason) {
+      if (phase === 'off') return { ok: false, reason: 'not_listening' };
+      phase = 'off';
+      startedAt = null;
+      suspendedAt = null;
+      cooldownEndsAt = null;
+      lastScore = null;
+      failure = typeof reason === 'string' && reason ? reason.slice(0, 120) : 'wake_listener_error';
+      return { ok: true, state: state() };
+    }
+
     function stop() {
       if (phase === 'off') return { ok: false, reason: 'not_listening' };
       phase = 'off';
@@ -178,7 +193,7 @@
 
     return {
       start, reportScore, queryDone, dueResume, resumeFromCooldown,
-      pause, resume, stop, state,
+      pause, resume, stop, fail, state,
       isListening: () => phase === 'listening',
       phase: () => phase,
     };

@@ -177,3 +177,16 @@ test('the machine retains no audio and its state is frozen', () => {
   assert.strictEqual(st.audio, undefined);
   assert.strictEqual(st.frames, undefined);
 });
+
+test('session.fail records the reason and lands on off', () => {
+  const ww = require('../src/wake-word.js');
+  const s = ww.createWakeSession({ now: () => 1000 });
+  const startGate = s.start({ userInitiated: true }, { enabled: true, phraseOk: true, modelReady: true });
+  assert.strictEqual(startGate.ok, true);
+  const r = s.fail('wake_listener_test_error');
+  assert.strictEqual(r.ok, true);
+  assert.strictEqual(r.state.phase, 'off');
+  assert.strictEqual(r.state.failure, 'wake_listener_test_error');
+  // A second fail on an already-off session is refused honestly.
+  assert.strictEqual(s.fail('again').ok, false);
+});

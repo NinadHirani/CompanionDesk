@@ -99,6 +99,7 @@ function createWakeEngine(deps = {}) {
   }
 
   function stop() { return session.stop(); }
+  function fail(reason) { return session.fail(reason); }
   function pause() { return session.pause(); }
   function resume() { return session.resume(); }
 
@@ -117,7 +118,7 @@ function createWakeEngine(deps = {}) {
   }
 
   return {
-    status, start, stop, pause, resume, reportScore, queryDone, tick,
+    status, start, stop, fail, pause, resume, reportScore, queryDone, tick,
     phrase, modelState, isListening: () => session.isListening(),
   };
 }

@@ -223,6 +223,27 @@ machine; no audio leaves it. One-time setup:
 
 Until that is set up, the Speak button tells you what is missing.
 
+### Wake phrase ("Hey <companion name>", optional, default off, fully local)
+
+Before the overlay listens, it can wait for a spoken wake phrase built from
+your companion name, for example "Hey CompanionDesk" with the default
+settings name. How it works, stated plainly:
+
+- The phrase follows the companion name in About me; it is not hard-coded.
+  Changing the name makes the old model invalid and the engine refuses to
+  start until a model for the new phrase exists. It never silently reuses a
+  model trained for a different phrase, and invalid names are refused.
+- Detection is a small local model trained on fully synthetic speech from a
+  permissively licensed voice, verified from primary sources
+  (docs/WAKE_PROVENANCE.md). No pretrained wake model from another project
+  is bundled: none was shippable under its license.
+- Training a model for a name is one local, free command:
+  `bash scripts/wake/train_for_name.sh --name "Nova"`. The trainer writes a
+  held-out false accept / false reject report next to the model; those
+  numbers are measured on synthetic clips, so real-microphone performance
+  is not yet validated and wake stays default-off (`wake_enabled` false)
+  until it is, with the microphone opened only on your explicit action.
+
 ### Ask about a window (optional, fully local)
 
 Type a question, click **Screen**, and pick one window from the list. Only that

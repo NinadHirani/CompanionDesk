@@ -39,6 +39,38 @@ downloaded without an approved, documented provenance.
   reports `wake_engine_missing`. There is no cloud fallback and no
   substitution with a different engine.
 
+## Dynamic names: what is a model and what is a listener
+
+- **A trained model is per-name.** The phrase is built live from the
+  current `assistant_name`, and the engine only loads
+  `models/wake/<modelId>.onnx` for THAT exact phrase. Changing the
+  companion name in Settings makes the old model invalid: start refuses
+  with `phrase_mismatch` until `scripts/wake/train_for_name.sh --name
+  "<new name>"` produces the new model. Nothing is re-used or substituted
+  silently; an invalid or over-long name is refused before any model id
+  exists. That retrain path is local, free, and uses the same
+  license-verified synthetic pipeline (docs/WAKE_PROVENANCE.md).
+- **A trained model is not a working listener.** The model file only
+  exists; the streaming listener (hidden page, onnxruntime-web, mic
+  capture, engine gates) is a separate runtime slice, and `engineReady`
+  checks its pieces on disk. Both must be present before a start can open
+  a microphone.
+- **Detection quality is reported, not claimed.** The trainer writes a
+  held-out evaluation report (false accept / false reject rates at
+  thresholds 0.3/0.5/0.7) next to each model, and refuses to write a model
+  whose held-out positives are empty, so a meaningless report cannot ship.
+  The numbers are computed on held-out SYNTHETIC clips from the same
+  generator, which is exactly the stated limitation: real-microphone
+  performance is unmeasured until physical device testing. The first full
+  run for the default name (24 Nov 2026, 3,100 clips) is recorded in
+  scripts/wake/REFERENCE_EVAL.md: false accept 0.97% / false reject 0.0%
+  at the 0.5 default, 0.65% / 0.59% at 0.7. Wake stays default-off
+  (`wake_enabled` false) until physical validation.
+- **The shipped default artifact.** The reference model Ninad trains
+  first is for the default companion name ("Hey CompanionDesk"). It is
+  the default, not a claim: any other name needs its own model via the
+  script, and the engine says so honestly when one is missing.
+
 ## Files
 
 | file | role |
@@ -46,7 +78,10 @@ downloaded without an approved, documented provenance.
 | src/wake-word.js | Pure policy: phrase resolution, session state machine |
 | src/wake-engine.js | Main-process gate chain over the session machine |
 | renderer/wake-listener.html/.js | Hidden always-listening page (slice 5) |
-| renderer/wake-mel.js | Streaming log-mel DSP in JS (slice 5) |
+| renderer/wake-mel.js | Streaming log-mel DSP in JS (slice 5), pinned to the training reference by a fixture test |
+| renderer/wake-eval.js | Pure evaluation policy: 196-frame window, 16-step embedding head window, 80 ms cadence |
+| renderer/vendor/wake-ort/ | Pinned onnxruntime-web runtime files (MIT), vendored by scripts/wake/vendor-ort.sh |
+| src/wake-listener-preload.js | The listener window's own minimal IPC surface (start/stop/mic in, scores out) |
 | scripts/wake/ | Training pipeline: conversion, data, training, export |
 | docs/WAKE_PROVENANCE.md | Primary-source license verification for every asset |
 

@@ -24,6 +24,8 @@ import argparse
 import os
 import sys
 
+import tensorflow as tf  # training-only tool; never ships in the app
+
 DEFAULT_MODULE = "https://tfhub.dev/google/speech_embedding/1"
 # Fixed shapes per the notebook: the model consumes log-mel frames
 # [batch, T, 32, 1]; T=76 corresponds to 12,400 raw samples (775 ms) at
@@ -33,7 +35,8 @@ DYNAMIC_T = None
 
 def leakyrelu(alpha=0.4000000059604645):
     # The notebook's export-friendly variant of leaky ReLU.
-    return lambda x: tf.keras.backend.maximum(alpha * x / 2, x)
+    # keras.ops keeps this functional in Keras 3 (raw tf ops reject KerasTensors).
+    return lambda x: tf.keras.ops.maximum(alpha * x / 2, x)
 
 
 def build_model():
@@ -41,7 +44,7 @@ def build_model():
     def bn_act(x):
         x = tf.keras.layers.BatchNormalization()(x)
         x = leakyrelu()(x)
-        x = tf.maximum(x, -0.4000000059604645)
+        x = tf.keras.ops.maximum(x, -0.4000000059604645)
         return x
 
     class CenterAround(tf.keras.constraints.Constraint):
@@ -77,6 +80,8 @@ def build_model():
     x = tf.keras.layers.MaxPool2D((1, 2), (1, 2), padding='valid')(x)
     x = tf.keras.layers.Conv2D(96, (1, 3), use_bias=False, padding='same')(x); x = bn_act(x)
     x = tf.keras.layers.Conv2D(96, (3, 1), use_bias=False, padding='valid')(x); x = bn_act(x)
+    x = tf.keras.layers.Conv2D(96, (1, 3), use_bias=False, padding='same')(x); x = bn_act(x)
+    x = tf.keras.layers.Conv2D(96, (3, 1), use_bias=False, padding='valid')(x); x = bn_act(x)
     x = tf.keras.layers.MaxPool2D((2, 2), (2, 2), padding='valid')(x)
     x = tf.keras.layers.Conv2D(96, (3, 1), use_bias=False, padding='valid')(x)
     return tf.keras.Model(inputs=inputs, outputs=x)
@@ -94,40 +99,62 @@ def main():
     import tensorflow_hub as hub
 
     print(f"loading module: {args.module}")
-    original = hub.KerasLayer(args.module, trainable=False)
+    original = hub.load(args.module)
+    fn = original.signatures['default']
+    print("signature outputs:", list(fn.structured_outputs.keys()))
+
+    rng = np.random.default_rng(20261124)
+    sample = rng.uniform(-1, 1, size=(1, 12400)).astype(np.float32)
+    ref = np.asarray(fn(tf.constant(sample))['default'], dtype=np.float32).ravel()
+    print(f"reference embeddings: {ref.shape}")
+
+    # Read the module's INTERNAL log-mel straight from its SavedModel
+    # graph: the input of the first ZeroMeanConv2D's pad op IS the scaled
+    # log-mel the embedding consumes (this reproduces the notebook's
+    # intermediate-tensor read without needing TFLite flex ops, which
+    # current TensorFlow cannot convert for this module).
+    import tempfile, os
+    graph = fn.graph
+    # Walk from the ZeroMeanConv2d conv back to the Pad feeding it, then one
+    # hop further: the pad's input IS the unscaled-free internal log-mel
+    # (32 mel bins, same layout the notebook's reimplementation consumes).
+    conv_ops = [op for op in graph.get_operations()
+                if op.type == 'Conv2D' and 'ZeroMeanConv2d/Conv2D' in op.name]
+    pad_ops = []
+    for conv in conv_ops:
+        src = conv.inputs[0].op
+        if src.type == 'Pad':
+            pad_ops.append(src)
+    if not pad_ops:
+        pad_ops = [op for op in graph.get_operations() if op.type == 'Pad']
+    if not pad_ops:
+        print("could not locate the module's internal log-mel tensor",
+              file=sys.stderr)
+        sys.exit(1)
+    mel_t = pad_ops[0].inputs[0]
+    with tf.compat.v1.Session(graph=graph) as sess:
+        spec = np.asarray(sess.run(mel_t, feed_dict={'samples:0': sample}))
+    if spec.shape[-2] != 32 or spec.shape[-3] < 76:
+        print(f"unexpected internal log-mel shape {spec.shape}", file=sys.stderr)
+        sys.exit(1)
+    spec = spec[0]  # [T, 32, 1]
 
     model = build_model()
     # Weight copy, exactly the notebook's cell 19: all layers, then the
     # first conv re-centered around zero per its constraint.
-    model.set_weights(original.get_weights())
-    model.layers[2].set_weights([model.layers[2].kernel_constraint(model.layers[2].weights[0])])
-    model.layers[2].set_weights([model.layers[2].weights[0].numpy() - model.layers[2].weights[0].numpy().mean(axis=(0, 1))])
+    # hub.load returns a SavedModel wrapper (no get_weights); its variables
+    # are in checkpoint order, which matches the re-implementation's stack.
+    src_weights = [v.numpy() for v in original.variables]
+    if len(src_weights) != len(model.weights):
+        print(f"weight count mismatch: module {len(src_weights)} vs model "
+              f"{len(model.weights)}", file=sys.stderr)
+        sys.exit(1)
+    model.set_weights(src_weights)
+    k0 = model.layers[2].kernel_constraint(model.layers[2].weights[0])
+    model.layers[2].set_weights([k0])
 
-    # Numeric equivalence check against the original module on raw audio,
-    # mirroring the notebook's cells 22-24: the re-implementation must match
-    # the original's embeddings on the module's own internal log-mel.
-    rng = np.random.default_rng(20261124)
-    sample = rng.uniform(-1, 1, size=(1, 12400)).astype(np.float32)
-    # The module consumes raw audio; the re-implementation consumes its
-    # internal log-mel. Extract that internal tensor via a tflite pass,
-    # as the notebook does, then compare embeddings.
-    wrapped = tf.keras.Model(inputs=tf.keras.Input((12400,)), outputs=original(tf.constant(sample)))
-    print("computing reference embeddings from the original module...")
-    ref = original(tf.constant(sample)).numpy()
-
-    print("building the module's internal log-mel via its own graph...")
-    # The internal spec tensor is produced inside the module's SavedModel;
-    # use its concrete function to grab it by signature output, per the
-    # notebook's approach of reading the intermediate tensor.
-    loaded = tf.saved_model.load(args.module if os.path.isdir(args.module) else
-                                 hub.resolve(args.module))
-    fn = loaded.signatures['serving_default']
-    out = fn(tf.constant(sample))
-    spec_key = next(k for k in out if 'spec' in k.lower() or k != list(out.keys())[-1])
-    spec = np.array(out[spec_key], dtype=np.float32).squeeze().T  # [T, 32]
-
-    ours = model(spec[None, ..., None]).numpy()
-    diff = float(np.abs(ours.flatten() - ref.flatten()).max())
+    ours = model(np.clip(spec[None, ...], 1e-10, None)).numpy().ravel()
+    diff = float(np.abs(ours - ref).max())
     print(f"max abs embedding difference: {diff:.6f}")
     if diff > 0.05:
         print("REFUSING to write the model: the conversion does not match "
@@ -136,10 +163,12 @@ def main():
         sys.exit(1)
 
     # Export to ONNX with a dynamic time axis for streaming.
-    import tf2onnx
-    dyn = tf.keras.Model(inputs=tf.keras.Input((None, 32, 1)), outputs=model(tf.keras.Input((None, 32, 1))))
+    dyn_input = tf.keras.Input((None, 32, 1))
+    dyn = tf.keras.Model(inputs=dyn_input, outputs=model(dyn_input))
     spec_proto = [tf.TensorSpec([None, None, 32, 1], tf.float32, name='input')]
-    tf2onnx.convert.from_keras(dyn, input_signature=spec_proto, opset=13, output_path=args.out)
+    import tf2onnx
+    tf2onnx.convert.from_keras(dyn, input_signature=spec_proto, opset=13,
+                               output_path=args.out)
     print(f"wrote {args.out}")
     import hashlib
     h = hashlib.sha256(open(args.out, 'rb').read()).hexdigest()

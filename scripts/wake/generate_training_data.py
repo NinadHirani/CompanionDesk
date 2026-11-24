@@ -19,13 +19,15 @@
 #   python3 generate_training_data.py --phrase "Hey Nova" \
 #     --voices en_US-amy-medium,en_GB-northern_english_female-medium \
 #     --positives 3000 --negatives 12000 --out data/
-# Deps: pip install piper-tts numpy soundfile
+# Deps: pip install piper-tts numpy soundfile scipy
 #       (voice files come from the verified permissive sources only)
 
 import argparse
 import json
 import os
 import sys
+
+import numpy as np
 
 # Random common words for negatives: common English words that never form
 # the wake phrase, so a classifier cannot cheat on "hey" alone.
@@ -81,21 +83,30 @@ def ensure_voice_verified(voice):
         sys.exit(1)
 
 
-def synth(voice, text, out_wav, length_scale=None):
-    """Synthesize one clip with piper. Only local inference, no network."""
-    from piper import PiperVoice  # piper-tts
-    load_kwargs = {}
-    cfg_path = out_wav + '.json'
-    voice_obj = PiperVoice.load(voice)  # voice = path to .onnx (verified voice)
-    synth_kwargs = {}
-    if length_scale is not None:
-        synth_kwargs['syn_config'] = None  # piper exposes length via SynthesisConfig in newer builds
-    with open(out_wav, 'wb') as wav_file:
-        voice_obj.synthesize(text, wav_file)
+def spoken_form(text):
+    """Turn a settings name into what it sounds like (CompanionDesk ->
+    Companion Desk) so TTS reads the actual phrase."""
+    import re
+    return re.sub(r'(?<=[a-z0-9])(?=[A-Z])', ' ', text)
 
 
-def jitter(x, rng, sr=16000):
-    """Cheap, deterministic augmentation: gain, band-limiting and noise."""
+def synth_to_float(voice_path, text, syn_cfg):
+    """Synthesize with piper and return 16 kHz float32 audio. Local only."""
+    from piper import PiperVoice, SynthesisConfig
+    import soundfile as sf
+    from scipy.signal import resample_poly
+    voice_obj = PiperVoice.load(voice_path)
+    chunks = list(voice_obj.synthesize(text, syn_config=syn_cfg))
+    pcm = b''.join(c.audio_int16_bytes for c in chunks)
+    sr = chunks[0].sample_rate if chunks else 22050
+    x = np.frombuffer(pcm, dtype=np.int16).astype(np.float32) / 32768.0
+    if sr != 16000:
+        x = resample_poly(x, 16000, sr).astype(np.float32)
+    return x
+
+
+def jitter(x, rng):
+    """Deterministic-seeded augmentation: gain, noise, one-pole coloration."""
     gain = rng.uniform(-12, 6)
     x = x * (10 ** (gain / 20))
     snr_db = rng.uniform(5, 30)
@@ -103,7 +114,10 @@ def jitter(x, rng, sr=16000):
     sig_p = max(float((x ** 2).mean()), 1e-9)
     noise_p = max(float((noise ** 2).mean()), 1e-9)
     x = x + noise * ((sig_p / noise_p) / (10 ** (snr_db / 10))) ** 0.5
-    if rng.random() < 0.5:  # simple one-pole low/high pass coloration
+    peak = float(np.abs(x).max())
+    if peak > 0.9:
+        x = x * (0.9 / peak)
+    if rng.random() < 0.5:
         alpha = rng.uniform(0.1, 0.9)
         out = np.empty_like(x)
         acc = 0.0
@@ -114,35 +128,102 @@ def jitter(x, rng, sr=16000):
     return x
 
 
+def pad_to(x, seconds, rng, sr=16000):
+    """Random lead/tail silence to a fixed length; keeps the phrase inside."""
+    target = int(seconds * sr)
+    lead = int(rng.uniform(0.05, 0.45) * sr)
+    if len(x) + lead > target - int(0.2 * sr):
+        lead = max(0, target - int(0.2 * sr) - len(x))
+    x = np.concatenate([np.zeros(lead, np.float32), x])
+    if len(x) < target:
+        x = np.concatenate([x, np.zeros(target - len(x), np.float32)])
+    return x[:target]
+
+
+HARD_NEGATIVES = [
+    "Hey.", "Hey there.", "Hey you.", "Hey everyone.", "Hey computer.",
+    "Hey companion.", "Hey companion, are you there?", "Hi companion desk.",
+    "Okay companion desk.", "A companion.", "Companion.", "Desk.",
+    "Hey computer desk.", "He companion.", "Hay companion desk.",
+]
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--phrase', required=True)
     ap.add_argument('--voices', required=True, help='comma-separated verified voice paths')
-    ap.add_argument('--positives', type=int, default=3000)
-    ap.add_argument('--negatives', type=int, default=12000)
+    ap.add_argument('--positives', type=int, default=800)
+    ap.add_argument('--word-negatives', type=int, default=1600)
+    ap.add_argument('--hard-negatives', type=int, default=300)
+    ap.add_argument('--noise-negatives', type=int, default=400)
     ap.add_argument('--out', default='data')
     args = ap.parse_args()
 
-    import numpy as np
+    import soundfile as sf
     voices = [v.strip() for v in args.voices.split(',') if v.strip()]
     for v in voices:
         ensure_voice_verified(os.path.basename(v).replace('.onnx', ''))
 
     os.makedirs(args.out, exist_ok=True)
     rng = np.random.default_rng(20261124)
-    manifest = {'phrase': args.phrase, 'voices': voices, 'positives': [], 'negatives': []}
+    from piper import SynthesisConfig
+    spoken = spoken_form(args.phrase)
+    manifest = {'phrase': args.phrase, 'spoken_text': spoken, 'voices': voices,
+                'positives': [], 'negatives': []}
+
+    def save(x, name, kind):
+        wav = os.path.join(args.out, f'{kind}_{name:05d}.wav')
+        sf.write(wav, x, 16000, subtype='PCM_16')
+        return wav
 
     for i in range(args.positives):
-        text = args.phrase
-        wav = os.path.join(args.out, f'pos_{i:05d}.wav')
-        synth(voices[i % len(voices)], text, wav)
-        manifest['positives'].append(wav)
+        cfg = SynthesisConfig(
+            length_scale=float(rng.uniform(0.75, 1.35)),
+            noise_scale=float(rng.uniform(0.2, 1.0)),
+            noise_w_scale=float(rng.uniform(0.2, 1.0)),
+            normalize_audio=True,
+        )
+        x = synth_to_float(voices[i % len(voices)], spoken, cfg)
+        x = pad_to(jitter(x, rng), 2.2, rng)
+        manifest['positives'].append(save(x, i, 'pos'))
 
-    for i in range(args.negatives):
+    for i in range(args.word_negatives):
         n = int(rng.integers(1, 5))
         words = ' '.join(rng.choice(NEGATIVE_WORDS, size=n))
-        wav = os.path.join(args.out, f'neg_{i:05d}.wav')
-        synth(voices[i % len(voices)], words, wav)
+        cfg = SynthesisConfig(
+            length_scale=float(rng.uniform(0.75, 1.35)),
+            noise_scale=float(rng.uniform(0.2, 1.0)),
+            noise_w_scale=float(rng.uniform(0.2, 1.0)),
+            normalize_audio=True,
+        )
+        x = synth_to_float(voices[i % len(voices)], words, cfg)
+        x = pad_to(jitter(x, rng), 2.2, rng)
+        manifest['negatives'].append(save(x, i, 'neg'))
+
+    for i in range(args.hard_negatives):
+        text = HARD_NEGATIVES[i % len(HARD_NEGATIVES)]
+        cfg = SynthesisConfig(
+            length_scale=float(rng.uniform(0.75, 1.35)),
+            noise_scale=float(rng.uniform(0.2, 1.0)),
+            noise_w_scale=float(rng.uniform(0.2, 1.0)),
+            normalize_audio=True,
+        )
+        x = synth_to_float(voices[i % len(voices)], text, cfg)
+        x = pad_to(jitter(x, rng), 2.2, rng)
+        manifest['negatives'].append(save(x, 10000 + i, 'neg'))
+
+    for i in range(args.noise_negatives):
+        n = int(rng.uniform(1.0, 2.2) * 16000)
+        if i % 4 == 3:  # silence with dither
+            x = rng.standard_normal(n).astype(np.float32) * 1e-4
+        elif i % 4 == 2:  # pink-ish noise
+            w = rng.standard_normal(n).astype(np.float32)
+            x = np.cumsum(w) / 64.0
+            x = x / (np.abs(x).max() + 1e-9) * 0.05
+        else:  # white noise
+            x = rng.standard_normal(n).astype(np.float32) * 0.03
+        wav = os.path.join(args.out, f'noise_{i:05d}.wav')
+        sf.write(wav, x, 16000, subtype='PCM_16')
         manifest['negatives'].append(wav)
 
     with open(os.path.join(args.out, 'manifest.json'), 'w') as f:

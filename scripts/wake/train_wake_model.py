@@ -33,61 +33,71 @@ import torch.nn as nn
 
 
 # ---- log-mel reference implementation (the verified parameters) ----
-def mel_filterbank(sr=16000, n_fft=512, n_mels=32, fmin=60.0, fmax=3800.0):
-    """librosa-compatible slaney mel filterbank, implemented directly."""
+# Verified 24 Nov 2026 against Google's speech_embedding module's own
+# internal log-mel tensor (max abs diff < 0.001 on a test signal):
+#   periodic hann window of 400 samples, hop 160, FFT length 512,
+#   MAGNITUDE spectrum (not power), mel filterbank with the htk mel
+#   formula 1127*log10(1+f/700), fmin 60 Hz, fmax 3800 Hz, triangular
+#   weights built in the mel domain with no slaney normalization
+#   (tf.signal.linear_to_mel_weight_matrix style), natural log of the
+#   clipped mel. The embedding model consumes this tensor DIRECTLY: the
+#   /10+2 scaling belongs to openWakeWord's separate melspectrogram
+#   feature, which we do not use.
+MEL_FMIN = 60.0
+MEL_FMAX = 3800.0
+
+
+def mel_filterbank(sr=16000, n_fft=512, n_mels=32):
+    """tf.signal.linear_to_mel_weight_matrix-style filterbank."""
     def hz_to_mel(f):
-        return 2595.0 * np.log10(1.0 + np.asarray(f, dtype=np.float64) / 700.0)
+        return 1127.0 * np.log10(1.0 + np.asarray(f, dtype=np.float64) / 700.0)
     def mel_to_hz(m):
-        return 700.0 * (10 ** (np.asarray(m, dtype=np.float64) / 2595.0) - 1.0)
-    mel_min, mel_max = hz_to_mel(fmin), hz_to_mel(fmax)
-    mels = np.linspace(mel_min, mel_max, n_mels + 2)
-    hz = mel_to_hz(mels)
-    bins = np.floor((n_fft + 1) * hz / sr).astype(int)
+        return 700.0 * (10 ** (np.asarray(m, dtype=np.float64) / 1127.0) - 1.0)
+    mel_edges = np.linspace(hz_to_mel(MEL_FMIN), hz_to_mel(MEL_FMAX), n_mels + 2)
+    freqs = np.arange(n_fft // 2 + 1) * sr / n_fft
+    mel_freqs = hz_to_mel(freqs)
     fb = np.zeros((n_mels, n_fft // 2 + 1), dtype=np.float64)
     for i in range(n_mels):
-        left, center, right = bins[i], bins[i + 1], bins[i + 2]
-        for k in range(max(left, 0), min(center, n_fft // 2 + 1)):
-            fb[i, k] = (k - bins[i]) / (bins[i + 1] - bins[i])
-        for k in range(center, min(right, n_fft // 2 + 1)):
-            fb[i, k] = (bins[i + 2] - k) / (bins[i + 2] - bins[i + 1])
-    # slaney normalization
-    enorm = 2.0 / (hz[2:n_mels + 2] - hz[:n_mels])
-    fb *= enorm[:, None]
+        lo, ce, hi = mel_edges[i], mel_edges[i + 1], mel_edges[i + 2]
+        lower = (mel_freqs - lo) / (ce - lo)
+        upper = (hi - mel_freqs) / (hi - ce)
+        fb[i] = np.maximum(0.0, np.minimum(lower, upper))
     return fb
 
 
 def logmel(audio, sr=16000, win=400, hop=160, n_fft=512):
-    """Raw audio -> [T, 32] log-mel, matching torchlibrosa center=False."""
-    import numpy.fft as fft
+    """Raw audio -> [T, 32] natural-log mel, matching the module."""
     n = len(audio)
     if n < win:
         audio = np.pad(audio, (0, win - n))
         n = win
     n_frames = 1 + (n - win) // hop
     idx = np.arange(win)[None, :] + hop * np.arange(n_frames)[:, None]
-    frames = audio[idx]
-    window = np.hanning(win + 1)[:win].astype(np.float64)  # periodic hann
-    padded = np.zeros((n_frames, n_fft), dtype=np.float64)
-    pad = (n_fft - win) // 2
-    padded[:, pad:pad + win] = frames * window
-    spec = np.abs(fft.rfft(padded, axis=1)) ** 2
-    mel = mel_filterbank(sr=sr) @ spec.T  # [32, T]
-    logmel = 10.0 * np.log10(np.maximum(mel, 1e-10))
-    return (logmel / 10.0 + 2.0).T.astype(np.float32)  # [T, 32]
+    window = 0.5 - 0.5 * np.cos(2.0 * np.pi * np.arange(win) / win)  # periodic hann
+    frames = audio[idx] * window
+    spec = np.abs(np.fft.rfft(frames, n=n_fft, axis=1))  # magnitude, [T, 257]
+    mel = mel_filterbank(sr=sr, n_fft=n_fft) @ spec.T  # [32, T]
+    return np.log(np.maximum(mel, 1e-10)).T.astype(np.float32)  # [T, 32]
 
 
 class WakeHead(nn.Module):
-    """Small GRU head over 16 embedding steps, openWakeWord-shaped."""
-    def __init__(self, emb_dim=1024, hidden=64):
+    """Small GRU head over 16 embedding steps, openWakeWord-shaped.
+
+    The forward pass ends in a sigmoid, so the exported ONNX emits a
+    probability in [0, 1] directly: the listener reports that score as-is
+    and the engine's bounded-score contract holds by construction.
+    """
+    def __init__(self, emb_dim=96, hidden=64):
         super().__init__()
         self.gru = nn.GRU(emb_dim, hidden, batch_first=True)
         self.fc1 = nn.Linear(hidden, 32)
         self.relu = nn.ReLU()
         self.fc2 = nn.Linear(32, 1)
+        self.sigmoid = nn.Sigmoid()
 
     def forward(self, x):
         _, h = self.gru(x)
-        return self.fc2(self.relu(h[-1]))
+        return self.sigmoid(self.fc2(self.relu(self.fc1(h[-1]))))
 
 
 def load_clip(path):
@@ -99,16 +109,57 @@ def load_clip(path):
     return data
 
 
-def extract_windows(audio, emb_sess, window=76, step=8, out_steps=16):
-    """Audio -> overlapping [out_steps, emb_dim] windows."""
+# One training sample: MEL_WINDOW mel frames (about 2 s of audio) fed to
+# the converted embedding model, which yields one 96-dim embedding every 8
+# frames (80 ms), then OUT_STEPS consecutive embeddings scored by the head.
+# The app's listener uses exactly this shape: streaming log-mel -> sliding
+# 196-frame window -> 16 embeddings -> score, re-scored every 80 ms.
+MEL_WINDOW = 196
+OUT_STEPS = 16
+
+
+def phrase_span(mels):
+    """Energy-based [start, end] mel-frame span of the voiced content.
+
+    The mel is a natural-log spectrogram with a fixed floor: silence sits at
+    log(1e-10) = -23.03 while speech is near 0 and above. The frame energy is
+    therefore the SIGNED per-frame maximum over mel bins; the earlier draft
+    squared the values, which put silence (its -23 floor squared) above speech
+    and made every clip look fully voiced, so no window could contain the span
+    and the 24 Nov 2026 full run trained on zero positive windows. The held-out
+    report refused to publish a false-reject rate, which is what exposed it.
+    """
+    energy = mels.max(axis=1)
+    ordered = np.sort(energy)
+    floor = float(np.median(ordered[:max(1, len(ordered) // 4)]))
+    peak = float(energy.max())
+    thr = floor + 0.3 * (peak - floor)
+    voiced = np.where(energy > thr)[0]
+    if len(voiced) == 0:
+        return None
+    return int(voiced[0]), int(voiced[-1])
+
+
+def extract_windows(audio, emb_sess, step=8, span=None):
+    """Audio -> [OUT_STEPS, 96] samples; positives need span fully inside."""
     mels = logmel(audio)
+    if len(mels) < MEL_WINDOW:
+        mels = np.pad(mels, ((0, MEL_WINDOW - len(mels)), (0, 0)))
     windows = []
-    for start in range(0, len(mels) - window + 1, step):
-        chunk = mels[start:start + window][None, ..., None]
-        emb = emb_sess.run(None, {'input': chunk})[0]  # [1, T', emb_dim]
-        emb = np.asarray(emb[0], dtype=np.float32)
-        for i in range(0, len(emb) - out_steps + 1):
-            windows.append(emb[i:i + out_steps])
+    for start in range(0, len(mels) - MEL_WINDOW + 1, step):
+        if span is not None and span[1] - span[0] + 1 > MEL_WINDOW:
+            # Voiced content longer than one window: keep exactly one window
+            # centred on the span's energy centroid instead of yielding none.
+            centre = (span[0] + span[1]) // 2
+            start = max(0, min(centre - MEL_WINDOW // 2, len(mels) - MEL_WINDOW))
+        elif span is not None and not (start <= span[0] and start + MEL_WINDOW - 1 >= span[1]):
+            continue
+        chunk = mels[start:start + MEL_WINDOW][None, ..., None]
+        emb = emb_sess.run(None, {'input': chunk})[0]
+        emb = np.asarray(emb, dtype=np.float32).reshape(-1, emb.shape[-1])
+        if emb.shape[0] != OUT_STEPS:
+            continue
+        windows.append(emb)
     return windows
 
 
@@ -127,7 +178,9 @@ def main():
 
     pos, neg = [], []
     for wav in manifest['positives']:
-        pos.extend(extract_windows(load_clip(wav), emb_sess))
+        audio = load_clip(wav)
+        mels = logmel(audio)
+        pos.extend(extract_windows(audio, emb_sess, span=phrase_span(mels)))
     for wav in manifest['negatives']:
         neg.extend(extract_windows(load_clip(wav), emb_sess))
     rng = np.random.default_rng(20261124)
@@ -141,7 +194,7 @@ def main():
 
     model = WakeHead(emb_dim=X.shape[-1])
     opt = torch.optim.Adam(model.parameters(), lr=1e-3)
-    lossf = nn.BCEWithLogitsLoss()
+    lossf = nn.BCELoss()
     Xt = torch.tensor(X); yt = torch.tensor(y).unsqueeze(1)
     Xht = torch.tensor(Xh); yht = torch.tensor(yh).unsqueeze(1)
     for epoch in range(args.epochs):
@@ -154,7 +207,7 @@ def main():
             loss.backward(); opt.step()
             total += float(loss) * len(idx)
         with torch.no_grad():
-            scores = torch.sigmoid(model(Xht)).numpy().ravel()
+            scores = model(Xht).numpy().ravel()
         print(f"epoch {epoch + 1}/{args.epochs} loss {total / len(Xt):.4f} "
               f"held-out AUROC-ish sep mean(pos) {scores[yht.numpy().ravel() == 1].mean():.3f} "
               f"mean(neg) {scores[yht.numpy().ravel() == 0].mean():.3f}")
@@ -164,12 +217,16 @@ def main():
                       output_names=['logit'], opset_version=13,
                       dynamic_axes={'input': {0: 'batch'}})
     sess = ort.InferenceSession(args.out, providers=['CPUExecutionProvider'])
-    scores = sess.run(None, {'input': Xht})[0].ravel()
+    scores = sess.run(None, {'input': Xht.numpy()})[0].ravel()
+    if hold_p == 0:
+        raise SystemExit("REFUSING to write a model: zero held-out positive windows; "
+                         "positive extraction produced nothing, the report would be meaningless")
     report = {'held_out_positive_windows': int(hold_p), 'held_out_negative_windows': int(hold_n),
               'thresholds': {}}
     for thr in [0.3, 0.5, 0.7]:
-        fa = float((scores[yh == 0] >= thr).mean())
-        fr = float((scores[yh == 1] < thr).mean())
+        neg, pos = scores[yh == 0], scores[yh == 1]
+        fa = float((neg >= thr).mean()) if len(neg) else None
+        fr = float((pos < thr).mean()) if len(pos) else None
         report['thresholds'][str(thr)] = {'false_accept_rate': fa, 'false_reject_rate': fr}
     report['data'] = 'fully synthetic, generated by scripts/wake/generate_training_data.py'
     report['real_world_status'] = 'unmeasured until physical device testing'

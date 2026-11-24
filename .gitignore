@@ -3,6 +3,7 @@ dist/
 *.log
 .DS_Store
 web/vendor/
+renderer/vendor/
 web/core/
 web/prompts/
 web/app.js

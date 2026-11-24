@@ -19,7 +19,21 @@ Order of operations:
    per-voice (license recorded in WAKE_PROVENANCE.md) before use.
 3. `python3 train_wake_model.py` - train the classifier head on the
    embedding features and export the ONNX the app loads, with a held-out
-   synthetic evaluation report.
+   synthetic evaluation report. The head ends in a sigmoid, so the ONNX
+   emits a probability in [0, 1] directly.
+4. `bash scripts/wake/vendor-ort.sh` - copy the pinned onnxruntime-web
+   runtime files into renderer/vendor/wake-ort/ for the listener page
+   (MIT, version pinned in package.json). The wake engine reports
+   wake_engine_missing until this has run.
+5. Place the artifacts for the user (never fetched at runtime):
+   models/wake/embedding.onnx (step 1's output) and
+   models/wake/<modelId>.onnx (step 3's output) under the app's models
+   directory. The app reads `<userData>/models/wake` at runtime (on macOS:
+   `~/Library/Application Support/CompanionDesk/models/wake`), so when
+   training for a real install pass that directory to the tooling, e.g.
+   `bash scripts/wake/train_for_name.sh --name "Nova" --models-dir
+   "$HOME/Library/Application Support/CompanionDesk/models/wake"`.
+   directory.
 
 Every script is explicitly offline-of-app: the app never downloads
 anything; the model files are produced here and placed under

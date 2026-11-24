@@ -191,14 +191,18 @@ async function init() {
     getSettings: () => P.getSettings(db),
     modelPathFor: (modelId) => {
       try {
-        const p = path.join(modelsDir(), 'wake', `${modelId}.onnx`);
-        return fs.existsSync(p) ? p : null;
+        const dir = path.join(modelsDir(), 'wake');
+        const head = path.join(dir, `${modelId}.onnx`);
+        // The shared feature extractor is a second required file; a head
+        // without it is not a working model and fails closed as missing.
+        if (!fs.existsSync(head) || !fs.existsSync(path.join(dir, 'embedding.onnx'))) return null;
+        return head;
       } catch { return null; }
     },
     engineReady: () => {
       // The listener runtime must exist on disk before the mic can open;
       // each piece is checked, never assumed.
-      for (const f of ['wake-listener.html', 'wake-listener.js', 'wake-mel.js']) {
+      for (const f of ['wake-listener.html', 'wake-listener.js', 'wake-mel.js', 'wake-eval.js', path.join('vendor', 'wake-ort', 'ort.min.js'), path.join('vendor', 'wake-ort', 'ort-wasm-simd-threaded.wasm')]) {
         if (!fs.existsSync(path.join(__dirname, '..', 'renderer', f))) return 'wake_engine_missing';
       }
       return true;
@@ -656,10 +660,11 @@ function registerIpc() {
       });
     } finally {
       askControllers.delete(requestId);
+      wakeQueryDone(); // no-op unless a wake detection is holding the session
     }
   });
   ipcMain.handle('overlay:show', async () => { overlay.show(); return { ok: true }; });
-  ipcMain.handle('overlay:hide', async () => { overlay.hide(); return { ok: true }; });
+  ipcMain.handle('overlay:hide', async () => { overlay.hide(); wakeQueryDone(); return { ok: true }; });
   ipcMain.handle('overlay:status', async () => ({ ok: true, hotkey: savedHotkey(), registered: overlay.getHotkey() !== null }));
   ipcMain.handle('overlay:setHotkey', async (_e, payload) => {
     const n = hotkey.normalize(payload && payload.accelerator);
@@ -689,11 +694,98 @@ function registerIpc() {
   // action from the About control; the engine still refuses anything else
   // (autostart, missing model, name mismatch). The microphone permission
   // is requested only by that explicit start, never at startup.
+  //
+  // M6 slice 5: the listener is a hidden window created only by a start
+  // that passed every gate. It reports single bounded scores; the engine
+  // stays the only policy. On a detection the mic closes immediately (the
+  // indicator contract), the overlay opens for the query, and the query
+  // flow's end (ask settled or overlay hidden) hands back to the cooldown,
+  // which a small timer in main drives back into listening.
+  let wakeListenerWin = null;
+  let wakeResumeTimer = null;
+
+  async function startWakeListener() {
+    const p = wakeEngine.phrase();
+    if (!p.ok) return { ok: false, reason: p.reason };
+    const dir = path.join(modelsDir(), 'wake');
+    const embedding = fs.readFileSync(path.join(dir, 'embedding.onnx'));
+    const head = fs.readFileSync(path.join(dir, `${p.modelId}.onnx`));
+    if (!wakeListenerWin || wakeListenerWin.isDestroyed()) {
+      wakeListenerWin = new BrowserWindow({
+        show: false, width: 320, height: 240, skipTaskbar: true,
+        webPreferences: {
+          preload: path.join(__dirname, 'wake-listener-preload.js'),
+          contextIsolation: true, nodeIntegration: false, sandbox: true,
+          backgroundThrottling: false, // the hidden page must keep scoring in real time
+        },
+      });
+      wakeListenerWin.on('closed', () => {
+        if (wakeListenerWin) wakeListenerWin = null;
+        if (wakeEngine.isListening()) wakeEngine.stop();
+        if (wakeResumeTimer) { clearInterval(wakeResumeTimer); wakeResumeTimer = null; }
+      });
+      await wakeListenerWin.loadFile(path.join(__dirname, '..', 'renderer', 'wake-listener.html'));
+    }
+    wakeListenerWin.webContents.send('wake:listener:start', {
+      embedding: embedding.buffer.slice(embedding.byteOffset, embedding.byteOffset + embedding.byteLength),
+      head: head.buffer.slice(head.byteOffset, head.byteOffset + head.byteLength),
+    });
+    return { ok: true };
+  }
+
+  function wakeListenerMic(open) {
+    if (wakeListenerWin && !wakeListenerWin.isDestroyed()) {
+      wakeListenerWin.webContents.send('wake:listener:mic', { open });
+    }
+  }
+
+  function stopWakeListener() {
+    if (wakeListenerWin && !wakeListenerWin.isDestroyed()) wakeListenerWin.destroy();
+    wakeListenerWin = null;
+    if (wakeResumeTimer) { clearInterval(wakeResumeTimer); wakeResumeTimer = null; }
+  }
+
   ipcMain.handle('wake:status', async () => wakeEngine.status());
-  ipcMain.handle('wake:start', async () => wakeEngine.start({ userInitiated: true }));
-  ipcMain.handle('wake:stop', async () => wakeEngine.stop());
-  ipcMain.handle('wake:pause', async () => wakeEngine.pause());
-  ipcMain.handle('wake:resume', async () => wakeEngine.resume());
+  ipcMain.handle('wake:start', async () => {
+    const r = wakeEngine.start({ userInitiated: true });
+    if (!r.ok) return r;
+    try {
+      const lr = await startWakeListener();
+      if (!lr.ok) { wakeEngine.stop(); return lr; }
+      return r;
+    } catch (err) {
+      wakeEngine.stop();
+      stopWakeListener();
+      return { ok: false, reason: 'wake_listener_start_failed' };
+    }
+  });
+  ipcMain.handle('wake:stop', async () => { stopWakeListener(); return wakeEngine.stop(); });
+  ipcMain.handle('wake:pause', async () => { const r = wakeEngine.pause(); if (r.ok) wakeListenerMic(false); return r; });
+  ipcMain.handle('wake:resume', async () => { const r = wakeEngine.resume(); if (r.ok) wakeListenerMic(true); return r; });
+
+  ipcMain.on('wake:listener:score', (_e, score) => {
+    const r = wakeEngine.reportScore(score);
+    if (r.ok && r.detected) {
+      wakeListenerMic(false); // indicator contract: mic closes the moment listening suspends
+      try { overlay.show(); } catch {}
+      if (!wakeResumeTimer) wakeResumeTimer = setInterval(() => {
+        const t = wakeEngine.tick();
+        if (t.ok) {
+          if (wakeResumeTimer) { clearInterval(wakeResumeTimer); wakeResumeTimer = null; }
+          wakeListenerMic(true);
+        }
+      }, 500);
+    }
+  });
+  ipcMain.on('wake:listener:error', (_e, msg) => {
+    stopWakeListener();
+    wakeEngine.fail(String(msg || 'wake_listener_error').slice(0, 120));
+  });
+
+  // The wake query flow ends when the overlay's ask settles (any outcome)
+  // or the overlay is hidden again; either way the session returns to its
+  // refractory period. queryDone is a no-op outside 'suspended'.
+  const wakeQueryDone = () => { wakeEngine.queryDone(); };
 
   ipcMain.handle('screen:status', async () => {
     const sel = await modelSelection();
