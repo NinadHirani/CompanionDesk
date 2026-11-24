@@ -143,11 +143,19 @@
       verify(records) {
         const list = records || entries;
         let p = GENESIS;
+        let expectSeq = 1;
         for (const e of list) {
-          if (typeof e.seq !== 'number' || typeof e.hash !== 'string') return { ok: false, brokenAt: e.seq || 0, reason: 'malformed_entry' };
+          if (typeof e.seq !== 'number' || !Number.isInteger(e.seq) || typeof e.hash !== 'string') {
+            return { ok: false, brokenAt: e.seq || 0, reason: 'malformed_entry' };
+          }
+          // Contiguous from 1: a dropped (and even rehashed) entry leaves a
+          // gap the chain alone could not see once the attacker recomputes
+          // the following hashes.
+          if (e.seq !== expectSeq) return { ok: false, brokenAt: e.seq, reason: 'sequence_gap' };
           const expect = chainHash(e.seq, p, toCanonicalEntry(e));
           if (expect !== e.hash) return { ok: false, brokenAt: e.seq };
           p = e.hash;
+          expectSeq += 1;
         }
         return { ok: true };
       },
@@ -155,5 +163,5 @@
     return log;
   }
 
-  return { createAuditLog, sanitize, GENESIS };
+  return { createAuditLog, sanitize, GENESIS, toCanonicalEntry, chainHash };
 });

@@ -8,10 +8,10 @@
 const test = require('node:test');
 const assert = require('node:assert');
 const { canonicalJson, sha256Hex } = require('../src/digest');
-const { CAPABILITIES, createRegistry } = require('../src/tool-registry');
+const { CAPABILITIES, createRegistry, isCriticalName } = require('../src/tool-registry');
 const { createApprovalDesk, argsDigest } = require('../src/approval');
 const { createPolicyEngine } = require('../src/policy-engine');
-const { createAuditLog } = require('../src/audit');
+const { createAuditLog, chainHash, toCanonicalEntry } = require('../src/audit');
 const { createEmergencyStop } = require('../src/emergency-stop');
 
 let now = 0;
@@ -23,7 +23,7 @@ function fixtureRegistry() {
   registry.define({ name: 'notes.rename_tag', description: 'Rename a tag (reversible fixture)', capability: 'reversible_write', schema: { properties: { from: { type: 'string', required: true, maxLength: 64 }, to: { type: 'string', required: true, maxLength: 64 } } } });
   registry.define({ name: 'payments.charge', description: 'Charge a payment (sensitive fixture)', capability: 'sensitive', schema: { properties: { amount: { type: 'integer', required: true }, currency: { type: 'string', required: true, maxLength: 8 } } } });
   registry.define({ name: 'calendar.export', description: 'Export calendar (critical reversible fixture)', capability: 'reversible_write', critical: true, schema: { properties: { format: { type: 'string', required: true, maxLength: 8 } } } });
-  registry.define({ name: 'system.wipe', description: 'Wipe data (forbidden fixture)', capability: 'forbidden', schema: { properties: { scope: { type: 'string', required: true, maxLength: 32 } } } });
+  registry.define({ name: 'system.shutdown', description: 'Shut the app down (forbidden fixture)', capability: 'forbidden', schema: { properties: { scope: { type: 'string', required: true, maxLength: 32 } } } });
   return registry;
 }
 
@@ -296,9 +296,9 @@ test('a critical-flagged tool requires fresh approval regardless of capability c
 
 test('forbidden tools are always denied, at grant time and at authorize time', () => {
   const { engine } = world();
-  assert.match(engine.grantTool({ tool: 'system.wipe' }).reason, /forbidden_tool/);
-  assert.equal(engine.grantTool({ tool: 'system.wipe' }).ok, false);
-  assert.match(engine.authorize({ tool: 'system.wipe', args: { scope: 'all' } }).reason, /forbidden_tool/);
+  assert.match(engine.grantTool({ tool: 'system.shutdown' }).reason, /forbidden_tool/);
+  assert.equal(engine.grantTool({ tool: 'system.shutdown' }).ok, false);
+  assert.match(engine.authorize({ tool: 'system.shutdown', args: { scope: 'all' } }).reason, /forbidden_tool/);
 });
 
 test('an active emergency stop blocks every authorization, read-only included', () => {
@@ -460,4 +460,177 @@ test('the full authorize flow records a sanitized audit trail end to end', () =>
   assert.equal(blob.includes('currency'), false);
   assert.equal(blob.includes('query'), false);
   assert.equal(audit.verify().ok, true);
+});
+
+// ---- hardening round (review of 3d4d5f7) ----
+
+test('approval ids are unpredictable: secure randomness, not seq or time', () => {
+  const { approvals } = world();
+  const a1 = approvals.request({ tool: 'payments.charge', args: { amount: 1, currency: 'INR' } }).approval;
+  const a2 = approvals.request({ tool: 'payments.charge', args: { amount: 1, currency: 'INR' } }).approval;
+  assert.equal(/^[a-f0-9]{64}$/.test(a1.id), true);
+  assert.equal(/^[a-f0-9]{64}$/.test(a2.id), true);
+  assert.notEqual(a1.id, a2.id, 'identical args at an identical clock still mint distinct ids');
+  assert.notEqual(a1.id, a1.argsDigest, 'the id is not derived from the args digest');
+  // an injected generator is used verbatim (test seam; production uses
+  // crypto.randomBytes on desktop and crypto.getRandomValues in the browser)
+  const fixed = createApprovalDesk({ clock, randomHex: () => 'a'.repeat(64) });
+  assert.equal(fixed.request({ tool: 'x.y', args: {} }).approval.id, 'a'.repeat(64));
+});
+
+test('approval requests fail closed without secure randomness', () => {
+  const desk = createApprovalDesk({ clock, randomHex: () => null });
+  const res = desk.request({ tool: 'payments.charge', args: { amount: 1, currency: 'INR' } });
+  assert.deepEqual(res, { ok: false, reason: 'secure_randomness_unavailable' });
+  assert.equal(desk.get('a'.repeat(64)), null, 'nothing is stored on a failed mint');
+  // a weak or wrongly shaped id is refused too
+  const weak = createApprovalDesk({ clock, randomHex: (n) => 'x'.repeat(n) });
+  assert.match(weak.request({ tool: 'x.y', args: {} }).reason, /secure_randomness_unavailable/);
+});
+
+test('approval requests refuse args that are not plain JSON-like data', () => {
+  const { approvals } = world();
+  const acc = {};
+  Object.defineProperty(acc, 'amount', { get() { return 100; }, enumerable: true });
+  assert.match(approvals.request({ tool: 'payments.charge', args: acc }).reason, /approval_args_not_plain_data/);
+  const sparse = ['a', 'b'];
+  delete sparse[0];
+  assert.match(approvals.request({ tool: 'notes.search', args: { tags: sparse } }).reason, /approval_args_not_plain_data/);
+  const sym = {};
+  sym[Symbol('s')] = 1;
+  assert.match(approvals.request({ tool: 'x.y', args: sym }).reason, /approval_args_not_plain_data/);
+});
+
+test('sparse arrays and arrays with extra properties are refused in args and digests', () => {
+  const { registry } = world();
+  const sparse = ['a', 'b'];
+  delete sparse[0];
+  assert.match(JSON.stringify(registry.validateArgs('notes.search', { query: 'x', tags: sparse })), /args_not_plain_data:sparse_or_extra_array_keys/);
+  const extra = ['a', 'b'];
+  extra.extra = 'x';
+  assert.match(JSON.stringify(registry.validateArgs('notes.search', { query: 'x', tags: extra })), /args_not_plain_data:sparse_or_extra_array_keys/);
+  assert.throws(() => canonicalJson(sparse), TypeError);
+  assert.throws(() => canonicalJson(extra), TypeError);
+  // a hole in the middle is just as sparse
+  const holed = ['a', 'b', 'c'];
+  delete holed[1];
+  assert.throws(() => canonicalJson(holed), TypeError);
+});
+
+test('symbol keys, non-enumerable properties and accessors are refused in args and digests', () => {
+  const { registry } = world();
+  const sym = {};
+  sym[Symbol('s')] = 1;
+  sym.query = 'ok';
+  assert.match(JSON.stringify(registry.validateArgs('notes.search', sym)), /args_not_plain_data:symbol_key/);
+  const hidden = {};
+  Object.defineProperty(hidden, 'hidden', { value: 1, enumerable: false });
+  hidden.query = 'ok';
+  assert.match(JSON.stringify(registry.validateArgs('notes.search', hidden)), /args_not_plain_data:non_enumerable_property/);
+  const acc = {};
+  Object.defineProperty(acc, 'query', { get() { return 'evil'; }, enumerable: true });
+  assert.match(JSON.stringify(registry.validateArgs('notes.search', acc)), /args_not_plain_data:accessor_property/);
+  const accArr = ['a'];
+  Object.defineProperty(accArr, 0, { get() { return 'evil'; }, enumerable: true });
+  assert.match(JSON.stringify(registry.validateArgs('notes.search', { query: 'x', tags: accArr })), /args_not_plain_data:accessor_property/);
+  for (const bad of [sym, hidden, acc]) {
+    assert.throws(() => canonicalJson(bad), TypeError);
+  }
+  // getter side effects never run during validation or digesting
+  let touched = false;
+  const spy = {};
+  Object.defineProperty(spy, 'query', { get() { touched = true; return 'ok'; }, enumerable: true });
+  registry.validateArgs('notes.search', spy);
+  assert.equal(touched, false, 'validation must not execute a getter');
+});
+
+test('critical action names cannot be registered as read-only or reversible', () => {
+  const registry = createRegistry();
+  for (const [name, capability] of [
+    ['payments.refund', 'read_only'],
+    ['payments.charge', 'reversible_write'],
+    ['purchase.confirm', 'read_only'],
+    ['checkout.pay', 'reversible_write'],
+    ['billing.subscribe', 'read_only'],
+    ['legal.file_return', 'reversible_write'],
+    ['compliance.submit_report', 'read_only'],
+    ['contract.sign', 'reversible_write'],
+    ['filing.submit', 'read_only'],
+    ['files.delete_all', 'reversible_write'],
+    ['cache.destroy', 'read_only'],
+    ['temp.erase', 'read_only'],
+    ['notes.wipe_all', 'read_only'],
+    ['cleanup.purge_cache', 'read_only'],
+    ['old_data.permanently_remove', 'reversible_write'],
+  ]) {
+    const res = registry.define({ name, description: 'fixture', capability, schema: { properties: {} } });
+    assert.equal(res.ok, false, name + ' must not register as ' + capability);
+    assert.match(JSON.stringify(res), /critical_name_requires_sensitive_or_critical/, name);
+  }
+  // the same names register fine as sensitive or explicitly critical
+  assert.equal(registry.define({ name: 'payments.refund', description: 'd', capability: 'sensitive', schema: { properties: {} } }).ok, true);
+  assert.equal(registry.define({ name: 'legal.notify', description: 'd', capability: 'reversible_write', critical: true, schema: { properties: {} } }).ok, true);
+  // and genuinely harmless names are untouched
+  assert.equal(registry.define({ name: 'notes.search', description: 'd', capability: 'read_only', schema: { properties: {} } }).ok, true);
+  assert.equal(registry.define({ name: 'notes.rename_tag', description: 'd', capability: 'reversible_write', schema: { properties: {} } }).ok, true);
+  assert.equal(isCriticalName('notes.search'), false);
+  assert.equal(isCriticalName('payments.refund'), true);
+});
+
+test('the policy engine refuses a misclassified critical name even from a registry without the check', () => {
+  const fakeRegistry = {
+    get(name) {
+      return name === 'payments.refund'
+        ? { name, description: 'misclassified', capability: 'read_only', critical: false, schema: { properties: {} } }
+        : null;
+    },
+    validateArgs(name, args) {
+      return name === 'payments.refund' && typeof args === 'object' && args !== null ? { ok: true, errors: [] } : { ok: false, errors: ['unknown_tool'] };
+    },
+  };
+  const approvals = createApprovalDesk({ clock });
+  const emergencyStop = createEmergencyStop();
+  const engine = createPolicyEngine({ registry: fakeRegistry, approvals, emergencyStop, clock });
+  engine.grantTool({ tool: 'payments.refund' });
+  const d = engine.authorize({ tool: 'payments.refund', args: {} });
+  assert.equal(d.allowed, false);
+  assert.equal(d.reason, 'critical_name_misclassified');
+  // with an approval presented it is STILL refused: the flag itself is wrong
+  const a = approvals.request({ tool: 'payments.refund', args: {} }).approval;
+  assert.equal(engine.authorize({ tool: 'payments.refund', args: {}, approvalId: a.id }).reason, 'critical_name_misclassified');
+});
+
+test('audit verify enforces contiguous sequence numbers starting at 1', () => {
+  const { audit } = world();
+  for (const cap of ['a', 'b', 'c']) {
+    audit.append({ actor: 'agent', action: 'tool.authorize', tool: 'notes.search', decision: 'allowed', reason: 'grant_valid', detail: { capability: cap } });
+  }
+  assert.equal(audit.verify().ok, true);
+  const ex = audit.exportAll();
+
+  // attacker drops entry 2 and rehashes entry 3 against entry 1's hash:
+  // the chain would pass, the sequence gap must not
+  const rehashed = { ...ex[2] };
+  rehashed.hash = chainHash(3, ex[0].hash, toCanonicalEntry(rehashed));
+  const gap = audit.verify([ex[0], rehashed]);
+  assert.equal(gap.ok, false);
+  assert.equal(gap.reason, 'sequence_gap');
+  assert.equal(gap.brokenAt, 3);
+
+  // plain gap without rehash
+  const plainGap = audit.verify([ex[0], ex[2]]);
+  assert.equal(plainGap.ok, false);
+  assert.equal(plainGap.reason, 'sequence_gap');
+
+  // a list not starting at 1 is rejected
+  const shifted = audit.verify([ex[1], ex[2]]);
+  assert.equal(shifted.ok, false);
+  assert.equal(shifted.reason, 'sequence_gap');
+
+  // non-integer or missing sequences are malformed, not passable
+  assert.equal(audit.verify([{ ...ex[0], seq: 1.5 }]).reason, 'malformed_entry');
+  assert.equal(audit.verify([{ ...ex[0], seq: undefined }]).reason, 'malformed_entry');
+
+  // the intact log still verifies, contiguity included
+  assert.equal(audit.verify(ex).ok, true);
 });

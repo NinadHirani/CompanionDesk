@@ -26,6 +26,8 @@
   if (typeof module === 'object' && module.exports) module.exports = factory();
   else root.CompanionToolRegistry = factory();
 })(typeof self !== 'undefined' ? self : this, function () {
+  const digestModule = (typeof require === 'function') ? require('./digest') : root.CompanionDigest;
+  const { plainDataProblem } = digestModule;
 
   const CAPABILITIES = ['read_only', 'reversible_write', 'sensitive', 'forbidden'];
   const NAME_RE = /^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*){0,3}$/;
@@ -40,6 +42,30 @@
     maxProperties: 32,
     maxEnum: 16,
   };
+
+  // Conservative, explicit critical-name matching. Tool names in these
+  // namespaces, or with a segment naming a destructive deletion, are
+  // CRITICAL actions (payments/purchases, destructive deletion, legal or
+  // binding submissions). The registry refuses to register such a tool
+  // unless it is defined as capability 'sensitive' or flagged critical:true,
+  // and the policy engine separately refuses to authorize any misclassified
+  // one that somehow exists, so a misclassification can neither be created
+  // nor executed. Matching is deliberate and over-broad in coverage, narrow
+  // in mechanism: extend these explicit lists, never pattern-guess new
+  // shapes, and when in doubt a name is treated as critical (fail closed).
+  const CRITICAL_NAMESPACES = new Set([
+    'payments', 'payment', 'purchases', 'purchase', 'checkout', 'billing',
+    'legal', 'compliance', 'signature', 'signatures', 'filing', 'filings',
+    'contract', 'contracts', 'submission', 'submissions', 'deletion',
+  ]);
+  const DESTRUCTIVE_DELETE_PREFIXES = ['delete', 'destroy', 'erase', 'wipe', 'purge', 'permanen'];
+
+  function isCriticalName(name) {
+    if (typeof name !== 'string') return false;
+    const segments = name.split('.');
+    if (CRITICAL_NAMESPACES.has(segments[0])) return true;
+    return segments.some((seg) => DESTRUCTIVE_DELETE_PREFIXES.some((p) => seg.startsWith(p)));
+  }
 
   function isPlainObject(v) {
     if (v === null || typeof v !== 'object' || Array.isArray(v)) return false;
@@ -68,6 +94,9 @@
     if (typeof def.description !== 'string' || def.description.length === 0 || def.description.length > LIMITS.description) errors.push('bad_description');
     if (typeof def.capability !== 'string' || !CAPABILITIES.includes(def.capability)) errors.push('bad_capability');
     if (def.critical !== undefined && typeof def.critical !== 'boolean') errors.push('bad_critical');
+    if (isCriticalName(def.name) && def.capability === 'sensitive' === false && def.critical !== true) {
+      errors.push('critical_name_requires_sensitive_or_critical');
+    }
     if (!isPlainObject(def.schema)) return errors.concat(['bad_schema']);
     for (const k of Object.keys(def.schema)) {
       if (k !== 'properties') errors.push('unknown_schema_field:' + k);
@@ -96,6 +125,12 @@
   function validateArgsAgainst(def, args) {
     if (args === undefined || args === null) return ['args_missing'];
     if (!isPlainObject(args)) return ['args_not_object'];
+    // Only plain JSON-like data passes: symbol keys, non-enumerable
+    // properties, accessors, sparse arrays and arrays with extra properties
+    // are refused up front, so a caller can never smuggle structure the
+    // schema never declared.
+    const argsProblem = plainDataProblem(args);
+    if (argsProblem) return ['args_not_plain_data:' + argsProblem];
     const errors = [];
     const fields = def.schema.properties;
     const argKeys = Object.keys(args);
@@ -105,6 +140,8 @@
       if (!Object.prototype.hasOwnProperty.call(fields, k)) { errors.push('unknown_field:' + k); continue; }
       const spec = fields[k];
       const v = args[k];
+      const vProblem = plainDataProblem(v);
+      if (vProblem) { errors.push('unsupported_value:' + k + ':' + vProblem); continue; }
       switch (spec.type) {
         case 'string': {
           if (typeof v !== 'string') { errors.push('wrong_type:' + k); break; }
@@ -168,5 +205,5 @@
     };
   }
 
-  return { CAPABILITIES, createRegistry, validateDefinition, LIMITS };
+  return { CAPABILITIES, createRegistry, validateDefinition, isCriticalName, LIMITS };
 });

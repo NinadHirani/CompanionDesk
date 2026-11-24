@@ -30,6 +30,8 @@
   if (typeof module === 'object' && module.exports) module.exports = factory();
   else root.CompanionPolicy = factory();
 })(typeof self !== 'undefined' ? self : this, function () {
+  const registryModule = (typeof require === 'function') ? require('./tool-registry') : root.CompanionToolRegistry;
+  const { isCriticalName } = registryModule;
 
   function createPolicyEngine({ registry, approvals, emergencyStop, clock } = {}) {
     if (!registry) throw new TypeError('policy engine needs a registry');
@@ -74,13 +76,18 @@
       const def = registry.get(tool);
       if (!def) return deny('unknown_tool');
       if (def.capability === 'forbidden') return deny('forbidden_tool');
+      // Belt and braces with the registry: a name that matches the critical
+      // namespaces but is not flagged sensitive/critical can never authorize,
+      // even if a registry without the registration-time check produced it.
+      const criticalDeclared = def.capability === 'sensitive' || def.critical === true;
+      if (isCriticalName(tool) && !criticalDeclared) return deny('critical_name_misclassified');
       const check = registry.validateArgs(tool, args);
       if (!check.ok) return deny('invalid_args', { errors: check.errors });
       const g = grants.get(tool);
       if (!g) return deny('no_grant');
       if (g.revoked) return deny('grant_revoked');
       if (g.expiresAt !== null && now() >= g.expiresAt) return deny('grant_expired');
-      const critical = def.capability === 'sensitive' || def.critical === true;
+      const critical = criticalDeclared;
       if (critical) {
         if (approvalId === undefined || approvalId === null) return deny('approval_required');
         const v = approvals.verify(approvalId, { tool, args });

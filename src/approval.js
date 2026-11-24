@@ -26,14 +26,39 @@
     return sha256Hex('companiondesk.approval.v1\n' + tool + '\n' + canonicalJson(args));
   }
 
-  function createApprovalDesk({ clock, ttlMs } = {}) {
+  // Secure 32-byte randomness for approval ids. Node: crypto.randomBytes.
+  // Browser: crypto.getRandomValues. If NEITHER is available the function
+  // returns null and every approval request must fail closed: a predictable
+  // id is not a nonce, so no weaker fallback (Math.random, counters, clocks)
+  // is ever used. Tests inject their own generator through randomHex.
+  function secureRandomHex(bytes) {
+    if (typeof require === 'function') {
+      try {
+        const nodeCrypto = require('crypto');
+        if (nodeCrypto && typeof nodeCrypto.randomBytes === 'function') {
+          return nodeCrypto.randomBytes(bytes).toString('hex');
+        }
+      } catch (e) { /* fall through to the Web API */ }
+    }
+    const webCrypto = (typeof globalThis !== 'undefined') ? globalThis.crypto : undefined;
+    if (webCrypto && typeof webCrypto.getRandomValues === 'function') {
+      const buf = new Uint8Array(bytes);
+      webCrypto.getRandomValues(buf);
+      let out = '';
+      for (const b of buf) out += b.toString(16).padStart(2, '0');
+      return out;
+    }
+    return null;
+  }
+
+  function createApprovalDesk({ clock, ttlMs, randomHex } = {}) {
     const now = clock || (() => Date.now());
+    const nextRandom = randomHex === undefined ? secureRandomHex : randomHex;
     if (ttlMs !== undefined && (typeof ttlMs !== 'number' || !Number.isFinite(ttlMs) || ttlMs <= 0 || ttlMs > MAX_TTL_MS)) {
       throw new TypeError('approval ttl out of range');
     }
     const ttl = ttlMs === undefined ? DEFAULT_TTL_MS : ttlMs;
     const byId = new Map();
-    let seq = 0;
 
     const desk = {
       // The user's explicit yes for one exact run. Returns the record the
@@ -41,11 +66,21 @@
       request({ tool, args } = {}) {
         if (typeof tool !== 'string' || tool.length === 0 || tool.length > TOOL_MAX) return { ok: false, reason: 'approval_tool_invalid' };
         if (args === undefined || args === null || typeof args !== 'object') return { ok: false, reason: 'approval_args_missing' };
-        const dg = argsDigest(tool, args);
-        seq += 1;
+        let dg;
+        try {
+          dg = argsDigest(tool, args);
+        } catch (e) {
+          // args are not plain JSON-like data (accessors, symbols, sparse
+          // arrays, hidden properties): fail closed, never digest them
+          return { ok: false, reason: 'approval_args_not_plain_data' };
+        }
+        // Fail closed when secure randomness is unavailable: an id that a
+        // caller could predict is not a nonce, so no approval is issued.
+        const id = nextRandom ? nextRandom(32) : null;
+        if (typeof id !== 'string' || !/^[a-f0-9]{64}$/.test(id)) return { ok: false, reason: 'secure_randomness_unavailable' };
         const requestedAt = now();
         const record = {
-          id: sha256Hex('companiondesk.nonce.v1\n' + seq + '\n' + dg + '\n' + String(requestedAt)),
+          id,
           tool,
           argsDigest: dg,
           requestedAt,
@@ -53,7 +88,7 @@
           state: 'pending',
         };
         byId.set(record.id, record);
-        const { id, argsDigest: digestEcho, state } = record;
+        const { argsDigest: digestEcho, state } = record;
         return { ok: true, approval: { id, tool, argsDigest: digestEcho, requestedAt, expiresAt: record.expiresAt, state } };
       },
 

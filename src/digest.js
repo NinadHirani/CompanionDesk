@@ -14,7 +14,53 @@
   else root.CompanionDigest = factory();
 })(typeof self !== 'undefined' ? self : this, function () {
 
+  // Accepts only plain JSON-like data: null, finite numbers, booleans,
+  // strings, DENSE arrays (every index an own enumerable data property, no
+  // extra properties, no symbols, no accessors) and plain objects (prototype
+  // Object.prototype or null, only own ENUMERABLE DATA properties, no symbol
+  // keys, no non-enumerable properties, no getters/setters). Anything else
+  // returns a short reason string; null means the value is clean. Digesting
+  // such a value can therefore never execute a getter, never see a hidden
+  // or symbol-keyed property, and never collapse two different structures
+  // (a sparse array and its dense counterpart are distinct values).
+  function plainDataProblem(value) {
+    if (value === null) return null;
+    const t = typeof value;
+    if (t === 'string' || t === 'boolean') return null;
+    if (t === 'number') return Number.isFinite(value) ? null : 'non_finite_number';
+    if (Array.isArray(value)) {
+      const keys = Object.keys(value);
+      if (keys.length !== value.length) return 'sparse_or_extra_array_keys';
+      for (let i = 0; i < value.length; i++) {
+        if (!Object.prototype.hasOwnProperty.call(value, i)) return 'sparse_array';
+        const d = Object.getOwnPropertyDescriptor(value, i);
+        if (d.get !== undefined || d.set !== undefined) return 'accessor_property';
+      }
+      if (Object.getOwnPropertySymbols(value).length > 0) return 'symbol_key';
+      for (const e of value) {
+        const p = plainDataProblem(e);
+        if (p) return p;
+      }
+      return null;
+    }
+    if (t !== 'object') return 'unsupported_type';
+    const proto = Object.getPrototypeOf(value);
+    if (proto !== Object.prototype && proto !== null) return 'not_plain_object';
+    const ownNames = Object.getOwnPropertyNames(value);
+    if (ownNames.length !== Object.keys(value).length) return 'non_enumerable_property';
+    if (Object.getOwnPropertySymbols(value).length > 0) return 'symbol_key';
+    for (const k of ownNames) {
+      const d = Object.getOwnPropertyDescriptor(value, k);
+      if (d.get !== undefined || d.set !== undefined) return 'accessor_property';
+      const p = plainDataProblem(value[k]);
+      if (p) return p;
+    }
+    return null;
+  }
+
   function canonicalJson(value) {
+    const problem = plainDataProblem(value);
+    if (problem) throw new TypeError('canonicalJson: ' + problem);
     if (value === null) return 'null';
     const t = typeof value;
     if (t === 'string') return JSON.stringify(value);
@@ -92,5 +138,5 @@
     return toHex(sha256OfBytes(new TextEncoder().encode(text)));
   }
 
-  return { canonicalJson, sha256Hex };
+  return { canonicalJson, sha256Hex, plainDataProblem };
 });
