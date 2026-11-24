@@ -298,7 +298,12 @@ passed the raw audit was caught in review and fixed, with an
 integration test proving the injection and flush-failure lockout), a
 reset while active converges and closes the old store before reopening,
 before-quit reports a failed save instead of claiming convergence, and
-the store saver uses a process-unique temp file plus atomic rename.
+the store saver uses a process-unique temp file plus atomic rename and
+FAILS CLOSED when the rename cannot replace the target (previous file
+byte-for-byte intact, sanitized code-only error, no in-place write of
+the target; atomicity is never traded for availability), and start()
+never throws (every failure path returns blocked with the store closed
+and sanitized reasons).
 Remaining Gate 2 work: delivery/scheduling/file output, each an
 explicitly-reviewed gate.
 Acceptance: policy

@@ -205,14 +205,16 @@ claims to literally experience emotions.
 - Update policy that never auto-installs unsigned builds; update modes
   disabled/auto/manual-download (`src/update-policy.js`, `src/updater.js`).
 - Health check and onboarding interview (`src/health.js`, `src/onboarding.js`).
-- 639 passing unit/integration tests (258 baseline; model selection +18, conversation history +17, optional key storage +13, M1 provider registry/task router/cloud gate +25, M1 per-ask routing integration +18, M1 review fixes +18, M1 hardware profiles +12, M1 provider status +11, M1 provider contract tests +18, M1 provider fault diagnostics +18, fault-detail sanitization review fix +3, offline memory-v2 retrieval harness +12, memory-v2 harness slice 4 fold fix and bridges +5, memory-v2 store contract tests +9, Gate 2 agent safety foundation +35, Gate 2 security hardening +8, Gate 2 persistence +17, M1 diagnostics hardening +2, Gate 2 orchestrator +13, orchestrator audit hardening +13, first harmless tools +18, ICS
+- 644 passing unit/integration tests (258 baseline; model selection +18, conversation history +17, optional key storage +13, M1 provider registry/task router/cloud gate +25, M1 per-ask routing integration +18, M1 review fixes +18, M1 hardware profiles +12, M1 provider status +11, M1 provider contract tests +18, M1 provider fault diagnostics +18, fault-detail sanitization review fix +3, offline memory-v2 retrieval harness +12, memory-v2 harness slice 4 fold fix and bridges +5, memory-v2 store contract tests +9, Gate 2 agent safety foundation +35, Gate 2 security hardening +8, Gate 2 persistence +17, M1 diagnostics hardening +2, Gate 2 orchestrator +13, orchestrator audit hardening +13, first harmless tools +18, ICS
   hardening +5, injection corpus +27, IPC contract +5, IPC contract review hardening +11, agent surface
   wiring +21, persistence hardening +6 (strict records, acknowledged
   appends flush to disk immediately, unacknowledged appends roll back),
   orchestrator-on-durable durability +2, persistence desks follow-ups +3,
   agent runtime lifecycle +5, stack-wiring review fixes +3 (the
   injection proof, the reset lifecycle, and honest before-quit reporting),
-  +17 total since the 622 count above); CI,
+  saver fail-closed hardening +5 (rename failure proven per error code
+  with the old file byte-for-byte intact, sanitized errors, startup
+  exception proof), +22 total since the 622 count above); CI,
   CI macOS + Linux and Android APK all green on the
   current baseline `9addfdb` (runs 45323544121, 45323543975, 45323765018);
   public Android debug-APK preview release.
@@ -289,9 +291,20 @@ recovers through the ordinary verified load. before-quit reports a
 failed save honestly instead of claiming convergence (already-
 acknowledged audit records stay durable) and always closes the store.
 The agent-state file is replaced whole via a process-unique temp file
-plus an atomic rename (with a Windows-safe retry for file locks and an
-in-place fallback the load path verifies), so a crash mid-save cannot
-corrupt the live store. Secrets never enter this store; the
+plus an atomic rename (with a Windows-safe retry for file locks). If
+the rename still cannot replace the target, the saver FAILS CLOSED:
+the previous file stays byte-for-byte intact, the temp file is
+removed, and a sanitized, code-only error is thrown. There is
+deliberately NO in-place write of the target: a crash during one could
+corrupt the previously valid store, and load-time verification cannot
+resurrect a torn database image, so atomicity is never traded for
+availability; the caller treats the failure as a persist failure and
+the runtime blocks until a verified restart. start() never throws:
+every failure path (open, build, load, save) returns blocked with the
+store closed and sanitized, code-only reasons, exposing no exception
+detail or partial stack. The quit path reports the save outcome
+bounded (outcome and reason code only, never paths or secrets), and
+the main store closes on shutdown. Secrets never enter this store; the
 Gemini key remains in the OS credential vault. Bounded retention without silent deletion:
 pruning the audit trail requires an archive that verifies and covers the
 entries being dropped, the prune itself is audited, and the chain base
