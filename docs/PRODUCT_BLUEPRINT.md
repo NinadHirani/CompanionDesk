@@ -217,8 +217,12 @@ claims to literally experience emotions.
   exception proof), delivery bridge +16 (fail-closed drain to a
   wiring-supplied sink), +38 total since the 622 count above); CI,
   CI macOS + Linux and Android APK all green on the
-  current baseline `9addfdb` (runs 45323544121, 45323543975, 45323765018);
-  public Android debug-APK preview release.
+  current baseline `9addfdb` (runs 45323544121, 45323543975, 45323765018)
+  and re-proven on the delivery gate commit `d84b1aa` (CI 45331634733,
+  CI macOS + Linux 45331655027, Android APK 45331649304, dispatched: the
+  Android workflow's push filter covers only android/, web/, scripts/,
+  package-lock.json, MOBILE.md and its own file); public Android
+  debug-APK preview release.
 
 ## 3b. Gate 2 slice 1 (implemented as pure modules, 24 Nov 2026)
 
