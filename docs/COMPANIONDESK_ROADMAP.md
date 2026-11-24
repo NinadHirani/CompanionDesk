@@ -68,9 +68,14 @@ propose-then-confirm principle is unchanged.
     hardening, the first harmless tools (notifications, reminders, ics,
     with the ICS date/time and UTF-8 byte-count hardening from review),
     the prompt-injection red-team corpus, and the read-only renderer-to-
-    main IPC contract are implemented as pure, isolated, UNWIRED modules
-    (blueprint sections 3a-3g; baseline de1e284, 582 tests). UI/IPC
-    wiring is the next, explicitly-reviewed step.
+    main IPC contract are implemented as pure, isolated modules (blueprint
+    sections 3a-3g). The IPC contract was hardened after review (strict
+    plain-object validation, duplicate allowlist rejection, safe refusal
+    rendering) and is now wired read-only end to end (section 3h: agent
+    surface in main, one literal handler registration per channel, the
+    preload and a text-only renderer panel; writes unreachable from the
+    renderer; baseline 9addfdb, 614 tests). Persistence wiring
+    (hydrate/write) stays a separate, explicitly-reviewed gate.
 
 Risks unchanged: per-OS permissions (Accessibility, Screen Recording,
 Android foreground-service types) must fail closed; privacy expectations are

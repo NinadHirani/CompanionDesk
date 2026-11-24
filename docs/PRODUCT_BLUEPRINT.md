@@ -1,11 +1,10 @@
 # CompanionDesk Product Blueprint
 
 Status: **proposed** in direction; M0 and M1 are COMPLETE on main, verified
-24 Nov 2026. The current verified baseline is main `de1e284` with 582
+24 Nov 2026. The current verified baseline is main `9addfdb` with 614
 passing tests, Fo-reported from a full `npm test` run at that head
-(582/582, selftest included). CI, CI macOS + Linux and Android APK are all
-green on that head (runs 45321563591, 45321563695 and , the APK
-explicitly dispatched). Gate 2 slices 1-6 (agent safety foundation,
+(614/614, selftest included). CI, CI macOS + Linux and Android APK are all
+green on that head (runs 45323544121, 45323543975 and 45323765018). Gate 2 slices 1-6 (agent safety foundation,
 hardening, persistence, orchestrator, first harmless tools, injection
 corpus, IPC contract) are pure, isolated modules with NO product wiring,
 NO UI and NO IPC beyond the slice 6 CONTRACT module, which is itself
@@ -13,7 +12,8 @@ unwired data; slice 2 persists the audit log, slice 3 adds the
 orchestrator, slice 4 adds the notifications/reminders/ics tools (see 3d
 and 3e), slice 5 adds the prompt-injection red-team corpus (3f), and
 slice 6 defines the fail-closed read-only renderer-to-main IPC contract
-(3g), all still unwired. The ICS tool was hardened after Ninad's review
+(3g). The contract was hardened after Ninad's review and is now wired
+read-only end to end by the wiring slice (3h). The ICS tool was hardened after Ninad's review
 (commit 9adf493): strict date/time component validation replaced the
 shape-only regex and the byte counter now counts exact UTF-8 (recorded
 in 3e). The
@@ -206,10 +206,10 @@ claims to literally experience emotions.
 - Update policy that never auto-installs unsigned builds; update modes
   disabled/auto/manual-download (`src/update-policy.js`, `src/updater.js`).
 - Health check and onboarding interview (`src/health.js`, `src/onboarding.js`).
-- 582 passing unit/integration tests (258 baseline; model selection +18, conversation history +17, optional key storage +13, M1 provider registry/task router/cloud gate +25, M1 per-ask routing integration +18, M1 review fixes +18, M1 hardware profiles +12, M1 provider status +11, M1 provider contract tests +18, M1 provider fault diagnostics +18, fault-detail sanitization review fix +3, offline memory-v2 retrieval harness +12, memory-v2 harness slice 4 fold fix and bridges +5, memory-v2 store contract tests +9, Gate 2 agent safety foundation +35, Gate 2 security hardening +8, Gate 2 persistence +17, M1 diagnostics hardening +2, Gate 2 orchestrator +13, orchestrator audit hardening +13, first harmless tools +18, ICS
-  hardening +5, injection corpus +27, IPC contract +5); CI, CI macOS + Linux
-  and Android APK all green on the current baseline `de1e284` (runs
-  45321563591, 45321563695 and , the APK explicitly dispatched);
+- 614 passing unit/integration tests (258 baseline; model selection +18, conversation history +17, optional key storage +13, M1 provider registry/task router/cloud gate +25, M1 per-ask routing integration +18, M1 review fixes +18, M1 hardware profiles +12, M1 provider status +11, M1 provider contract tests +18, M1 provider fault diagnostics +18, fault-detail sanitization review fix +3, offline memory-v2 retrieval harness +12, memory-v2 harness slice 4 fold fix and bridges +5, memory-v2 store contract tests +9, Gate 2 agent safety foundation +35, Gate 2 security hardening +8, Gate 2 persistence +17, M1 diagnostics hardening +2, Gate 2 orchestrator +13, orchestrator audit hardening +13, first harmless tools +18, ICS
+  hardening +5, injection corpus +27, IPC contract +5, IPC contract review hardening +11, agent surface
+  wiring +21); CI, CI macOS + Linux and Android APK all green on the
+  current baseline `9addfdb` (runs 45323544121, 45323543975, 45323765018);
   public Android debug-APK preview release.
 
 ## 3b. Gate 2 slice 1 (implemented as pure modules, 24 Nov 2026)
@@ -395,6 +395,48 @@ exposed surface equals the contract exactly, so the shell cannot
 silently widen it; refusalResponse renders one bounded fail-closed
 answer. 5 tests cover the read-only construction proof, refusals,
 strict validation, the allowlist equality proof and the refusal shape.
+
+Ninad's review hardened all three validators the same day: payloads must
+be plain objects (Dates, class instances, arrays and inherited-key
+objects refused), validated with only their own enumerable string-keyed
+data properties (symbol keys, accessor properties, non-enumerables and
+prototype-polluting keys refused before any value is read or copied, so
+a getter is never invoked and a validated copy never carries hostile
+structure) and copied as validated primitives without spread;
+validatePreloadAllowlist now refuses duplicate entries (a Set used to
+hide them); refusalResponse stringifies nothing but a string reason (an
+object with a throwing toString or a symbol used to throw or leak). 11
+adversarial tests cover each shape.
+
+## 3h. Gate 2 wiring slice (24 Nov 2026): the read-only surface, wired
+
+The contract is now wired end to end, still read-only. main constructs
+the in-memory agent runtime (registry, approvals, emergency stop, audit
+log, policy engine, orchestrator, notifications, reminders) and exposes
+it ONLY through agent-surface.js, whose six handlers exist exactly for
+RENDERER_CHANNELS. Every request passes validateRequest before a reader
+runs; reader output is bounded before it leaves (arrays capped at the
+contract ceiling, records reduced to own string-keyed primitive fields,
+strings clipped to 200, non-finite numbers dropped, one nested object
+level kept for the audit detail shape, run step lists flattened and
+approval args dropped entirely); a reader that throws returns the
+standard refusal without leaking its error. main.js registers one
+literal ipcMain.handle line per channel so the ipc-sync structural
+guard keeps proving "a handler for every channel and no others";
+src/ipc-channels.js carries the six as reads; preload.js inlines the
+same six (no main-only channel anywhere in its surface, requests still
+invoke-only); the renderer panel (agent-panel.js) renders text only
+(textContent, never innerHTML), feature-detects the six read methods
+and calls nothing else. Writes stay unreachable from the renderer: run
+start/step/resume/abort, approvals, grants, stop and persistence are
+wired to no handler and nothing in main calls them in this slice.
+Persistence (hydrate/write) remains a separate, explicitly reviewed
+gate. 21 tests prove the surface (channel-set equality via
+validatePreloadAllowlist, no main-only handler reachable,
+validation-before-read, bounded shaping, caps, refusal-on-throw,
+dispatcher registration, fail-closed construction) and the shipped
+preload/renderer structure (inlined-list extraction, main-only absence,
+invoke-only, text-only panel). Full suite 614/614.
 
 ## 4. Planned, NOT implemented
 

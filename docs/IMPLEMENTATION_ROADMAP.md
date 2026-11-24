@@ -1,10 +1,10 @@
 # CompanionDesk Implementation Roadmap
 
 Status: M0 and M1 are COMPLETE on main (verified 24 Nov 2026; current
-baseline `05cea22`, 544 passing tests, Fo-reported from a full `npm test`
-run at that head (544/544, selftest included). CI, CI macOS + Linux and
-Android APK green on that head (runs 45319482959, 45319482716,
-45319501624, the APK explicitly dispatched). Gate 2 slice 1 (agent safety
+baseline `9addfdb`, 614 passing tests, Fo-reported from a full `npm test`
+run at that head (614/614, selftest included). CI, CI macOS + Linux and
+Android APK green on that head (runs 45323544121, 45323543975,
+45323765018). Gate 2 slice 1 (agent safety
 foundation) and its hardening are pure, isolated modules with NO product
 wiring, NO tools registered beyond test fixtures and NO UI or IPC. Slice 2
 (persistence) is additive-only storage, same boundary. Slice 3
@@ -285,11 +285,13 @@ suffices and no per-call approval is required, proven end to end through
 the real registry, policy engine and orchestrator (denied without a
 grant, authorized with no approvalId with one, full three-step run
 creates real records and audits every transition, a tool-level refusal
-stores nothing and follows skip recovery). Remaining Gate 2 work: the
-prompt-injection corpus before any grant widening, and UI/IPC wiring
-(which will bind the persistence and orchestrator surfaces together and
-owns delivery/scheduling/file output as separate, explicitly-reviewed
-gates).
+stores nothing and follows skip recovery). The read-only renderer-to-
+main surface is now wired end to end (agent-surface.js on the hardened
+ipc-contract.js, section 3h of the blueprint; writes unreachable from
+the renderer). Remaining Gate 2 work: persistence wiring (hydrating and
+writing the audit log, approvals, grants and stop state through the db
+adapter) and delivery/scheduling/file output, each an explicitly-
+reviewed gate.
 Acceptance: policy
 engine refuses ungranted calls (tested); payments, purchases, destructive
 deletion, and legal or binding submissions are denied unless fresh,
