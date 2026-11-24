@@ -30,6 +30,7 @@ const DEFAULTS = Object.freeze({
   proactive_quiet_enabled: true, // quiet hours on by default (fail-safe)
   proactive_quiet_start: '22:00',
   proactive_quiet_end: '08:00',
+  voice_enabled: false, // M6 slice 1: voice stays off until the user enables it
 });
 
 const ENUMS = Object.freeze({
@@ -38,7 +39,7 @@ const ENUMS = Object.freeze({
   brevity: ['short', 'normal', 'detailed'],
   hardware_profile: ['auto', 'lightweight', 'balanced', 'powerful'],
 });
-const BOOLEANS = ['learn_from_activity', 'suggest_memories', 'cloud_personal', 'cloud_enabled', 'onboarding_done', 'proactive_enabled', 'proactive_scope_reminder', 'proactive_scope_deadline', 'proactive_quiet_enabled'];
+const BOOLEANS = ['learn_from_activity', 'suggest_memories', 'cloud_personal', 'cloud_enabled', 'onboarding_done', 'proactive_enabled', 'proactive_scope_reminder', 'proactive_scope_deadline', 'proactive_quiet_enabled', 'voice_enabled'];
 // 'HH:MM' 24h local clock times bounding the quiet window.
 const QUIET_TIME_KEYS = ['proactive_quiet_start', 'proactive_quiet_end'];
 const QUIET_TIME_RE = /^([01][0-9]|2[0-3]):[0-5][0-9]$/;

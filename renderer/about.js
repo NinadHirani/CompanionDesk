@@ -120,6 +120,7 @@
     proactiveQuiet: document.getElementById('s-proactive-quiet'),
     quietStart: document.getElementById('s-quiet-start'),
     quietEnd: document.getElementById('s-quiet-end'),
+    voice: document.getElementById('s-voice'),
   };
 
   function fillSettings(s) {
@@ -141,6 +142,7 @@
     if (F.proactiveQuiet) F.proactiveQuiet.checked = s.proactive_quiet_enabled !== false;
     if (F.quietStart) F.quietStart.value = s.proactive_quiet_start || '22:00';
     if (F.quietEnd) F.quietEnd.value = s.proactive_quiet_end || '08:00';
+    if (F.voice) F.voice.checked = s.voice_enabled === true;
   }
 
   // Model choices come only from what Ollama already has installed; nothing
@@ -227,6 +229,7 @@
     if (F.proactiveQuiet) payload.proactive_quiet_enabled = F.proactiveQuiet.checked;
     if (F.quietStart) payload.proactive_quiet_start = F.quietStart.value;
     if (F.quietEnd) payload.proactive_quiet_end = F.quietEnd.value;
+    if (F.voice) payload.voice_enabled = F.voice.checked;
     const res = await api.settings_save(payload);
     if (res.ok) { fillSettings(res.settings); msg.textContent = 'Saved.'; msg.className = 'hint'; UI.today.refresh(); }
     else { msg.textContent = UI.friendlyError(res.error); msg.className = 'hint error'; }

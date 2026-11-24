@@ -494,6 +494,27 @@ M5 is complete as specified.
 
 ## M6 - Voice v2 (2-3 wks)
 
+**Slice 1 (landed 24 Nov 2026): decision-independent groundwork; voice
+stays off until configured.** New `src/voice-session.js` is the pure
+push-to-talk session state machine: one explicit session at a time, begun
+only by an explicit user action, the `micInUse` privacy indicator true only
+while recording, a 30 s cap the caller enforces via `autoStopDue()`
+(no timers of its own), failure reasons allowlisted, and no audio argument
+anywhere in its API (the page holds the recording; the machine never
+receives it). Voice is now gated by a setting: `voice_enabled` defaults to
+false, `voice:transcribe` refuses with `voice_disabled` until the user
+turns it on in About > Voice input, and the overlay explains that instead
+of recording into a closed door. Microphone permission is still requested
+only on the first explicit Speak press (the permission policy stays
+overlay-only and audio-only), never at startup. An in-flight transcription
+can now be cancelled: `voice:cancel` kills the running whisper process and
+the result maps to `cancelled`; the overlay's Escape and close do this.
+No audio retention: the temp WAV is deleted before transcription returns,
+and cancel releases the page's buffer. No model selection, no download, no
+wake word, no always-listening, and no claim of validated recognition:
+those wait for Ninad's decisions (docs/M6_VOICE_DECISIONS.md) and physical
+device time.
+
 Multilingual whisper model option wired to the existing `language` setting;
 OS-native text-to-speech first (Piper deferred pending verification of its
 successor project); wake word only after the licensing decision, behind a

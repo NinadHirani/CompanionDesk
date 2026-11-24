@@ -33,6 +33,23 @@ test('wav: a correct 44-byte header followed by the samples', () => {
   assert.deepEqual(wav.subarray(44), pcm);
 });
 
+test('voice: the active run can be cancelled and maps to cancelled', async () => {
+  let spawned = null;
+  const hanging = ({ onSpawn }) => new Promise((resolve, reject) => {
+    spawned = { kill: () => reject(new Error('killed')) };
+    if (onSpawn) onSpawn(spawned);
+  });
+  const pending = voice.transcribe({ pcm: bytes(concat(tone(600), silence(300), tone(600))) }, { find: () => ({ available: true, bin: 'b', model: 'm' }), run: hanging });
+  await new Promise((r) => setImmediate(r));
+  assert.equal(voice.cancelActiveRun().ok, true);
+  const res = await pending;
+  assert.deepEqual(res, { ok: false, error: 'cancelled' });
+});
+
+test('voice: cancelling with nothing active says so', () => {
+  assert.deepEqual(voice.cancelActiveRun(), { ok: false, reason: 'nothing_active' });
+});
+
 test('vad: silence and faint noise are not speech; a tone is', () => {
   assert.equal(vad.hasSpeech(silence(2000)), false);
   const hiss = Int16Array.from({ length: RATE * 2 }, (_, i) => Math.round((Math.sin(i * 12.9898) * 43758.5453 % 1) * 0.004 * 32767));

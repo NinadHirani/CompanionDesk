@@ -642,9 +642,15 @@ function registerIpc() {
     return { ok: true, hotkey: n.value };
   });
 
-  ipcMain.handle('voice:status', async () => voice.status({ modelsDir: modelsDir() }));
-  ipcMain.handle('voice:transcribe', async (_e, payload) =>
-    voice.transcribe(payload, { modelsDir: modelsDir(), language: process.env.WHISPER_LANG || 'en' }));
+  ipcMain.handle('voice:status', async () => {
+    const s = voice.status({ modelsDir: modelsDir() });
+    return { ...s, enabled: db.getSetting('voice_enabled', false) === true };
+  });
+  ipcMain.handle('voice:transcribe', async (_e, payload) => {
+    if (!db.getSetting('voice_enabled', false)) return { ok: false, error: 'voice_disabled' };
+    return voice.transcribe(payload, { modelsDir: modelsDir(), language: process.env.WHISPER_LANG || 'en' });
+  });
+  ipcMain.handle('voice:cancel', async () => voice.cancelActiveRun());
 
   ipcMain.handle('screen:status', async () => {
     const sel = await modelSelection();

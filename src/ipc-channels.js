@@ -51,6 +51,7 @@ const IPC_CHANNELS = Object.freeze([
   'overlay:status',
   'voice:status',
   'voice:transcribe',
+  'voice:cancel',
   'screen:status',
   'screen:windows',
   'screen:ask',

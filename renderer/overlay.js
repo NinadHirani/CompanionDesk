@@ -10,11 +10,13 @@
   const micBtn = document.getElementById('ov-mic');
   let busy = false;
   let recording = null; // the active recorder, if any
+  let processing = false; // a transcription is in flight in the main process
 
   const IDLE_HINT = 'Enter to ask. Esc to close.';
 
   function cancelRecording() {
     if (recording) { recording.cancel(); recording = null; }
+    if (processing) { api.voice_cancel(); processing = false; }
     micBtn.textContent = 'Speak';
   }
 
@@ -116,7 +118,9 @@
     micBtn.disabled = true;
     hint.textContent = 'Transcribing';
     const pcm = await rec.stop();
+    processing = true;
     const res = await api.voice_transcribe({ pcm });
+    processing = false;
     micBtn.disabled = false;
     if (!res.ok) { showError(res.error); return; }
     input.value = res.text;
@@ -127,6 +131,7 @@
     if (busy) return;
     if (recording) { await stopAndTranscribe(); return; }
     const status = await api.voice_status();
+    if (status.enabled === false) { showError('voice_disabled'); return; }
     if (!status.available) {
       answer.textContent = status.reason === 'no_model'
         ? 'Voice needs a whisper model file. See the README for where to put it.'

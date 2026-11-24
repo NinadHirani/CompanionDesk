@@ -53,6 +53,7 @@ const IPC_CHANNELS = [
   'overlay:status',
   'voice:status',
   'voice:transcribe',
+  'voice:cancel',
   'screen:status',
   'screen:windows',
   'screen:ask',

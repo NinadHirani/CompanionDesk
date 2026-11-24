@@ -39,21 +39,22 @@ function cleanTranscript(stdout) {
     .trim();
 }
 
-function run(bin, args, { timeoutMs }) {
+function run(bin, args, { timeoutMs, onSpawn }) {
   return new Promise((resolve, reject) => {
-    execFile(bin, args, { timeout: timeoutMs, maxBuffer: 1024 * 1024 }, (err, stdout) => {
+    const child = execFile(bin, args, { timeout: timeoutMs, maxBuffer: 1024 * 1024 }, (err, stdout) => {
       if (err) reject(err); else resolve({ stdout });
     });
+    if (onSpawn) onSpawn(child); // lets the caller cancel by killing the process
   });
 }
 
 // pcm: Buffer of 16 kHz mono Int16 samples. -> transcript text
-async function transcribe({ pcm, bin, model, language = 'en', timeoutMs = 30000, tmpDir = os.tmpdir(), runner = run }) {
+async function transcribe({ pcm, bin, model, language = 'en', timeoutMs = 30000, tmpDir = os.tmpdir(), runner = run, onSpawn }) {
   const dir = await fs.promises.mkdtemp(path.join(tmpDir, 'companiondesk-voice-'));
   try {
     const wavFile = path.join(dir, 'speech.wav');
     await fs.promises.writeFile(wavFile, pcm16ToWav(pcm, 16000));
-    const { stdout } = await runner(bin, ['-m', model, '-f', wavFile, '-l', language, '-nt', '-np'], { timeoutMs });
+    const { stdout } = await runner(bin, ['-m', model, '-f', wavFile, '-l', language, '-nt', '-np'], { timeoutMs, onSpawn });
     return cleanTranscript(stdout);
   } finally {
     await fs.promises.rm(dir, { recursive: true, force: true });

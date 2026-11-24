@@ -10,6 +10,8 @@
   voice_unavailable: 'Voice needs whisper.cpp set up. See the README.',
   no_speech: 'I did not catch that. Try again.',
   transcribe_failed: 'Voice transcription failed. Try again.',
+  voice_disabled: 'Voice is off. Turn it on in About > Voice input.',
+  cancelled: 'Voice input cancelled.',
   too_long: 'That recording was too long. Keep it under 15 seconds.',
   mic_blocked: 'Microphone access was blocked. Allow it in your system privacy settings.',
   mic_missing: 'No microphone was found.',

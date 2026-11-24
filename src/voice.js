@@ -23,6 +23,18 @@ function status({ find = whisper.findWhisper, modelsDir } = {}) {
   return w.available ? { ok: true, available: true } : { ok: true, available: false, reason: w.reason };
 }
 
+// At most one transcription runs at a time; cancelActiveRun() kills the
+// in-flight whisper process so a cancelled ask costs nothing further. Audio
+// is never retained: the buffer lives in the caller's page and is released
+// there, and the temp file whisper writes is deleted before this returns.
+let active = null;
+
+function cancelActiveRun() {
+  if (!active) return { ok: false, reason: 'nothing_active' };
+  active.cancel();
+  return { ok: true };
+}
+
 // payload: { pcm: bytes }. deps lets tests substitute the finder and transcriber.
 async function transcribe(payload, { modelsDir, find = whisper.findWhisper, run = whisper.transcribe, language = 'en' } = {}) {
   const buf = payload ? toBuffer(payload.pcm) : null;
@@ -37,12 +49,17 @@ async function transcribe(payload, { modelsDir, find = whisper.findWhisper, run 
   if (!hasSpeech(samples, SAMPLE_RATE)) return { ok: false, error: 'no_speech' };
   const trimmed = trimSilence(samples, SAMPLE_RATE);
 
+  let cancelled = false;
   try {
-    const text = await run({ pcm: Buffer.from(trimmed.buffer, trimmed.byteOffset, trimmed.byteLength), bin: w.bin, model: w.model, language });
+    const text = await run({ pcm: Buffer.from(trimmed.buffer, trimmed.byteOffset, trimmed.byteLength), bin: w.bin, model: w.model, language, onSpawn: (child) => {
+      active = { cancel: () => { cancelled = true; child.kill(); } };
+    } });
     return text ? { ok: true, text } : { ok: false, error: 'no_speech' };
   } catch {
-    return { ok: false, error: 'transcribe_failed' };
+    return { ok: false, error: cancelled ? 'cancelled' : 'transcribe_failed' };
+  } finally {
+    active = null;
   }
 }
 
-module.exports = { status, transcribe, SAMPLE_RATE, MAX_BYTES };
+module.exports = { status, transcribe, cancelActiveRun, SAMPLE_RATE, MAX_BYTES };
