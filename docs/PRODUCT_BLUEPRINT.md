@@ -1,10 +1,19 @@
 # CompanionDesk Product Blueprint
 
 Status: **proposed** in direction; M0 and M1 are COMPLETE on main, verified
-23 Nov 2026. The current verified baseline is main `40946f4` with 437
-passing tests and all three main-branch CI workflows green on that head
-(CI 45231761653, CI macOS + Linux 45231761785, Android APK 45232214311). Doc-only commits after the baseline do not change these
-numbers. This document states the agreed product vision and the
+24 Nov 2026. The current verified baseline is main `5b643be` with 437
+passing tests, Fo-reported from a full `npm test` run at that head (437/437,
+selftest included). CI (run 45238046955) and CI macOS + Linux (run
+45238047043) are green on that head. The Android APK workflow was last
+green on `40946f4` (run 45232214311) and has not been rerun on the current
+head because every commit since was experiment-scripts/docs-only and
+touches no app code. Work since the previous baseline is
+preparation/harness only, NOT product memory-v2 wiring: the slice-6
+sanitizer hardening, the Gate 1 repo-only benchmark scripts + selftest and
+the comparison assembler, and the M4 memory-v2 harness slices. No actual
+OnePlus device measurements exist; the OnePlus 12R and MacBook Air M1 are
+validation targets only. Doc-only commits after the baseline do not change
+these numbers. This document states the agreed product vision and the
 verified current state. No decision here is accepted until Ninad approves
 it. Every feature is marked **implemented** (verified against the
 current baseline named in the Status header) or **planned** (not built; do not assume otherwise).
@@ -182,9 +191,11 @@ claims to literally experience emotions.
 - Update policy that never auto-installs unsigned builds; update modes
   disabled/auto/manual-download (`src/update-policy.js`, `src/updater.js`).
 - Health check and onboarding interview (`src/health.js`, `src/onboarding.js`).
-- 437 passing unit/integration tests (258 baseline; model selection +18, conversation history +17, optional key storage +13, M1 provider registry/task router/cloud gate +25, M1 per-ask routing integration +18, M1 review fixes +18, M1 hardware profiles +12, M1 provider status +11, M1 provider contract tests +18, M1 provider fault diagnostics +18, fault-detail sanitization review fix +3, offline memory-v2 retrieval harness +12, memory-v2 harness slice 4 fold fix and bridges +5, memory-v2 store contract tests +9); three main-branch CI workflows green
-  (CI, CI macOS + Linux, Android APK; verified this session: only these
-  three have ever run on main);
+- 437 passing unit/integration tests (258 baseline; model selection +18, conversation history +17, optional key storage +13, M1 provider registry/task router/cloud gate +25, M1 per-ask routing integration +18, M1 review fixes +18, M1 hardware profiles +12, M1 provider status +11, M1 provider contract tests +18, M1 provider fault diagnostics +18, fault-detail sanitization review fix +3, offline memory-v2 retrieval harness +12, memory-v2 harness slice 4 fold fix and bridges +5, memory-v2 store contract tests +9); CI and CI macOS + Linux green on the
+  current baseline `5b643be` (runs 45238046955 and 45238047043); the
+  Android APK workflow was last green on `40946f4` (run 45232214311) and
+  has not been rerun since, because every commit after it was
+  experiment-scripts/docs-only;
   public Android debug-APK preview release.
 
 ## 4. Planned, NOT implemented

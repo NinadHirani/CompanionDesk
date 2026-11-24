@@ -1,9 +1,16 @@
 # CompanionDesk Implementation Roadmap
 
-Status: M0 and M1 are COMPLETE on main (verified 23 Nov 2026; current
-baseline `40946f4`, 437 passing tests, all three main-branch CI workflows green
-on that head (CI 45231761653, CI macOS + Linux 45231761785, Android APK 45232214311). Doc-only commits after the baseline do not change
-these numbers). Supersedes `docs/COMPANIONDESK_ROADMAP.md` and
+Status: M0 and M1 are COMPLETE on main (verified 24 Nov 2026; current
+baseline `5b643be`, 437 passing tests, Fo-reported from a full `npm test`
+run at that head (437/437, selftest included). CI (run 45238046955) and
+CI macOS + Linux (run 45238047043) are green on that head. The Android APK
+workflow was last green on `40946f4` (run 45232214311) and has not been
+rerun on the current head because every commit since was
+experiment-scripts/docs-only and touches no app code. Work since the
+previous baseline is preparation/harness only, NOT product memory-v2
+wiring: the slice-6 sanitizer hardening, the Gate 1 repo-only benchmark
+scripts + selftest and the comparison assembler, and the M4 memory-v2
+harness slices. No actual OnePlus device measurements exist). Supersedes `docs/COMPANIONDESK_ROADMAP.md` and
 `docs/FEATURE_GAP.md` once approved; those files stay until then. Phases
 are dependency-ordered with explicit gates. Phases M2-M8 below are planned
 unless stated as implemented; M0 and M1 are the only implemented phases.
