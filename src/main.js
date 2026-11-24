@@ -52,6 +52,7 @@ const { createPolicyEngine } = require('./policy-engine');
 const { createOrchestrator } = require('./agent-orchestrator');
 const { createNotificationDesk } = require('./agent-notifications');
 const { createNotificationsDisplayStore } = require('./agent-notifications-display');
+const { createDisplayDelivery } = require('./agent-display-delivery');
 const { createReminderBook } = require('./agent-reminders');
 const { createAgentSurface } = require('./agent-surface');
 const { createAgentRuntime, createAgentStack } = require('./agent-runtime');
@@ -84,10 +85,27 @@ let agentNotifications = null;
 // Main-owned notification display store (blueprint 3j.3): separate from the
 // persisted desk, in-memory only, no read semantics. The renderer reads it
 // through the existing notifications:read channel and can never write it.
-// Delivery wiring does NOT exist yet (blueprint 3j.1): nothing appends to
-// this store today, and nothing will until the acknowledgement decision is
-// made by the user.
+//
+// Display delivery (blueprint 3j.6): the narrow MAIN-ONLY operation below
+// copies unread desk records into this store. It never marks the desk read
+// and never acknowledges; the 3j.4/3j.5 decision (option C) stands. The
+// pass runs ONLY at two main-side moments: once after the agent runtime
+// starts (restart reconciliation) and after every successful
+// acknowledgement. A future main-side creation site must call
+// runDisplayDelivery() in the same step. There is no renderer trigger, no
+// timer and no other path into this store.
 const notificationsDisplay = createNotificationsDisplayStore();
+const displayDelivery = createDisplayDelivery({
+  readDesk: () => (agentNotifications ? agentNotifications.list() : null),
+  store: notificationsDisplay,
+});
+function runDisplayDelivery() {
+  const r = displayDelivery.deliver();
+  if (!r || r.ok !== true) {
+    console.warn('[agent] display delivery refused: ' + String((r && r.reason) || 'unknown'));
+  }
+  return r;
+}
 let agentReminders = null;
 let agentSurface = null;
 let agentRuntime = null;
@@ -189,6 +207,10 @@ async function init() {
     // normally. No automatic reset, no fallback to an empty store.
     console.warn('[agent] persistence blocked:', (agentStarted.problems || []).join('; '));
   }
+  // Restart reconciliation (blueprint 3j.6): repopulate the ephemeral
+  // display store from the desk's unread records. A blocked runtime makes
+  // this pass refuse honestly; the desk keeps every record either way.
+  runDisplayDelivery();
   agentSurface = createAgentSurface({
     status: () => {
       if (!agentRuntime.isActive()) {
@@ -258,9 +280,18 @@ async function init() {
     // persistence layer performs the transition and stays authoritative;
     // a blocked or failed runtime refuses here (fail closed), it never
     // falls back.
-    acknowledgeNotification: (id) => (agentRuntime.isActive() && agentPersistence
-      ? agentPersistence.acknowledgeNotification(id)
-      : { ok: false, reason: 'persistence_unavailable' }),
+    acknowledgeNotification: (id) => {
+      const r = agentRuntime.isActive() && agentPersistence
+        ? agentPersistence.acknowledgeNotification(id)
+        : { ok: false, reason: 'persistence_unavailable' };
+      // Blueprint 3j.6: after a successful acknowledgement a delivery pass
+      // frees the evicted slot deterministically (the acked record becomes
+      // safe to displace) and the next unread record reaches the display
+      // store. The pass never acknowledges anything; the response shape is
+      // unchanged.
+      if (r && r.ok === true) runDisplayDelivery();
+      return r;
+    },
   });
 }
 

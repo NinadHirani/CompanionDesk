@@ -95,6 +95,25 @@
 
     function size() { return records.length; }
 
+    // drop(id): remove one displayed record BY ID, main-only by
+    // construction (the store object never reaches the renderer). It
+    // exists for the delivery operation's orphan garbage collection: the
+    // delivery pass drops a displayed record only when the desk, the
+    // source of truth, no longer holds that id, and reports every drop.
+    // It is NOT an acknowledgement path and never consults read state; a
+    // record dropped here is one the desk discarded, not one the user
+    // acknowledged.
+    function drop(id) {
+      if (closed) return { ok: false, reason: 'closed' };
+      if (typeof id !== 'string' || !ID_RE.test(id)) return { ok: false, reason: 'id_invalid' };
+      const i = records.findIndex((r) => r.id === id);
+      if (i === -1) return { ok: false, reason: 'unknown_id' };
+      const gone = records[i];
+      records.splice(i, 1);
+      ids.delete(id);
+      return { ok: true, dropped: { ...gone }, size: records.length };
+    }
+
     function close() {
       closed = true;
       return { ok: true, closed: true, size: records.length };
@@ -102,7 +121,7 @@
 
     function isClosed() { return closed; }
 
-    return { append, list, size, close, isClosed };
+    return { append, list, size, drop, close, isClosed };
   }
 
   return { createNotificationsDisplayStore, MAX_RECORDS };
