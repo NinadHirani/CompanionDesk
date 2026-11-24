@@ -115,6 +115,112 @@ RESIDUAL RISKS even for the self-training path (unchanged and gated):
 4. The centre's terms are "Last updated: February 2025" and can change;
    this memo's quotes are point-in-time reads of 24 Nov 2026.
 
+## Second-pass residual closure (24 Nov 2026, ~10:50 PM IST)
+
+This section updates the residual list above with a second pass of
+primary-source reads, same day. It resolves three of the named unknowns;
+the conclusion is unchanged.
+
+### Residual closed: the centre's Terms were read in full (sections 8-13)
+
+The remaining sections of https://openwakeword.com/terms (read via a
+rendered browser session, scrolled to the end; quotes point-in-time
+24 Nov 2026):
+
+- Section 8 (Service Availability): "There is no guarantee of uptime or
+  availability. The developer reserves the right to modify, suspend, or
+  discontinue any part of the Service at any time."
+- Section 9 (Limitation of Liability): the Service is provided "as is"
+  without warranties; the developer "is not liable for any damages
+  arising from the use or inability to use the Service"; "Your sole
+  remedy is to stop using the Service."
+- Section 10 (Data & Privacy): "We collect minimal data required to
+  operate the Service: your name, email, and avatar from your OAuth
+  provider, plus your usage data (jobs, credits, ratings). We do not
+  sell your data to third parties. Cookies are used solely for session
+  management. You may request deletion of your account and associated
+  data by contacting the developer."
+- Section 11 (Termination): the developer may suspend or terminate an
+  account at any time; the user may delete the account at any time by
+  contacting the developer.
+- Section 12 (Changes to Terms): terms may be updated; continued use
+  after changes constitutes acceptance. Section 13 (Contact):
+  dev@openwakeword.com.
+
+No separate privacy-policy page was found on the site; the Terms'
+Section 10 is the data-handling statement. No separate privacy policy
+therefore remains unread. Impact on Finding 1: none; it adds practical
+terms (no uptime commitment, broad termination right, deletion on
+request) that further argue against depending on the centre.
+
+### Residual closed: the commercial-license page was read (real URL /license)
+
+The page exists at https://openwakeword.com/license (an earlier read of
+/commercial-license redirected to the homepage; the footer link is
+/license). Point-in-time 24 Nov 2026:
+
+- "Models trained through openwakeword.com are licensed for personal
+  and non-commercial use by default (see Terms & Conditions section 5)."
+- Scope statement: "The underlying openWakeWord runtime library remains
+  Apache 2.0 and is free for any use. The license discussed here covers
+  only the trained .onnx and .tflite model files produced by this
+  platform."
+- Pricing shown: Single Wake Word License, USD 185 one-time (per wake
+  word; the page also offers a "Permanent" view). Recorded for
+  completeness; no purchase is authorized or planned.
+- FAQ, verbatim answer to "I trained the model myself. Why do I need a
+  license?": "You provided the wake word and ran the job, but the
+  training pipeline on openwakeword.com (Piper TTS voices, augmentation
+  datasets, hosted training infrastructure) is operated and maintained
+  by the developer. The resulting model files are licensed under the
+  Terms & Conditions you accepted when signing up - non-commercial by
+  default. The commercial license simply unlocks the right to use those
+  files in revenue-generating contexts."
+
+KEY BOUNDARY FINDING: the centre's license claim reaches only models
+trained THROUGH its service. CompanionDesk's self-training path
+generates its audio locally with a license-verified Piper voice and
+trains locally with openWakeWord; it never touches the centre, accepts
+no terms there, and produces no centre-trained model files. The centre's
+non-commercial default therefore does not apply to our self-trained
+model. This confirms the self-training path is unaffected by Finding 1,
+which now holds only for centre-produced models.
+
+The site's own footer attributes its training voices per voice
+("Training voices: Piper TTS (rhasspy) - Czech voice 'Kasandra' by
+Ondrej Simek, CC BY 4.0"), consistent with the per-voice gate this repo
+already enforces.
+
+### Residual closed: VCTK license verified (CC BY 4.0)
+
+The corpus's publisher record was read directly: Edinburgh DataShare
+full item page, https://datashare.ed.ac.uk/items/30e7453c-9ea8-48b4-8e18-f96d0dc62928/full
+(handle 10283/3443, DOI 10.7488/ds/2645, publisher "University of
+Edinburgh. The Centre for Speech Technology Research (CSTR)", item
+dated 2019-11-13). Its dc.rights field reads: "Creative Commons
+Attribution 4.0 International Public License" (CC BY 4.0), and a
+license_text.txt bitstream is attached to the item.
+
+Relevance unchanged: CompanionDesk's approved training route uses NO
+third-party speech dataset at all. VCTK matters only to the third-party
+TTS checkpoints (the VITS checkpoint is VCTK-trained), which are not
+used. The dataset's own license is permissive: commercial use with
+attribution is permitted.
+
+### Still open (narrowed)
+
+1. TTS checkpoint WEIGHTS licensing remains unstated in every source
+   read (the WaveGlow README's "published model" link is a Google Drive
+   file with no license statement; repo code is BSD-3-Clause; the VITS
+   repo's pretrained models are Google Drive folders with no license
+   statement). Irrelevant to the approved route; recorded for
+   completeness.
+2. Everything behind the centre's sign-in gate (retention, library
+   behaviour) remains unread. Irrelevant: the centre path is closed by
+   default.
+3. Feature-extractor ambiguity, per-voice obligations, on-device
+   validation, and point-in-time terms stand exactly as recorded above.
+
 ## Conclusion
 
 - The third-party centre path is CLOSED for CompanionDesk by default:

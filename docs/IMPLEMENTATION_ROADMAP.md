@@ -680,7 +680,15 @@ extractor; per-voice Piper gate) with named residuals (centre terms tail
 and privacy policy unread, checkpoint weights licensing unstated, VCTK
 license unverified, technical performance unvalidated on device). Wake
 word stays disabled and gated: no training run, no download, no
-activation, no phrase choice.
+activation, no phrase choice. Second pass, 24 Nov 2026 (late): the centre's Terms were read in
+full (sections 8-13; data handling lives in section 10, no separate
+privacy page), the commercial-license page was read at /license
+(USD 185 one-time per wake word; its scope statement covers only
+models trained through the centre's pipeline while the runtime
+stays Apache-2.0, so our locally-trained model is outside its
+claim), and VCTK was verified CC BY 4.0 from Edinburgh DataShare
+(DOI 10.7488/ds/2645). Conclusions unchanged: centre closed by
+default, self-training path unaffected, wake stays gated.
 
 Piper successor VERIFIED (24 Nov 2026, primary sources read live via
 the GitHub API): `rhasspy/piper` is archived (MIT, last pushed
