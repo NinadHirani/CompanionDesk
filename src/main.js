@@ -53,7 +53,7 @@ const { createOrchestrator } = require('./agent-orchestrator');
 const { createNotificationDesk } = require('./agent-notifications');
 const { createReminderBook } = require('./agent-reminders');
 const { createAgentSurface } = require('./agent-surface');
-const { createAgentRuntime } = require('./agent-runtime');
+const { createAgentRuntime, createAgentStack } = require('./agent-runtime');
 const { createAgentPersistence } = require('./agent-persistence');
 
 const SMOKE = process.argv.includes('--smoke');
@@ -155,26 +155,19 @@ async function init() {
   agentRuntime = createAgentRuntime({
     openDb: () => LocalDb.open({ file: path.join(app.getPath('userData'), 'agent-state.db') }),
     buildAgent: ({ db: agentDb }) => {
-      agentRegistry = createRegistry();
-      agentApprovals = createApprovalDesk({});
-      agentStop = createEmergencyStop();
-      agentAudit = createAuditLog({});
-      const agentEngine = createPolicyEngine({ registry: agentRegistry, approvals: agentApprovals, emergencyStop: agentStop });
-      agentOrchestrator = createOrchestrator({ engine: agentEngine, approvals: agentApprovals, emergencyStop: agentStop, audit: agentAudit });
-      agentNotifications = createNotificationDesk({});
-      agentReminders = createReminderBook({});
-      const agentPersistence = createAgentPersistence({
-        db: agentDb,
-        clock: () => Date.now(),
-        registry: agentRegistry,
-        audit: agentAudit,
-        approvals: agentApprovals,
-        engine: agentEngine,
-        emergencyStop: agentStop,
-        notifications: agentNotifications,
-        reminders: agentReminders,
-      });
-      return { db: agentDb, persistence: agentPersistence, audit: agentAudit, approvals: agentApprovals, engine: agentEngine, emergencyStop: agentStop, notifications: agentNotifications, reminders: agentReminders, orchestrator: agentOrchestrator };
+      // ONE shared factory (agent-runtime.js) builds the stack, so the
+      // integration test proves the exact construction the app runs:
+      // persistence FIRST, then the orchestrator wired to the persistence
+      // layer's durable audit wrapper (never the raw audit log).
+      const stack = createAgentStack({ db: agentDb, clock: () => Date.now() });
+      agentRegistry = stack.registry;
+      agentApprovals = stack.approvals;
+      agentStop = stack.emergencyStop;
+      agentAudit = stack.audit;
+      agentOrchestrator = stack.orchestrator;
+      agentNotifications = stack.notifications;
+      agentReminders = stack.reminders;
+      return stack;
     },
   });
   const agentStarted = await agentRuntime.start();

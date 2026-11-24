@@ -192,12 +192,40 @@ CREATE TABLE IF NOT EXISTS agent_schema (
     return {
       save(bytes) {
         fs.mkdirSync(path.dirname(file), { recursive: true });
-        // Atomic swap: write a sibling temp file, then rename it over the
+        // Atomic swap with a process-unique temp file, then rename over the
         // target. A crash or power loss mid-write leaves the PREVIOUS file
-        // intact; the live store is only ever replaced whole.
-        const tmp = file + '.tmp';
-        fs.writeFileSync(tmp, Buffer.from(bytes));
-        fs.renameSync(tmp, file);
+        // intact; the live store is only ever replaced whole. POSIX rename
+        // replaces the target atomically; on Windows the same overwrite
+        // semantics apply, but an antivirus or backup tool holding the file
+        // can surface EPERM/EACCES, so a couple of quick retries happen
+        // before the weaker in-place write is used as a last resort (the
+        // load path verifies the store and fails closed, so a torn last-
+        // resort write is never trusted). The temp file is always removed
+        // on the failure path. Error messages carry no file contents.
+        const tmp = file + '.' + process.pid + '.tmp';
+        try {
+          fs.writeFileSync(tmp, Buffer.from(bytes));
+          try {
+            fs.renameSync(tmp, file);
+          } catch (err) {
+            const code = err && err.code;
+            if (code === 'EPERM' || code === 'EEXIST' || code === 'EACCES') {
+              let renamed = false;
+              for (let i = 0; i < 2 && !renamed; i++) {
+                try { fs.renameSync(tmp, file); renamed = true; } catch (err2) { /* brief lock; retry */ }
+              }
+              if (!renamed) {
+                // Last resort, documented weaker: in-place replace. The
+                // verification on load fails closed if this is torn.
+                fs.writeFileSync(file, Buffer.from(bytes));
+              }
+            } else {
+              throw err;
+            }
+          }
+        } finally {
+          try { if (fs.existsSync(tmp)) fs.unlinkSync(tmp); } catch (err3) { /* cleanup is best effort */ }
+        }
       },
     };
   }

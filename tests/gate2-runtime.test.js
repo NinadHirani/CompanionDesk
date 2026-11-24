@@ -161,12 +161,15 @@ test('beforeQuit converges on active and closes; on blocked it writes nothing', 
   const actions = started2.agent.audit.snapshot().entries.map((e) => e.action);
   assert.ok(actions.includes('quit.audit'), 'the quit-time append survived');
 
-  // Blocked path: corrupt the store, then quit writes nothing new.
-  const corrupt = Buffer.from(r2.storage.state.bytes);
-  corrupt[corrupt.length - 3] = (corrupt[corrupt.length - 3] ^ 0xff) & 0xff;
-  r2.storage.state.bytes = corrupt;
-  await r2.runtime.start(); // now blocked
+  // Blocked path: break the file flush, so the controlled save at reset
+  // fails and the runtime blocks. (Corrupting the bytes behind an active
+  // runtime no longer works: the controlled replacement save legitimately
+  // rewrites them first, which is exactly the durability guarantee.)
+  const preBlocked = Buffer.from(r2.storage.state.bytes);
+  r2.runtime.agent().db.flush = () => { throw new Error('simulated flush failure'); };
+  await r2.runtime.start(); // now blocked: save_before_reset_failed
   const quit = r2.runtime.beforeQuit();
   assert.equal(quit.mode, 'blocked');
-  assert.ok(r2.storage.state.bytes.equals(corrupt), 'a blocked quit wrote nothing');
+  assert.ok(quit.ok, 'nothing to save while blocked');
+  assert.ok(r2.storage.state.bytes.equals(preBlocked), 'a blocked quit wrote nothing');
 });

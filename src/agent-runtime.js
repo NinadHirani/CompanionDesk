@@ -30,6 +30,17 @@
 // The runtime never widens capabilities: it performs no tool execution and
 // holds no model access. It only owns open/load/save/close of the store.
 
+const LocalDbModule = require('./db');
+const { createAuditLog } = require('./audit');
+const { createApprovalDesk } = require('./approval');
+const { createEmergencyStop } = require('./emergency-stop');
+const { createRegistry } = require('./tool-registry');
+const { createPolicyEngine } = require('./policy-engine');
+const { createNotificationDesk } = require('./agent-notifications');
+const { createReminderBook } = require('./agent-reminders');
+const { createAgentPersistence } = require('./agent-persistence');
+const { createOrchestrator } = require('./agent-orchestrator');
+
 function createAgentRuntime({ openDb, buildAgent, closeDb } = {}) {
   if (typeof openDb !== 'function') throw new Error('openDb required');
   if (typeof buildAgent !== 'function') throw new Error('buildAgent required');
@@ -52,6 +63,27 @@ function createAgentRuntime({ openDb, buildAgent, closeDb } = {}) {
   }
 
   async function start() {
+    // Controlled replacement: when an agent is already active, converge its
+    // state and close its store BEFORE the file is touched again. Two live
+    // handles on one file could overwrite each other's writes, and the
+    // controlled save is the durability boundary that preserves the active
+    // state whatever the reopened load then finds. If that save fails, do
+    // not proceed: block with the store closed and its bytes intact.
+    if (mode === 'active' && agent) {
+      let saved;
+      try {
+        saved = agent.persistence.save();
+      } catch (err) {
+        saved = { ok: false, reason: 'save_threw' };
+      }
+      closeStore(agent.db);
+      agent = null;
+      if (!saved || !saved.ok) {
+        mode = 'blocked';
+        problems = ['save_before_reset_failed: ' + String((saved && saved.reason) || 'persist_failure')];
+        return result();
+      }
+    }
     agent = null;
     problems = null;
     mode = 'cold';
@@ -137,13 +169,51 @@ function createAgentRuntime({ openDb, buildAgent, closeDb } = {}) {
       };
     },
     beforeQuit() {
+      let saved = null;
       if (mode === 'active' && agent && agent.persistence) {
-        try { agent.persistence.save(); } catch (err) { /* last save is best effort; flush already ran on every mutation */ }
+        try {
+          saved = agent.persistence.save();
+        } catch (err) {
+          saved = { ok: false, reason: 'save_threw' };
+        }
       }
       if (agent && agent.db) closeStore(agent.db);
-      return { ok: true, mode };
+      // A failed save is NOT convergence: report it. Already-acknowledged
+      // audit appends stay durable regardless (each flushed at its own
+      // acknowledged append); only desk-state convergence is left pending.
+      return {
+        ok: !saved || saved.ok === true,
+        mode,
+        saved: saved ? saved.ok === true : null,
+        reason: saved && saved.ok !== true ? String(saved.reason || 'persist_failure') : null,
+      };
     },
   };
 }
 
-module.exports = { createAgentRuntime };
+// The agent stack exactly as the app builds it: persistence FIRST, then
+// the orchestrator wired to the persistence layer's durable audit wrapper,
+// so every transition the orchestrator logs is persisted and acknowledged
+// before it may commit (log-before-commit at the file boundary). Reads go
+// through the same underlying in-memory log either way; only appends
+// differ. extractAgentStack keeps main.js's module handles in one place.
+function createAgentStack({ db, clock, registry: registryOverride } = {}) {
+  if (!db) throw new Error('db required');
+  const now = clock || (() => Date.now());
+  const audit = createAuditLog({ clock: now });
+  const approvals = createApprovalDesk({ clock: now });
+  const emergencyStop = createEmergencyStop();
+  const registry = registryOverride || createRegistry();
+  const engine = createPolicyEngine({ registry, approvals, emergencyStop, clock: now });
+  const notifications = createNotificationDesk({ clock: now });
+  const reminders = createReminderBook({ clock: now });
+  const persistence = createAgentPersistence({
+    db, clock: now, registry, audit, approvals, engine, emergencyStop, notifications, reminders,
+  });
+  // THE injection point: the orchestrator never sees the raw audit log.
+  const durableAudit = persistence.durableAudit();
+  const orchestrator = createOrchestrator({ engine, approvals, emergencyStop, audit: durableAudit });
+  return { db, persistence, audit, durableAudit, approvals, engine, emergencyStop, registry, notifications, reminders, orchestrator };
+}
+
+module.exports = { createAgentRuntime, createAgentStack };

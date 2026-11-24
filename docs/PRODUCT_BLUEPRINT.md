@@ -205,12 +205,14 @@ claims to literally experience emotions.
 - Update policy that never auto-installs unsigned builds; update modes
   disabled/auto/manual-download (`src/update-policy.js`, `src/updater.js`).
 - Health check and onboarding interview (`src/health.js`, `src/onboarding.js`).
-- 636 passing unit/integration tests (258 baseline; model selection +18, conversation history +17, optional key storage +13, M1 provider registry/task router/cloud gate +25, M1 per-ask routing integration +18, M1 review fixes +18, M1 hardware profiles +12, M1 provider status +11, M1 provider contract tests +18, M1 provider fault diagnostics +18, fault-detail sanitization review fix +3, offline memory-v2 retrieval harness +12, memory-v2 harness slice 4 fold fix and bridges +5, memory-v2 store contract tests +9, Gate 2 agent safety foundation +35, Gate 2 security hardening +8, Gate 2 persistence +17, M1 diagnostics hardening +2, Gate 2 orchestrator +13, orchestrator audit hardening +13, first harmless tools +18, ICS
+- 639 passing unit/integration tests (258 baseline; model selection +18, conversation history +17, optional key storage +13, M1 provider registry/task router/cloud gate +25, M1 per-ask routing integration +18, M1 review fixes +18, M1 hardware profiles +12, M1 provider status +11, M1 provider contract tests +18, M1 provider fault diagnostics +18, fault-detail sanitization review fix +3, offline memory-v2 retrieval harness +12, memory-v2 harness slice 4 fold fix and bridges +5, memory-v2 store contract tests +9, Gate 2 agent safety foundation +35, Gate 2 security hardening +8, Gate 2 persistence +17, M1 diagnostics hardening +2, Gate 2 orchestrator +13, orchestrator audit hardening +13, first harmless tools +18, ICS
   hardening +5, injection corpus +27, IPC contract +5, IPC contract review hardening +11, agent surface
   wiring +21, persistence hardening +6 (strict records, acknowledged
   appends flush to disk immediately, unacknowledged appends roll back),
   orchestrator-on-durable durability +2, persistence desks follow-ups +3,
-  agent runtime lifecycle +5, +14 total since the 622 count above); CI,
+  agent runtime lifecycle +5, stack-wiring review fixes +3 (the
+  injection proof, the reset lifecycle, and honest before-quit reporting),
+  +17 total since the 622 count above); CI,
   CI macOS + Linux and Android APK all green on the
   current baseline `9addfdb` (runs 45323544121, 45323543975, 45323765018);
   public Android debug-APK preview release.
@@ -266,14 +268,30 @@ surface has no resume API). Durability semantics (slice P2 hardening): an
 acknowledged audit append is flushed to disk immediately, so log-before-
 commit holds at the file boundary; a persist failure rolls the unacknow-
 ledged in-memory append back (the log holds acknowledged entries only,
-never a record of a transition that did not commit) and poisons the
-orchestrator until a fresh verified load replaces the instance. The
-runtime (agent-runtime.js) owns open/load/save/close: any failure on
-that path puts the app in a blocked mode where nothing is written or
-deleted (the store stays byte-for-byte intact), every write path is
-refused, and only a real verified load can revive it. The agent-state
-file is replaced whole via temp-file-plus-rename, so a crash mid-save
-cannot corrupt the live store. Secrets never enter this store; the
+never a record of a transition that did not commit), compensates the
+store itself (the failed append's audit row and anchor are rolled back
+to the pre-append state, so a later successful flush can never converge
+a phantom record), and poisons the orchestrator until a fresh verified
+load replaces the instance. The orchestrator never sees the raw audit
+log: a single shared stack factory (createAgentStack) builds persistence
+first and wires the orchestrator to the persistence layer's durable
+audit wrapper, and the integration test proves the exact injection the
+app runs, including that a forced flush failure prevents step closure
+and locks the orchestrator (review fix, 24 Nov 2026). The runtime
+(agent-runtime.js) owns open/load/save/close: any failure on that path
+puts the app in a blocked mode where nothing is written or deleted (the
+store stays byte-for-byte intact), every write path is refused, and
+only a real verified load can revive it. A reset while active converges
+and closes the old store before reopening (controlled save, then close,
+then reopen, never two live handles on one file); a failed controlled
+save blocks with the bytes intact, and from blocked a fresh reset
+recovers through the ordinary verified load. before-quit reports a
+failed save honestly instead of claiming convergence (already-
+acknowledged audit records stay durable) and always closes the store.
+The agent-state file is replaced whole via a process-unique temp file
+plus an atomic rename (with a Windows-safe retry for file locks and an
+in-place fallback the load path verifies), so a crash mid-save cannot
+corrupt the live store. Secrets never enter this store; the
 Gemini key remains in the OS credential vault. Bounded retention without silent deletion:
 pruning the audit trail requires an archive that verifies and covers the
 entries being dropped, the prune itself is audited, and the chain base

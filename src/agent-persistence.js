@@ -502,7 +502,9 @@
       if (!audit) return { ok: false, reason: 'no_audit' };
       const res = audit.append(entry);
       if (!res.ok) return res;
+      let prevAnchor = null;
       try {
+        prevAnchor = readAnchor();
         tx(() => {
           const row = audit.read({ fromSeq: res.seq, limit: 1 })[0];
           insertAuditRow(row);
@@ -517,11 +519,19 @@
         lastPersistedSeq = res.seq;
         return { ok: true, seq: res.seq, hash: res.hash };
       } catch (err) {
-        // The transaction rolled back: the entry never became durable, and
-        // the transition it recorded never committed. Roll the in-memory
-        // append back too, so the log holds acknowledged entries only and
-        // can never converge a record of a transition that did not happen.
+        // The flush failed AFTER the transaction committed: the store's row
+        // and anchor exist only in the database image, while the file never
+        // received them. The entry never became durable and the transition
+        // it recorded never committed. Roll the in-memory append back AND
+        // compensate the store, so a later successful flush can never
+        // converge a phantom record whose log entry no longer exists.
         try { audit.rollbackLast(res.seq); } catch (e2) { /* nothing further */ }
+        try {
+          tx(() => {
+            db.run('DELETE FROM agent_audit WHERE seq = ?', [res.seq]);
+            if (prevAnchor) putAnchor(prevAnchor.base_seq, prevAnchor.base_hash, prevAnchor.last_seq, prevAnchor.last_hash);
+          });
+        } catch (e3) { /* compensation is best effort; load-time verification still fails closed on any residue */ }
         return { ok: false, reason: 'persist_failure', seq: res.seq, error: String((err && err.message) || err) };
       }
     }

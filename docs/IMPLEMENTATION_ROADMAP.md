@@ -291,9 +291,16 @@ ipc-contract.js, section 3h of the blueprint; writes unreachable from
 the renderer). Persistence wiring is IMPLEMENTED on main (24 Nov 2026, slice P2):
 the agent runtime module owns open/load/save/close of a dedicated
 agent-state.db, every write path passes a persistence-blocked gate, the
-renderer's surface reports blocked state neutrally, and before-quit
-converges and closes. Remaining Gate 2 work: delivery/scheduling/file
-output, each an explicitly-reviewed gate.
+renderer's surface reports blocked state neutrally, the orchestrator
+receives the persistence layer's durable audit wrapper through one
+shared stack factory (createAgentStack; the injection gap where main.js
+passed the raw audit was caught in review and fixed, with an
+integration test proving the injection and flush-failure lockout), a
+reset while active converges and closes the old store before reopening,
+before-quit reports a failed save instead of claiming convergence, and
+the store saver uses a process-unique temp file plus atomic rename.
+Remaining Gate 2 work: delivery/scheduling/file output, each an
+explicitly-reviewed gate.
 Acceptance: policy
 engine refuses ungranted calls (tested); payments, purchases, destructive
 deletion, and legal or binding submissions are denied unless fresh,
