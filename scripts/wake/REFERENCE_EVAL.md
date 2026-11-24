@@ -20,3 +20,16 @@ Note: an earlier same-day run trained on ZERO positive windows (a
 phrase-localisation bug that squared the log-mel floor, putting silence above
 speech) and its report was meaningless; the trainer now refuses to write a
 model with zero held-out positives.
+
+## Reproduction (24 Nov 2026, 20:52 IST)
+
+Re-ran the evaluation only (no retraining) with `scripts/wake/repro_eval.py`
+from the same corpus directory: rebuilt the deterministic held-out split
+(seed 20261124, 10% hold-out) from the manifest, scored all 786 held-out
+windows with the saved `wake_model.onnx` (sha256
+`56e58e78f2e629cc5f0aaee978c014319ef2986668eaa0a6f3d4135329996021`), and
+recomputed the sweep. Every number matched the recorded report exactly:
+169 positive / 617 negative windows; FA 1.30% / FR 0.00% at 0.3, FA
+0.97% / FR 0.00% at 0.5, FA 0.65% / FR 0.59% at 0.7. The only differences
+in the file are the report's `data` and `real_world_status` note fields,
+which are metadata, not metrics.

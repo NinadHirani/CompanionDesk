@@ -243,6 +243,16 @@ settings name. How it works, stated plainly:
   numbers are measured on synthetic clips, so real-microphone performance
   is not yet validated and wake stays default-off (`wake_enabled` false)
   until it is, with the microphone opened only on your explicit action.
+  The recorded run is reproducible: `scripts/wake/repro_eval.py` rebuilds
+  the held-out split from the same corpus and scores the saved model, and
+  matched the report's numbers exactly on 24 Nov 2026.
+- Wake runs in the desktop app only (macOS, Windows, Linux). On Android or
+  the web build the engine refuses with a plain reason and the About card
+  says so instead of offering a Start button. A refused microphone maps to
+  a plain reason too (permission denied, or no microphone), and a failure
+  always lands wake off again.
+- While it listens, the wake card in About shows the live state, including
+  when the microphone is open; Stop closes the microphone immediately.
 
 ### Ask about a window (optional, fully local)
 
