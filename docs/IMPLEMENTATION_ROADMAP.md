@@ -551,6 +551,25 @@ Android MediaProjection POC honoring its per-session consent requirements.
 
 ## M8 - Integrations and workspace UI (open-ended)
 
+## M8 progress
+
+- Slice 1 (decision-independent groundwork): `src/integrations.js`, the
+  pure integrations registry. Manifest validation (strict shape, no
+  unknown fields, wildcard/unknown/forbidden/empty scopes refused), a
+  fixed least-privilege scope catalog mapping each scope to a Gate 2
+  capability class (read_only / reversible_write / sensitive / forbidden;
+  forbidden scopes exist only to be nameable and are never grantable),
+  connect/disconnect/revoke/readmit lifecycle with explicit-consent
+  records, re-connection after revoke only after explicit readmission,
+  and a single `authorizeCall(id, scope)` door. Connect is refused while
+  connected, so grants are never widened in place. No connector talks to
+  anything, nothing auto-connects, and the module ships empty (same
+  precedent as the tool registry). Verified by tests/integrations.test.js
+  (8 tests); full suite 841/841 + selftest. Deliberately deferred until
+  Ninad chooses: real connectors (each verified against official APIs
+  before any capability claim), the workspace views, and companion
+  move/resize/remember.
+
 Plugin API with connect/disconnect, least-privilege scopes, revocation;
 connectors chosen by Ninad and verified against official APIs before any
 capability claim; workspace views (conversations, tasks, memory, tools,
