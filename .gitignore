@@ -31,3 +31,4 @@ web/ingest.js
 web/ai.js
 web/db.js
 dist/
+__pycache__/

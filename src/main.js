@@ -8,6 +8,10 @@
 
 const { app, BrowserWindow, ipcMain, dialog, session, desktopCapturer, systemPreferences, shell, safeStorage } = require('electron');
 const { createOverlayController } = require('./overlay');
+// M6 slice 4: wake word. The engine owns the gate chain and the session
+// machine (src/wake-engine.js); main wires it to real settings, model
+// files and, later, the listener page.
+const { createWakeEngine } = require('./wake-engine');
 const hotkey = require('./hotkey');
 const voice = require('./voice');
 const permissions = require('./permissions');
@@ -74,6 +78,7 @@ const askControllers = new Map();
 let secureStore = null;
 let win = null;
 let overlay = null;
+let wakeEngine = null;
 
 // The in-memory agent runtime (Gate 2). Constructed in init(); nothing in
 // main starts or advances a run in this slice.
@@ -177,6 +182,29 @@ async function init() {
   // Cloud fallback is double-gated: the saved key AND the explicit
   // cloud_enabled setting (default false). A key alone arms nothing.
   ai = createAi({ geminiKey: () => secureStore.readKey(), cloudEnabled: P.getSettings(db).cloud_enabled === true });
+  // M6 slice 4: wake word engine. Every gate is checked against the real
+  // filesystem and settings, never assumed: the trained model must exist
+  // for the EXACT phrase built from the current companion name, and the
+  // listener runtime pieces must be present before a start can open the
+  // microphone. Nothing autostarts and nothing is downloaded here.
+  wakeEngine = createWakeEngine({
+    getSettings: () => P.getSettings(db),
+    modelPathFor: (modelId) => {
+      try {
+        const p = path.join(modelsDir(), 'wake', `${modelId}.onnx`);
+        return fs.existsSync(p) ? p : null;
+      } catch { return null; }
+    },
+    engineReady: () => {
+      // The listener runtime must exist on disk before the mic can open;
+      // each piece is checked, never assumed.
+      for (const f of ['wake-listener.html', 'wake-listener.js', 'wake-mel.js']) {
+        if (!fs.existsSync(path.join(__dirname, '..', 'renderer', f))) return 'wake_engine_missing';
+      }
+      return true;
+    },
+    now: () => Date.now(),
+  });
   // Agent runtime, now persistence-backed (Gate 2 slice P2). The stack is
   // built by a factory so every recovery starts from FRESH desks and never
   // reuses a possibly poisoned stack. The state store is a dedicated
@@ -656,6 +684,16 @@ function registerIpc() {
     return voice.transcribe(payload, { modelsDir: modelsDir(), preferredModel: db.getSetting('voice_model', 'small.en'), language: voice.resolveLanguage({ setting: db.getSetting('language', 'English'), env: process.env.WHISPER_LANG }) });
   });
   ipcMain.handle('voice:cancel', async () => voice.cancelActiveRun());
+
+  // M6 slice 4: wake word channels. wake:start carries the explicit user
+  // action from the About control; the engine still refuses anything else
+  // (autostart, missing model, name mismatch). The microphone permission
+  // is requested only by that explicit start, never at startup.
+  ipcMain.handle('wake:status', async () => wakeEngine.status());
+  ipcMain.handle('wake:start', async () => wakeEngine.start({ userInitiated: true }));
+  ipcMain.handle('wake:stop', async () => wakeEngine.stop());
+  ipcMain.handle('wake:pause', async () => wakeEngine.pause());
+  ipcMain.handle('wake:resume', async () => wakeEngine.resume());
 
   ipcMain.handle('screen:status', async () => {
     const sel = await modelSelection();

@@ -122,6 +122,13 @@
     quietEnd: document.getElementById('s-quiet-end'),
     voice: document.getElementById('s-voice'),
     voiceOutput: document.getElementById('s-voice-output'),
+    wake: document.getElementById('s-wake'),
+    wakeThreshold: document.getElementById('s-wake-threshold'),
+    wakeStart: document.getElementById('wake-start'),
+    wakePause: document.getElementById('wake-pause'),
+    wakeResume: document.getElementById('wake-resume'),
+    wakeStop: document.getElementById('wake-stop'),
+    wakeStatus: document.getElementById('wake-status'),
     screenMode: document.getElementById('s-screen-mode'),
     screenConsent: document.getElementById('s-screen-consent'),
     screenNote: document.getElementById('screen-mode-note'),
@@ -148,6 +155,8 @@
     if (F.quietEnd) F.quietEnd.value = s.proactive_quiet_end || '08:00';
     if (F.voice) F.voice.checked = s.voice_enabled === true;
     if (F.voiceOutput) F.voiceOutput.checked = s.voice_output_enabled === true;
+    if (F.wake) F.wake.checked = s.wake_enabled === true;
+    if (F.wakeThreshold) F.wakeThreshold.value = String(s.wake_threshold);
     if (F.screenMode) F.screenMode.value = s.screen_mode || 'manual';
     if (F.screenConsent) F.screenConsent.checked = s.screen_background_consent === true;
     syncScreenMode();
@@ -251,6 +260,10 @@
     if (F.quietEnd) payload.proactive_quiet_end = F.quietEnd.value;
     if (F.voice) payload.voice_enabled = F.voice.checked;
     if (F.voiceOutput) payload.voice_output_enabled = F.voiceOutput.checked;
+    if (F.wake) {
+      payload.wake_enabled = F.wake.checked;
+      payload.wake_threshold = Number(F.wakeThreshold.value);
+    }
     if (F.screenMode) {
       payload.screen_mode = F.screenMode.value;
       payload.screen_background_consent = F.screenMode.value === 'background' && F.screenConsent.checked;
@@ -258,6 +271,51 @@
     const res = await api.settings_save(payload);
     if (res.ok) { fillSettings(res.settings); msg.textContent = 'Saved.'; msg.className = 'hint'; UI.today.refresh(); }
     else { msg.textContent = UI.friendlyError(res.error); msg.className = 'hint error'; }
+
+  // M6 slice 4: wake word session controls. The settings checkbox saves the
+  // gate; Start/Pause/Resume/Stop drive the session itself and every action
+  // reports the honest status back, including exactly which gate is
+  // missing. Nothing here starts anything on its own: Start is the explicit
+  // user action the engine requires.
+  async function refreshWakeStatus() {
+    const el = F.wakeStatus;
+    if (!el) return;
+    let res = null;
+    try { res = await api.wake_status(); } catch { res = null; }
+    if (!res || !res.ok) { el.textContent = 'Wake status unavailable.'; return; }
+    const parts = [];
+    parts.push(res.enabled ? 'Wake listening is enabled' : 'Wake listening is disabled');
+    parts.push(res.phrase ? `phrase "${res.phrase}"` : 'no companion name is set');
+    if (res.modelReady) parts.push('model ready');
+    else parts.push(window.friendlyError(res.modelReason || 'wake_model_missing'));
+    if (res.running && res.running !== 'off') parts.push(`currently ${res.running}`);
+    el.textContent = parts.join('; ') + '.';
+    if (F.wakeStart) F.wakeStart.disabled = !(res.enabled && res.modelReady && res.running === 'off');
+    if (F.wakePause) F.wakePause.disabled = res.running !== 'listening';
+    if (F.wakeResume) F.wakeResume.disabled = res.running !== 'paused';
+    if (F.wakeStop) F.wakeStop.disabled = res.running === 'off';
+  }
+  const wakeActions = [
+    ['wake-start', 'wake_start'], ['wake-pause', 'wake_pause'],
+    ['wake-resume', 'wake_resume'], ['wake-stop', 'wake_stop'],
+  ];
+  for (const [id, channel] of wakeActions) {
+    const btn = document.getElementById(id);
+    if (!btn) continue;
+    btn.addEventListener('click', async () => {
+      let res = null;
+      try { res = await api[channel](); } catch { res = null; }
+      const el = F.wakeStatus;
+      if (!res || !res.ok) {
+        if (el) {
+          const reason = res ? (res.reason || res.error) : 'unavailable';
+          el.textContent = reason ? window.friendlyError(reason) : el.textContent;
+        }
+      }
+      await refreshWakeStatus();
+    });
+  }
+  if (F.wakeStatus) refreshWakeStatus();
   });
 
   // ---- provider status (read on demand; no polling, no cloud probing) ----

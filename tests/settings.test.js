@@ -77,3 +77,28 @@ test('text settings are capped in length', () => {
   const r = validatePatch({ user_name: 'x'.repeat(500) });
   assert.equal(r.clean.user_name.length, 40);
 });
+
+// M6 slice 4: wake word keys. wake_enabled is a boolean gate, off by
+// default; wake_threshold is a bounded number that fails closed to the
+// default outside [0.1, 0.9] so a corrupted setting can never widen a gate.
+test('wake word settings: wake_enabled boolean, wake_threshold bounded numeric', () => {
+  const { DEFAULTS, normalizeSettings, validatePatch } = require('../src/settings');
+  assert.strictEqual(DEFAULTS.wake_enabled, false);
+  assert.strictEqual(DEFAULTS.wake_threshold, 0.5);
+  const n = normalizeSettings({ wake_enabled: 'true', wake_threshold: 0.7 });
+  assert.strictEqual(n.wake_enabled, true);
+  assert.strictEqual(n.wake_threshold, 0.7);
+  // out of range or malformed: fail closed to the default
+  for (const bad of [0.09, 0.91, 'high', NaN, undefined, -1]) {
+    const b = normalizeSettings({ wake_threshold: bad });
+    assert.strictEqual(b.wake_threshold, 0.5, String(bad));
+  }
+  const p = validatePatch({ wake_enabled: true, wake_threshold: 0.65 });
+  assert.strictEqual(p.ok, true);
+  assert.strictEqual(p.clean.wake_enabled, 'true');
+  assert.strictEqual(p.clean.wake_threshold, '0.65');
+  assert.strictEqual(validatePatch({ wake_threshold: 0.9 }).ok, true);
+  assert.strictEqual(validatePatch({ wake_threshold: 0.95 }).ok, false);
+  assert.strictEqual(validatePatch({ wake_threshold: '0.5' }).ok, false); // number type required
+  assert.strictEqual(validatePatch({ wake_enabled: 'yes' }).ok, false);
+});

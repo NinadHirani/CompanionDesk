@@ -212,6 +212,20 @@
       <p class="hint">Off by default. Voice runs entirely on this computer: audio exists only while you are recording, goes to the local whisper program, and is then discarded; nothing is stored and nothing is uploaded. The microphone is used only during an explicit Speak press, never at startup.</p>
       <label class="check"><input id="s-voice" type="checkbox" /> Enable push-to-talk voice input</label>
       <label class="check"><input id="s-voice-output" type="checkbox" /> Read answers aloud (this computer's built-in voice)</label>
+      <h2>Wake word</h2>
+      <p class="hint">Off by default. When you start it, CompanionDesk listens on this computer only for &quot;Hey &lt;your companion's name&gt;&quot; and opens a hands-free question without any button press. Nothing leaves this computer: audio is analyzed frame by frame in memory and discarded, nothing is recorded, stored or uploaded, and no network is involved. The microphone is used only while listening, an indicator shows when it is active, and Stop closes the microphone immediately. The wake model is trained for your companion's exact name; changing the name stops wake listening until the model is retrained.</p>
+      <label class="check"><input id="s-wake" type="checkbox" /> Enable wake word listening</label>
+      <div class="field">
+        <label for="s-wake-threshold">Wake sensitivity threshold (higher = fewer false triggers; 0.1&ndash;0.9)</label>
+        <input id="s-wake-threshold" type="number" min="0.1" max="0.9" step="0.05" />
+      </div>
+      <div class="row">
+        <button id="wake-start">Start listening</button>
+        <button id="wake-pause">Pause</button>
+        <button id="wake-resume">Resume</button>
+        <button id="wake-stop">Stop</button>
+      </div>
+      <p id="wake-status" class="hint" role="status"></p>
       <h2>Screen observation</h2>
       <p class="hint">Off by default. Nothing looks at your screen until you pick a mode below and explicitly start it. Everything is processed on this computer only: nothing is stored and nothing is uploaded. The screen-capture permission is requested only when you act, never at startup. Background assist exists only on laptops and desktops; it never runs on Android.</p>
       <div class="field">

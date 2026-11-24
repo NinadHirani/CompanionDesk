@@ -637,10 +637,22 @@ speech. Honest limits: whether any specific machine actually speaks is
 a physical-device question and no such claim is made; where
 `speechSynthesis` is missing the UI says so instead of guessing.
 
-Remaining in M6: wake word only after the licensing decision, behind a
-separate auto-listening toggle, off by default, visible mic state,
-immediate stop; Android foreground service compliant with platform
-rules.
+M6 slice 4 wake word (24 Nov 2026): the user DECIDED the route - phrase
+"Hey <assistant_name>", local self-training on fully synthetic speech,
+primary-source license verification for every asset, nothing shipped
+without provenance, always-listening off by default with explicit
+activation, indicator, immediate stop, no platform bypasses. Implementation
+split: slice 4 = subsystem + gates + settings + About controls + training
+pipeline (src/wake-word.js, src/wake-engine.js, scripts/wake/,
+docs/WAKE_WORD.md, docs/WAKE_PROVENANCE.md). The shipped-file licensing
+situation changed on re-verification: the upstream shared feature-extractor
+ONNX artifacts have UNSETTLED licensing (open issues #338/#346/#348/#357,
+no maintainer answer), so we convert our own feature extractor from
+Google's Apache-2.0 speech_embedding module per the notebook, exactly the
+"run the training ourselves" path the user approved. Remaining: listener
+runtime integration (hidden page + onnxruntime-web + indicator + query
+flow), the actual model training run, and physical-device validation
+(synthetic-metric claims never substitute for measured on-device rates).
 
 Piper successor VERIFIED (24 Nov 2026, primary sources read live via
 the GitHub API): `rhasspy/piper` is archived (MIT, last pushed

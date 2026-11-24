@@ -33,6 +33,14 @@ const DEFAULTS = Object.freeze({
   voice_enabled: false, // M6 slice 1: voice stays off until the user enables it
   voice_output_enabled: false, // M6 slice 3: spoken answers off until the user enables them
   voice_model: 'small.en', // M6 decision: small.en is the initial STT model
+  // M6 slice 4 (Ninad's decision): wake word has its own gate, OFF by
+  // default and separate from push-to-talk voice_enabled. The phrase is
+  // exactly "Hey <assistant_name>", so a trained model is only valid while
+  // the companion name is unchanged (src/wake-word.js refuses a start on a
+  // name/model mismatch). The threshold is the false-trigger dial,
+  // bounded to [0.1, 0.9] with anything outside failing closed to 0.5.
+  wake_enabled: false,
+  wake_threshold: 0.5,
   screen_observation_enabled: false, // M7: master switch; stays off until the user enables it
   // M7 slice 2 (Ninad's decision): screen observation is a mode choice.
   // 'manual' (default) is option A, 'session' option B, 'background'
@@ -53,11 +61,17 @@ const ENUMS = Object.freeze({
   // the multilingual twins are selectable so Hindi can be added later.
   voice_model: ['small.en', 'base.en', 'tiny.en', 'small', 'base', 'tiny'],
 });
-const BOOLEANS = ['learn_from_activity', 'suggest_memories', 'cloud_personal', 'cloud_enabled', 'onboarding_done', 'proactive_enabled', 'proactive_scope_reminder', 'proactive_scope_deadline', 'proactive_quiet_enabled', 'voice_enabled', 'voice_output_enabled', 'screen_observation_enabled', 'screen_background_consent'];
+const BOOLEANS = ['learn_from_activity', 'suggest_memories', 'cloud_personal', 'cloud_enabled', 'onboarding_done', 'proactive_enabled', 'proactive_scope_reminder', 'proactive_scope_deadline', 'proactive_quiet_enabled', 'voice_enabled', 'voice_output_enabled', 'wake_enabled', 'screen_observation_enabled', 'screen_background_consent'];
 // 'HH:MM' 24h local clock times bounding the quiet window.
 const QUIET_TIME_KEYS = ['proactive_quiet_start', 'proactive_quiet_end'];
 const QUIET_TIME_RE = /^([01][0-9]|2[0-3]):[0-5][0-9]$/;
 const TEXT_MAX = Object.freeze({ user_name: 40, assistant_name: 40, language: 30 });
+// Numbers with hard bounds. A value outside the range (or not a finite
+// number at all) fails closed to the default rather than being clamped,
+// so a corrupted setting can never silently widen a gate.
+const NUMERIC = Object.freeze({
+  wake_threshold: { min: 0.1, max: 0.9, default: 0.5 },
+});
 
 // Ollama model ids, e.g. "llama3.2:latest" or "hf.co/org/model:Q4_K_M":
 // letters, digits, dots, dashes and slashes, then one optional :tag.
@@ -95,6 +109,11 @@ function normalizeSettings(raw = {}) {
   for (const key of QUIET_TIME_KEYS) {
     if (typeof raw[key] === 'string' && QUIET_TIME_RE.test(raw[key])) out[key] = raw[key];
   }
+  for (const [key, spec] of Object.entries(NUMERIC)) {
+    const v = Number(raw[key]);
+    if (Number.isFinite(v) && v >= spec.min && v <= spec.max) out[key] = v;
+    else out[key] = spec.default;
+  }
   for (const [key, max] of Object.entries(TEXT_MAX)) {
     if (raw[key] === undefined) continue;
     const v = cleanLine(raw[key], max);
@@ -129,6 +148,10 @@ function validatePatch(patch) {
     } else if (QUIET_TIME_KEYS.includes(key)) {
       if (typeof value === 'string' && QUIET_TIME_RE.test(value)) clean[key] = value;
       else errors.push(`invalid_value:${key}`);
+    } else if (NUMERIC[key]) {
+      const v = Number(value);
+      if (typeof value === 'number' && Number.isFinite(v) && v >= NUMERIC[key].min && v <= NUMERIC[key].max) clean[key] = String(v);
+      else errors.push(`invalid_value:${key}`);
     } else {
       const v = cleanLine(value, TEXT_MAX[key]);
       if (typeof value !== 'string') errors.push(`invalid_value:${key}`);
@@ -139,4 +162,4 @@ function validatePatch(patch) {
   return { ok: errors.length === 0, clean, errors };
 }
 
-module.exports = { DEFAULTS, ENUMS, normalizeSettings, validatePatch, cleanLine, isValidModelId };
+module.exports = { DEFAULTS, ENUMS, normalizeSettings, validatePatch, cleanLine, isValidModelId, NUMERIC };

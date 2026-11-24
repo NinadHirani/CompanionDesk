@@ -52,6 +52,13 @@ const IPC_CHANNELS = Object.freeze([
   'voice:status',
   'voice:transcribe',
   'voice:cancel',
+  // M6 slice 4: wake word. Explicit user action only (wake:start carries
+  // userInitiated from a direct control click); nothing autostarts.
+  'wake:status',
+  'wake:start',
+  'wake:stop',
+  'wake:pause',
+  'wake:resume',
   'screen:status',
   'screen:windows',
   'screen:ask',
