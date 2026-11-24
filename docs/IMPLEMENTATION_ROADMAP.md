@@ -523,6 +523,28 @@ stop; Android foreground service compliant with platform rules.
 
 ## M7 - Screen understanding v2 (2-3 wks)
 
+**Slice 1 (landed 24 Nov 2026): decision-independent groundwork; the
+interface only, no capture engine.** New `src/screen-observation.js` is the
+pure observation-session state machine the M7 line asks for: opt-in
+(`screen_observation_enabled` defaults to false in settings), started only
+by an explicit user action, one session at a time, pausable and resumable
+(a resumed session owes a full interval, not an instant tick), a bounded
+per-session interval (5 s to 10 min, default 30 s) the CALLER enforces via
+`dueTick()`/`markTicked()` (no timers of its own, clock injected), user app
+exclusions (case-insensitive, capped) combined with the existing
+`sensitiveWindow` and `isOwnWindow` rules and refused on any match, an
+always-visible indicator contract (`indicator()`), and `LOCAL_ONLY` as a
+named constant: an observation answer must resolve through the local vision
+route and nothing here can flip it. No pixels are accepted or stored
+anywhere in the API. Deliberately NOT in this slice: the engine loop that
+would drive captures, any desktopCapturer call on a schedule, any Android
+MediaProjection work (device-gated, flagged in RISK_REGISTER), and any UI.
+The existing per-ask capture path (`screen:ask`, one user-picked window,
+title-checked, local vision only) is unchanged and remains the only capture
+path until the engine slice is built and reviewed. Nothing captures at
+startup today: `getSources` runs only inside the explicit `screen:windows`
+and `screen:ask` handlers.
+
 Session-scoped live observation on desktop: opt-in, visibly indicated,
 pausable, app exclusions, configurable interval, local processing only.
 Android MediaProjection POC honoring its per-session consent requirements.

@@ -25,6 +25,16 @@ test('stored strings become typed values; garbage falls back to defaults', () =>
   assert.equal(s.language, 'Hindi');
 });
 
+test('screen observation stays off until the user enables it', () => {
+  assert.equal(normalizeSettings({}).screen_observation_enabled, false);
+  assert.equal(normalizeSettings({ screen_observation_enabled: 'true' }).screen_observation_enabled, true);
+  assert.equal(normalizeSettings({ screen_observation_enabled: 'nope' }).screen_observation_enabled, false);
+  const r = validatePatch({ screen_observation_enabled: true });
+  assert.equal(r.ok, true);
+  assert.equal(r.clean.screen_observation_enabled, 'true');
+  assert.equal(validatePatch({ screen_observation_enabled: 'yes' }).ok, false);
+});
+
 test('voice stays off until the user enables it', () => {
   assert.equal(normalizeSettings({}).voice_enabled, false);
   assert.equal(normalizeSettings({ voice_enabled: 'true' }).voice_enabled, true);
