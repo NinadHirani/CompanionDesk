@@ -485,6 +485,13 @@ disables the scope field while editing, and restores "Add schedule" after.
 Conservative defaults remain working defaults (delivery off, quiet hours
 23:30-08:00, nothing fires until the user enables it) until reviewed.
 
+**Slice 4 (landed 24 Nov 2026): quiet-hours visibility.** While delivery is
+on, the schedules panel states the configured quiet-hours window and its
+contract in plain language (a due schedule inside the window notifies when
+it ends, it is never dropped), so a deferred notification is never a
+mystery. Read-only; the change itself stays in About > Proactive reminders.
+M5 is complete as specified.
+
 ## M6 - Voice v2 (2-3 wks)
 
 Multilingual whisper model option wired to the existing `language` setting;
