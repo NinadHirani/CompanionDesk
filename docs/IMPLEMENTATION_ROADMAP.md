@@ -318,7 +318,11 @@ output. A creation-source review (blueprint 3j.7) verified there is no
 existing main-owned event source: no component drives agent runs, so no
 terminal outcome ever fires; the notification creation source belongs to
 the future run-driver gate, and until then the desk stays
-creation-empty by design.
+creation-empty by design. A design-only run-driver proposal now exists
+(docs/RUN_DRIVER_DESIGN.md, blueprint 3j.8): staged gates A/B/C with
+explicit approval checkpoints, an empty production registry in Stage A,
+and open decisions D1-D7 (including the D2 approval-delivery contract
+tension) awaiting Ninad's review; no execution capability is enabled.
 Acceptance: policy
 engine refuses ungranted calls (tested); payments, purchases, destructive
 deletion, and legal or binding submissions are denied unless fresh,

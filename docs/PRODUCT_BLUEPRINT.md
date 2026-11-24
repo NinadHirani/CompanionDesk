@@ -1062,6 +1062,51 @@ gate is scheduled.
 
 Docs commit: (this commit). No code changed in this gate.
 
+## 3j.8. Run driver design proposal (24 Nov 2026): DESIGN ONLY, nothing enabled
+
+A concrete design proposal for the main-owned agent run driver, written to
+docs/RUN_DRIVER_DESIGN.md and committed with NO code. It exists because
+3j.7 verified there is no agent event source in the running app: the
+orchestrator, emergency stop, persistence run ledger, notification desk,
+delivery operation and panel all exist, but nothing ever drives a run.
+
+Summary of the proposal (the document is authoritative):
+  - The driver is plumbing only: it accepts a fully-formed main-side
+    plan, drives the EXISTING orchestrator step() in one synchronous pass
+    until terminal or pause, mirrors transitions into the agent_runs
+    ledger, and creates allowlisted notifications at terminal
+    transitions. It never executes tools, forms plans, grants, resumes,
+    schedules, or touches the network or secrets.
+  - Exact state machine documented from the orchestrator as-is (running,
+    awaiting_approval, paused_stop, completed, aborted), with log-before-
+    commit on every transition and audit poisoning unchanged.
+  - Run requests must be born main-side with an audited per-run user
+    intent BEFORE startRun; the renderer may never receive a run-control
+    channel (preload contract) and model-driven execution stays
+    forbidden.
+  - Persistence ordering: orchestrator transition (durable audit) ->
+    ledger mirror (failures logged, never state-changing) -> save()
+    checkpoints at pauses and terminals (fail-closed saver, failures
+    logged, run continues).
+  - Stop race bound: at most one in-flight step completes after a stop;
+    no unbounded work can start after the stop.
+  - Restart: never auto-resume; proposed ledger reconciliation marks
+    running rows interrupted (decision D4); no notification for an
+    interrupted run.
+  - Notifications: completed + aborted only (decision D5), ledger-deduped
+    via finishRun's run_not_running replay refusal, generic allowlisted
+    copy plus the sanitized run id, failures with zero effect on the run,
+    feeding the existing 3j.6 path. Acknowledgement policy untouched.
+  - Threat model, fail-closed matrix, test/CI plan and staged gates are
+    in the document. Stages: A (driver + EMPTY production registry, no
+    step can execute in the shipped app), B (first read_only tool),
+    C (first reversible_write tool) - C is BLOCKED on decision D2, the
+    approval-delivery contract tension.
+  - Open decisions D1-D7 are listed for Ninad; nothing is decided where
+    the architecture leaves ambiguity.
+
+Docs commit: (this commit). No code changed. Design awaits review.
+
 ## 4. Planned, NOT implemented
 
 A secure credential-vault adapter
