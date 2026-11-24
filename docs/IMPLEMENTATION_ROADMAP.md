@@ -314,7 +314,11 @@ batches, explicit overflow with eviction safety so no unread record is
 ever silently displaced, reported orphan GC, replay idempotence; the
 bridge of 3j.1 stays untouched and no delivery path acknowledges).
 Still remaining, each an explicitly-reviewed gate: scheduling, and file
-output.
+output. A creation-source review (blueprint 3j.7) verified there is no
+existing main-owned event source: no component drives agent runs, so no
+terminal outcome ever fires; the notification creation source belongs to
+the future run-driver gate, and until then the desk stays
+creation-empty by design.
 Acceptance: policy
 engine refuses ungranted calls (tested); payments, purchases, destructive
 deletion, and legal or binding submissions are denied unless fresh,

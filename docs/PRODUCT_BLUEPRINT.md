@@ -1010,6 +1010,58 @@ so the visible change on main is the startup reconciliation pass (which
 finds no unread records until a creation site exists) and the post-ack
 pass.
 
+## 3j.7. Notification creation source: verified blocked, no existing event source (24 Nov 2026)
+
+Inspected, NOT implemented. The next narrow prerequisite after 3j.6 was a
+main-owned creation source translating already-existing terminal agent
+outcomes into bounded informational notifications. The verification found
+no such source in the running app, and per the gate's own constraint none
+was invented:
+
+  - Orchestrator runs never happen: startRun, step and resume have ZERO
+    callers in src outside src/agent-orchestrator.js itself. main.js only
+    reads run state (activeRun, getRun for the runs:get surface). No run
+    is ever started, so no run ever reaches completed, aborted or blocked;
+    there is no terminal outcome to translate.
+  - The persistence run ledger is never written: agent-persistence's own
+    startRun and finishRun (the agent_runs table) also have zero callers.
+  - The emergency stop never fires: its engage and user-reset transitions
+    have no callers in src; only isActive() reads exist (status surface,
+    orchestrator guards, policy engine).
+  - The only writer main wires is the 3j.5 acknowledgement. No approval,
+    grant or stop writer is reachable from anywhere.
+  - The one blocked outcome that DOES fire, persistence blocked at agent
+    runtime start, was considered and REJECTED: it is exactly the
+    fail-closed state in which the app refuses every write path by
+    documented design (and the desk may be unhydrated), so creating a
+    notification there would contradict the posture this gate is meant to
+    protect.
+  - Other main flows (ai:ask chat streaming, calendar import, update
+    checks, hardware polling) are user-facing app features the renderer
+    already sees directly; wiring any of them into notifications would be
+    inventing a new product interaction, which the gate forbids.
+
+Precise blocker: the agent EXECUTION DRIVER does not exist yet. Every
+downstream piece does (orchestrator, emergency stop, persistence run
+ledger, notification desk, delivery operation, display store, panel), but
+no component ever drives a run, so no user-relevant terminal outcome is
+ever emitted by the main process.
+
+Smallest next design decision (proposed, not decided): the creation
+source belongs to the future run-driver gate. When the driver lands, it
+should invoke a narrow main-owned event translation at exactly its
+terminal transitions: an allowlisted map (run completed, run aborted, run
+blocked by the emergency stop, persistence run finished) to bounded
+generic notifications carrying a stable sanitized run-id marker for
+idempotence, feeding the 3j.6 reconciliation path. Until then the
+notification desk stays creation-empty and 3j.6's startup and post-ack
+passes simply find nothing, which is correct behavior, not a defect. The
+decision to make is ordering only: build the run driver next and hang
+creation off its transitions, or leave notifications dormant until that
+gate is scheduled.
+
+Docs commit: (this commit). No code changed in this gate.
+
 ## 4. Planned, NOT implemented
 
 A secure credential-vault adapter
