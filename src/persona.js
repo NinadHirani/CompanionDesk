@@ -9,6 +9,7 @@
 // user allowed it, a minimal one for the cloud fallback with no name, no
 // memory lines and no habits in it.
 
+const retrieval = require('./memory-retrieval');
 const { cleanLine } = require('./settings');
 const { describePatterns } = require('./patterns');
 const { isConfirmedDate } = require('./extraction-core');
@@ -66,6 +67,16 @@ function renderCalendarBlock(occurrences, { max = 20 } = {}) {
 }
 
 // ---- choosing which memories to show ---------------------------------------
+//
+// M4 memory v2 (wired 24 Nov 2026): selection runs on the MEASURED ranker
+// (src/memory-retrieval.js: BM25 + section boost + bigram phrase bonus +
+// the FROZEN seeded synonym map) instead of the old token-overlap scorer,
+// with the DECIDED per-task budgets (chat 12, screen 6, goal 8, vision 0).
+// Vision and any screen-derived ask retrieve ZERO memory by default: the
+// budget gate fires before anything else, so even always-on sections are
+// withheld there. Sensitive bullets are never stored (src/memory-store.js
+// gate), and are filtered defensively here too. Raising a budget is a
+// reviewed change, never a convenience.
 
 const STOPWORDS = new Set(('the and for are but not you your with this that have what when where which will from about into over '
   + 'than then them they there their how can could should would any all out has had was were been being its our his her she him '
@@ -78,32 +89,34 @@ function tokens(text) {
 const ALWAYS_ON = { Preferences: 4, Constraints: 4, Goals: 3 }; // sections always shown, with a cap each
 
 // memories: [{ section, text }]. Preferences, constraints and goals always
-// apply; facts and routines only when they relate to the question. Capped so a
-// small local model is never buried.
-function selectMemories(memories, question, { limit = 10, maxChars = 1100 } = {}) {
+// apply; facts and routines only when they relate to the question (the
+// measured ranker decides relevance). Capped by the TASK BUDGET so a small
+// local model is never buried.
+function selectMemories(memories, question, { task = 'chat', maxChars = 1100 } = {}) {
+  const budget = retrieval.BUDGETS[task] == null ? retrieval.BUDGETS.default : retrieval.BUDGETS[task];
+  if (budget === 0) return []; // vision / screen-derived: zero memory, always-on included
+  const visible = (memories || []).filter((m) => !m.sensitive);
   const q = tokens(question);
   const picked = [];
   const used = {};
-  for (const m of memories) {
+  for (const m of visible) {
     const cap = ALWAYS_ON[m.section];
     if (!cap) continue;
     used[m.section] = (used[m.section] || 0) + 1;
     if (used[m.section] <= cap) picked.push({ ...m, score: Infinity });
   }
-  const scored = memories
+  // Facts and routines compete for the remaining budget slots on measured
+  // relevance. The ranker only returns bullets it matched, so score > 0 is
+  // structural; the frozen synonym map is part of that match.
+  const candidates = visible
     .filter((m) => !ALWAYS_ON[m.section])
-    .map((m, order) => {
-      const t = tokens(m.text);
-      let score = 0;
-      for (const w of t) if (q.has(w)) score += 1;
-      return { ...m, score, order };
-    })
-    .filter((m) => m.score > 0)
-    .sort((a, b) => b.score - a.score || a.order - b.order);
+    .map((m, i) => ({ id: `s${i}`, section: m.section, text: m.text }));
+  const scored = retrieval.search(retrieval.buildIndex(candidates), question, { k: budget })
+    .map((r) => ({ section: r.section, text: r.text, score: r.score }));
   const out = [];
   let chars = 0;
   for (const m of [...picked, ...scored]) {
-    if (out.length >= limit) break;
+    if (out.length >= budget) break;
     const line = cleanLine(m.text, 200);
     if (!line || chars + line.length > maxChars) continue;
     chars += line.length;
@@ -117,7 +130,7 @@ function selectMemories(memories, question, { limit = 10, maxChars = 1100 } = {}
 // -> { system, prompt, cloud }
 //   cloud is null when the user allowed personal context in cloud calls (the
 //   cloud then sees the same prompt), otherwise a minimal { system, prompt }.
-function buildPersona({ settings, memories = [], patterns = null, contextPack, calendarBlock = '', skills = [], question }) {
+function buildPersona({ settings, memories = [], patterns = null, contextPack, calendarBlock = '', skills = [], question, task = 'chat' }) {
   const student = skills.includes('student');
   const assistant = cleanLine(settings.assistant_name, 40) || 'CompanionDesk';
   const q = cleanLine(question, 2000);
@@ -125,7 +138,7 @@ function buildPersona({ settings, memories = [], patterns = null, contextPack, c
   const about = [];
   const name = cleanLine(settings.user_name, 40);
   if (name) about.push(`- Name: ${name}`);
-  for (const m of selectMemories(memories, q)) about.push(`- ${m.text}`);
+  for (const m of selectMemories(memories, q, { task })) about.push(`- ${m.text}`);
   if (settings.learn_from_activity) {
     const habit = describePatterns(patterns);
     if (habit) about.push(`- ${habit}`);

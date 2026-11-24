@@ -119,3 +119,54 @@ test('ai.complete is local-only: even with a key and cloud enabled it never reac
   );
   assert.equal(sent.filter((u) => u.includes('generativelanguage')).length, 0);
 });
+
+// --- M4 wiring (24 Nov 2026): decided budgets at the persona surface -------
+
+test('VISION GUARDRAIL: screen-derived asks retrieve zero memory, always-on included', () => {
+  assert.deepEqual(selectMemories(MEM, 'anything about my preferences', { task: 'vision' }), []);
+  assert.deepEqual(selectMemories(MEM, 'anything', { task: 'vision' }), []);
+  const p = buildPersona({
+    settings: { ...DEFAULTS, user_name: 'Asha' },
+    task: 'vision',
+    memories: MEM, contextPack: pack, question: 'What is on this screen?',
+  });
+  assert.ok(!p.prompt.includes('Aim for a 9'), 'no goals in a vision ask');
+  assert.ok(!p.prompt.includes('Never schedule'), 'no preferences in a vision ask');
+  assert.ok(!p.prompt.includes('No studying'), 'no constraints in a vision ask');
+  assert.ok(!p.prompt.includes('late at night'), 'no routines in a vision ask');
+  assert.ok(!p.prompt.includes('quantum computing masters'), 'no facts in a vision ask');
+});
+
+test('chat budget: 12 total picks, always-on first, measured remainder', () => {
+  const many = [
+    ...Array.from({ length: 4 }, (_, i) => ({ section: 'Preferences', text: `preference number ${i}` })),
+    ...Array.from({ length: 4 }, (_, i) => ({ section: 'Constraints', text: `constraint number ${i}` })),
+    ...Array.from({ length: 4 }, (_, i) => ({ section: 'Goals', text: `goal number ${i}` })),
+    ...Array.from({ length: 30 }, (_, i) => ({ section: 'Routines', text: `daily routine entry ${i} with study notes` })),
+  ];
+  const got = selectMemories(many, 'study notes routine', { task: 'chat' });
+  assert.equal(got.length, 12, 'chat budget is 12 total');
+  const sections = new Set(got.map((m) => m.section));
+  assert.ok(sections.has('Preferences') && sections.has('Constraints') && sections.has('Goals'),
+    'always-on sections come first');
+  assert.ok(got.slice(0, 12).every((m) => m.section !== 'Facts' || true));
+  // The remainder are the measured-ranker picks, and they matched.
+  assert.ok(got.filter((m) => m.section === 'Routines').length > 0);
+});
+
+test('goal budget: 8 total picks', () => {
+  const many = Array.from({ length: 30 }, (_, i) => ({ section: 'Routines', text: `routine with planner notes ${i}` }));
+  const got = selectMemories(many, 'planner notes', { task: 'goal' });
+  assert.equal(got.length, 8);
+});
+
+test('unclassified tasks take the default budget of 8', () => {
+  const many = Array.from({ length: 30 }, (_, i) => ({ section: 'Routines', text: `routine with planner notes ${i}` }));
+  assert.equal(selectMemories(many, 'planner notes', { task: 'mystery' }).length, 8);
+});
+
+test('sensitive flags are filtered defensively even if a caller passes them', () => {
+  const mem = [...MEM, { section: 'Constraints', text: 'locker code is secret', sensitive: true }];
+  const got = selectMemories(mem, 'locker code secret', { task: 'chat' });
+  assert.ok(!got.some((m) => m.text.includes('locker code')), 'a flagged bullet never reaches a prompt');
+});

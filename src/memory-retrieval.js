@@ -7,17 +7,24 @@
 // decisions in docs/M2_MEMORY_V2_DESIGN.md gate implementation, and this
 // module deliberately leaves all four untouched:
 //
-//   D1 sensitive-entry convention: flags are EXPLICIT caller input only
-//      (see the includeSensitive option); nothing here parses a
-//      `Sensitive:` prefix or any on-disk format.
-//   D2 synonym map: the seeded map rides along as inert, auditable data so
-//      this port is exactly the measured slice-4 ranker; no product ask
-//      path uses it. Whether it ever ships is the owner's decision.
-//   D3 task budgets: NOT ported. The harness's selectForTask and its
-//      {chat:12, screen:6, vision:0, goal:8} defaults do not exist here;
-//      retrieval takes an explicit k, so no product default is invented.
-//   D4 embeddings: absent by design; this stays pure lexical, local,
-//      deterministic.
+//   D1 sensitive-entry convention: explicit per-bullet marks (NOT a
+//      `Sensitive:` prefix). A mark is a SENSITIVITY CLASSIFICATION, not
+//      consent: retrieval excludes a marked bullet unless the caller holds
+//      explicit consent for that call (includeSensitive). Storing one is
+//      a separate gate: see src/memory-store.js (fail-closed).
+//   D2 synonym map: the seeded map SHIPS as this frozen, auditable map
+//      (owner decision 24 Nov 2026: keep the current frozen map; growth
+//      requires measured real-content misses and a documented benchmark;
+//      a test pins the exact map contents so any change is a reviewed
+//      benchmark event, never a silent edit).
+//   D3 task budgets: DECIDED by the owner 24 Nov 2026 - chat 12, screen 6,
+//      goal 8, vision 0, as tunable conservative defaults. Vision AND any
+//      screen-derived request retrieve ZERO memory by default
+//      (derivedFrom: 'screen' forces the vision budget); only explicit
+//      user control may change that later.
+//   D4 embeddings: deferred; a numeric trigger (recall < 70% or MRR < 0.5
+//      on a real representative corpus) is a MEASUREMENT GATE only, never
+//      permission to download or install anything.
 //
 // Deterministic by construction: no randomness, no network, no external
 // state; identical inputs always produce identical rankings, and every
@@ -149,4 +156,32 @@ function search(index, query, opts) {
 module.exports = {
   tokenize, buildIndex, search, expand, fold, SYNONYMS, FOLDED_SYNONYMS,
   K1, B, SECTION_BOOST, PHRASE_BONUS, STOPWORDS,
+};
+
+// ---- task budgets (decided 24 Nov 2026, tunable conservative defaults) ------
+
+// Total retrieved bullets per task kind. vision is 0 BY DEFAULT and any
+// request derived from screen content is forced to the vision budget: the
+// only change later is explicit user control. Keep these numbers
+// conservative; raising one is a reviewed change, never a convenience.
+const BUDGETS = Object.freeze({ chat: 12, screen: 6, vision: 0, goal: 8, default: 8 });
+
+// opts: { k?, includeSensitive?, synonyms?, derivedFrom? }. derivedFrom:
+// 'screen' forces the vision budget (0) whatever the task, so an ask whose
+// content came from a captured screen can never pull memory by default.
+function selectForTask(index, query, task, opts) {
+  const o = opts || {};
+  let budget = BUDGETS[task] == null ? BUDGETS.default : BUDGETS[task];
+  if (o.derivedFrom === 'screen') budget = BUDGETS.vision;
+  if (budget === 0) return [];
+  return search(index, query, {
+    includeSensitive: o.includeSensitive,
+    synonyms: o.synonyms,
+    k: budget,
+  });
+}
+
+module.exports = {
+  tokenize, buildIndex, search, expand, fold, SYNONYMS, FOLDED_SYNONYMS,
+  K1, B, SECTION_BOOST, PHRASE_BONUS, STOPWORDS, BUDGETS, selectForTask,
 };

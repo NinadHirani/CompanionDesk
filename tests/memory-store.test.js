@@ -19,17 +19,35 @@ const RET = path.join(__dirname, '..', 'src', 'memory-retrieval.js');
 
 // --- wiring lock ------------------------------------------------------------
 
-test('WIRING LOCK: nothing in src/ outside the M4 pair requires the new modules', () => {
+// Wiring scope as of 24 Nov 2026: src/memory-retrieval.js is wired into
+// persona.js only (per-task budgeted selection). src/memory-store.js (the
+// v2 store contract) stays UNWIRED: the product still runs the file-backed
+// src/memory.js flow until a later reviewed slice replaces it.
+const WIRED_RETRIEVAL = new Set(['memory-store.js', 'persona.js']);
+
+test('WIRING LOCK: memory-retrieval is required only by persona.js and the M4 pair', () => {
   const dir = path.join(__dirname, '..', 'src');
   const offenders = [];
   for (const f of fs.readdirSync(dir)) {
     if (!f.endsWith('.js')) continue;
     const text = fs.readFileSync(path.join(dir, f), 'utf8');
     const requiresRetrieval = /require\([^)]*memory-retrieval/.test(text);
-    const requiresStore = /require\([^)]*memory-store/.test(text);
     if (f === 'memory-store.js' && !requiresRetrieval) offenders.push(`${f} must require retrieval`);
-    if (f !== 'memory-store.js' && requiresRetrieval) offenders.push(`${f} requires memory-retrieval`);
-    if (f !== 'memory-store.js' && requiresStore) offenders.push(`${f} requires memory-store`);
+    if (f !== 'memory-store.js' && requiresRetrieval && !WIRED_RETRIEVAL.has(f)) {
+      offenders.push(`${f} requires memory-retrieval`);
+    }
+  }
+  assert.deepEqual(offenders, []);
+});
+
+test('WIRING LOCK: the v2 store contract stays unwired in product code', () => {
+  const dir = path.join(__dirname, '..', 'src');
+  const offenders = [];
+  for (const f of fs.readdirSync(dir)) {
+    if (!f.endsWith('.js') || f === 'memory-store.js') continue;
+    if (/require\([^)]*memory-store['"]/.test(fs.readFileSync(path.join(dir, f), 'utf8'))) {
+      offenders.push(`${f} requires memory-store`);
+    }
   }
   assert.deepEqual(offenders, []);
 });
@@ -149,15 +167,57 @@ test('markSensitive toggles at runtime; the gate follows the flag', () => {
   assert.equal(s.search('locker code', { k: 5 })[0].id, 'm1', 'unflagged is retrievable again');
 });
 
-test('toMarkdown writes plain bullets and drops flags (no on-disk convention invented)', () => {
+test('STORAGE GATE: toMarkdown never writes a sensitive bullet out (fail-closed)', () => {
   const s = store.createStore();
   s.addMemory('Facts', 'passport scans live in the vault', { sensitive: true });
+  s.addMemory('Facts', 'likes dosa');
   const md = s.toMarkdown();
-  assert.ok(md.includes('- passport scans live in the vault'));
+  assert.ok(md.includes('- likes dosa'), 'unflagged entries export normally');
+  assert.ok(!md.includes('passport scans'), 'sensitive entries are NEVER persisted');
   assert.ok(!/Sensitive:/i.test(md), 'no prefix convention may leak into the file');
-  assert.ok(!/sensitive/i.test(md.replace('passports', '').replace(/vault/g, '')));
   const items = store.parseMarkdown(md);
-  assert.equal(items[0].sensitive, undefined, 'a plain file round-trips unflagged');
+  assert.equal(items.length, 1, 'the exported file round-trips with the sensitive entry absent, not downgraded');
+});
+
+test('STORAGE GATE: persisted flag is explicit on add and mark operations', () => {
+  const s = store.createStore();
+  assert.deepEqual(s.addMemory('Facts', 'likes dosa'),
+    { ok: true, id: 'm1', text: 'likes dosa', persisted: true });
+  assert.deepEqual(s.addMemory('Constraints', 'locker code', { sensitive: true }),
+    { ok: true, id: 'm2', text: 'locker code', persisted: false });
+  assert.equal(s.markSensitive('m1').persisted, false, 'flagging revokes persistence immediately');
+  assert.equal(s.markSensitive('m1', false).persisted, true, 'unflagging restores persistence');
+});
+
+test('STORAGE GATE: persistSensitive refuses even with explicit consent (no safe format exists)', () => {
+  const s = store.createStore();
+  s.addMemory('Facts', 'passport scans live in the vault', { sensitive: true });
+  const res = s.persistSensitive('m1');
+  assert.equal(res.ok, false);
+  assert.equal(res.error, 'sensitive_storage_blocked');
+  assert.ok(/no on-disk format/.test(res.detail));
+  assert.equal(s.count(), 1, 'the entry stays in the session view');
+  assert.equal(s.toMarkdown().includes('passport scans'), false, 'and still never leaves it');
+  assert.deepEqual(s.persistSensitive('m99'), { ok: false, error: 'not_found' });
+});
+
+test('NO SILENT DOWNGRADE: marks survive every in-store round-trip', () => {
+  const s = store.createStore();
+  s.addMemory('Facts', 'a plain bullet');
+  s.addMemory('Constraints', 'locker code', { sensitive: true });
+  s.addMemory('Goals', 'another plain bullet');
+  // list preserves the flag
+  assert.equal(s.list().find((b) => b.id === 'm2').sensitive, true);
+  // forget a DIFFERENT bullet; the flag survives
+  s.forgetMemory('m1');
+  assert.equal(s.list().find((b) => b.id === 'm2').sensitive, true);
+  // retrieval keeps respecting it
+  assert.deepEqual(s.search('locker code', { k: 5 }), []);
+  assert.equal(s.search('locker code', { k: 5, includeSensitive: true })[0].id, 'm2');
+  // re-mark after unmark keeps the gate symmetric
+  s.markSensitive('m2', false);
+  s.markSensitive('m2');
+  assert.deepEqual(s.search('locker code', { k: 5 }), []);
 });
 
 test('index reflects mutations after every add/forget/mark', () => {

@@ -421,13 +421,19 @@ No automatic extraction, no inferred-fact auto-saving, no background
 monitoring in this phase.
 
 24 Nov 2026: the measured harness core (slices 0-5) is ported to
-`src/memory-retrieval.js` and `src/memory-store.js` as PURE, UNWIRED
-library modules (contract tests pin them to `src/memory.js`; a wiring
-lock test keeps every other `src/` file from requiring them). All four
-open decisions remain untouched: no `Sensitive:` convention, no task
-budgets, no synonym shipping, no embeddings. The decision sheet with
-recommended conservative defaults is `docs/M4_MEMORY_DECISIONS.md`;
-wiring waits on the owner's answers.
+`src/memory-retrieval.js` and `src/memory-store.js` (contract tests pin
+them to `src/memory.js`). Later the same day the owner DECIDED all four
+open questions with explicit guardrails (`docs/M4_MEMORY_DECISIONS.md`,
+"Status: RESOLVED") and authorized wiring. WIRED SLICE 1: persona
+selection now runs on the measured ranker with the decided budgets
+(chat 12, screen 6, goal 8, vision 0; screen-derived asks forced to
+zero); the vision ask path retrieves ZERO memory; the frozen synonym
+map is test-pinned; the storage gate keeps sensitive entries
+session-only (never written to the About-me file, no on-disk format,
+`persistSensitive` fail-closed). The v2 store contract itself remains
+unwired (the product still runs the file-backed `src/memory.js` flow);
+replacing that flow is a later reviewed slice. No automatic extraction,
+no inferred-fact auto-saving, no background monitoring in this phase.
 
 ## M5 - Proactive behavior (1-2 wks)
 

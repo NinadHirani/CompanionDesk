@@ -46,9 +46,14 @@ async function askAboutScreen({ db, ai, meFile }, payload, todayIso, deps) {
 
   const settings = getSettings(db);
   const skills = activeSkills(db, settings);
+  // M4 (24 Nov 2026): screen-derived asks retrieve ZERO memory by default.
+  // task 'vision' forces the zero budget before any selection runs, so not
+  // even always-on sections reach a screen ask. Raising this needs explicit
+  // user control; it is never a convenience change.
   const persona = buildPersona({
     settings,
     skills,
+    task: 'vision',
     memories: memory.listMemories(meFile),
     patterns: computePatterns(db.listEvents('assignment_done')),
     contextPack: renderContextPack({ today: todayIso, courses: db.listCourses(), due: db.listDue(todayIso, addDaysIso(todayIso, 7)), student: skills.includes('student') }),

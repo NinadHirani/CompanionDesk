@@ -163,6 +163,7 @@ async function ask({ db, ai, meFile }, payload, todayIso, { onToken, model, sign
   const persona = buildPersona({
     settings,
     skills,
+    task: 'chat',
     memories: memory.listMemories(meFile),
     patterns: computePatterns(db.listEvents('assignment_done')),
     contextPack,

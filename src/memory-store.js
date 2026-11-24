@@ -6,13 +6,20 @@
 // calls it; docs/M2_MEMORY_V2_DESIGN.md's four open decisions gate
 // implementation, and this module leaves all four untouched:
 //
-//   D1: sensitive flags are EXPLICIT caller input (sensitiveIds at parse
-//       time, markSensitive at runtime); no `Sensitive:` prefix or any
-//       on-disk format is parsed or invented, and toMarkdown() writes
-//       plain bullets and drops the flags.
-//   D2/D3/D4: retrieval comes from src/memory-retrieval.js (no task
-//       budgets, no shipping decision, no embeddings); search() takes an
-//       explicit k.
+//   D1 (decided 24 Nov 2026): explicit per-bullet marks, never a
+//       `Sensitive:` prefix. A mark is a SENSITIVITY CLASSIFICATION, not
+//       consent. The storage gate is fail-closed: a marked bullet is
+//       NEVER written to the About-me file (toMarkdown() excludes it)
+//       because no on-disk format preserves the mark yet; flagged entries
+//       stay session-only, and persistSensitive() refuses even an
+//       explicit yes until a safe format exists. Nothing silently
+//       downgrades or drops a mark inside the store: add/forget/mark/
+//       search round-trips keep it, and addMemory() reports
+//       persisted:false for flagged entries.
+//   D2/D3/D4 (decided 24 Nov 2026): retrieval comes from
+//       src/memory-retrieval.js with the decided budgets (chat 12,
+//       screen 6, goal 8, vision 0; screen-derived forced to vision 0);
+//       the synonym map is frozen; embeddings stay deferred.
 //
 // The markdown About-me file stays canonical and the only memory store:
 // this contract is an in-memory view over parsed bullets plus a retrieval
@@ -74,6 +81,9 @@ function createStore(bullets = []) {
     // Mirrors src/memory.js addBullet semantics: duplicate is judged within
     // the target section by normalized text; unknown sections and empty
     // bullets are rejected with the product module's error strings.
+    // persisted:false for a sensitive entry is the storage gate talking:
+    // the entry exists in this session's view ONLY and toMarkdown() will
+    // not write it out (fail-closed; see the D1 note above).
     addMemory(section, value, { sensitive = false } = {}) {
       if (!SECTIONS.includes(section)) return { ok: false, error: 'unknown_section' };
       const clean = memory.sanitizeBullet(value);
@@ -85,7 +95,7 @@ function createStore(bullets = []) {
       const id = `m${items.length + 1}`;
       items.push({ id, section, text: clean, ...(sensitive ? { sensitive: true } : {}) });
       rebuild();
-      return { ok: true, id, text: clean };
+      return { ok: true, id, text: clean, persisted: !sensitive };
     },
 
     forgetMemory(id) {
@@ -101,20 +111,39 @@ function createStore(bullets = []) {
       if (!b) return { ok: false, error: 'not_found' };
       if (value) b.sensitive = true; else delete b.sensitive;
       rebuild();
-      return { ok: true };
+      return { ok: true, persisted: !b.sensitive };
+    },
+
+    // Explicit storage consent for a sensitive entry is NOT enough today:
+    // persisting would lose the mark (no on-disk format preserves it), and
+    // a lost mark is a silent downgrade. Fail closed until a safe format
+    // exists; the caller reports this limitation to the user.
+    persistSensitive(id) {
+      const b = items.find((x) => x.id === id);
+      if (!b) return { ok: false, error: 'not_found' };
+      if (!b.sensitive) return { ok: true, persisted: true };
+      return {
+        ok: false,
+        error: 'sensitive_storage_blocked',
+        detail: 'no on-disk format preserves the sensitive mark yet; the entry stays session-only',
+      };
     },
 
     search(query, { k, includeSensitive = false, synonyms = true } = {}) {
       return retrieval.search(index, query, { k, includeSensitive, synonyms });
     },
 
+    // STORAGE GATE (fail-closed): sensitive bullets are NEVER written to
+    // the About-me file. There is no on-disk format that preserves the
+    // mark (the prefix convention was declined), so exporting one would
+    // either leak it unflagged or silently downgrade it; both are banned.
     // Sections in canonical order first, then any extra headings in
     // first-seen order, mirroring how the product parser reads files.
-    // Flags are dropped: the on-disk convention is decision 1, untouched.
     toMarkdown() {
       const order = [];
       const bySection = new Map();
       for (const b of items) {
+        if (b.sensitive) continue; // never persisted, never silently downgraded
         if (!bySection.has(b.section)) { bySection.set(b.section, []); order.push(b.section); }
         bySection.get(b.section).push(b.text);
       }

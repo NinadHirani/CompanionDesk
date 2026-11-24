@@ -125,10 +125,61 @@ test('k is respected exactly', () => {
   assert.equal(got.length, 3);
 });
 
-test('DEFAULTS LOCK: no task budgets exist in this module (decision 3 untouched)', () => {
-  assert.equal(R.selectForTask, undefined, 'selectForTask must not be ported');
-  assert.equal(R.BUDGETS, undefined, 'BUDGETS must not be ported');
-  const many = Array.from({ length: 15 }, (_, i) => ({ id: `d${i}`, section: 'Facts', text: `shared topic variant ${i}` }));
-  const got = R.search(R.buildIndex(many), 'shared topic');
-  assert.equal(got.length, 10, 'bare k defaults to plain depth 10, not a task budget');
+// --- decided 24 Nov 2026: task budgets as tunable conservative defaults -----
+
+test('DECIDED BUDGETS: exact conservative values, frozen shape', () => {
+  assert.deepEqual(R.BUDGETS, { chat: 12, screen: 6, vision: 0, goal: 8, default: 8 });
+});
+
+test('vision retrieves zero memory, even with an exact match present', () => {
+  const idx = R.buildIndex(corpus);
+  assert.deepEqual(R.selectForTask(idx, 'camera and photography', 'vision'), []);
+  assert.deepEqual(R.selectForTask(idx, 'medication dosage', 'vision', { includeSensitive: true }), [],
+    'vision retrieves nothing even with consent');
+});
+
+test('screen-derived asks are forced to the vision budget whatever the task', () => {
+  const idx = R.buildIndex(corpus);
+  assert.deepEqual(R.selectForTask(idx, 'camera and photography', 'chat', { derivedFrom: 'screen' }), []);
+  assert.deepEqual(R.selectForTask(idx, 'camera and photography', 'goal', { derivedFrom: 'screen' }), []);
+  assert.deepEqual(R.selectForTask(idx, 'camera and photography', 'screen', { derivedFrom: 'screen' }), []);
+  assert.ok(R.selectForTask(idx, 'camera and photography', 'chat').length > 0,
+    'the same chat ask without the screen derivation still retrieves');
+});
+
+test('chat, screen and goal budgets hold their caps', () => {
+  const many = Array.from({ length: 40 }, (_, i) => ({ id: `d${i}`, section: 'Facts', text: `shared topic variant ${i} detail ${i}` }));
+  const idx = R.buildIndex(many);
+  const q = 'shared topic detail';
+  assert.equal(R.selectForTask(idx, q, 'chat').length, 12);
+  assert.equal(R.selectForTask(idx, q, 'screen').length, 6);
+  assert.equal(R.selectForTask(idx, q, 'goal').length, 8);
+  assert.equal(R.selectForTask(idx, q, 'unknown-task').length, 8, 'unclassified tasks take the default budget');
+});
+
+test('synonym expansion defaults ON in the wired path (frozen map kept)', () => {
+  const idx = R.buildIndex(corpus);
+  const ids = R.selectForTask(idx, 'household chores schedule', 'screen').map((r) => r.id);
+  assert.ok(ids.includes('f29') && ids.includes('f16'));
+});
+
+test('SYNONYM FREEZE: the map is exactly the measured frozen set; any change is a benchmark event', () => {
+  const frozen = {
+    chore: ['laundry', 'grocerie', 'watering', 'cleaning'],
+    laundry: ['chore', 'washing'],
+    diet: ['eat', 'food', 'allergic'],
+    eat: ['diet', 'food', 'allergic', 'spice'],
+    dietary: ['diet', 'food', 'allergic'],
+    restaurant: ['eat', 'food', 'dining'],
+    running: ['run', 'marathon'],
+    fitness: ['run', 'marathon', 'exercise'],
+    weekend: ['saturday', 'sunday'],
+    activities: ['hobby', 'volunteer', 'club'],
+    family: ['parents', 'sibling'],
+    habits: ['planning', 'plans', 'routine'],
+    meeting: ['call', 'appointment'],
+    credential: ['password', 'locker', 'passport'],
+    document: ['scan', 'paperwork', 'transcript'],
+  };
+  assert.deepEqual(R.SYNONYMS, frozen);
 });
