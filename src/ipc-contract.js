@@ -7,11 +7,19 @@
 // from it.
 //
 // Standing boundaries this contract encodes:
-//   - The renderer surface is READ-ONLY. The preload allowlist must be
+//   - The renderer surface is READ-ONLY with ONE deliberate, narrow
+//     exception: notifications:ack (blueprint 3j.4 option C, the user's
+//     decision of 24 Nov 2026). It is an id-only acknowledgement REQUEST
+//     a renderer may emit ONLY from an explicit per-record user gesture;
+//     the renderer asserts nothing (no 'displayed' claims, timestamps or
+//     verdicts) and performs no write itself: main validates the id,
+//     re-derives the state, performs the transition through the
+//     persistence layer's durable guarantees, and stays authoritative.
+//     Everything else stays read-only: the preload allowlist must be
 //     exactly RENDERER_CHANNELS: status, audit snapshot, run state,
 //     provider status, and the harmless tools' record reads. Nothing
 //     that executes, grants, approves, or stops is ever exposed.
-//   - Every write path (run start/step/resume, approvals, grants,
+//   - Every other write path (run start/step/resume, approvals, grants,
 //     emergency stop, persistence) is MAIN_ONLY_CHANNELS: reachable only
 //     from main-process code the user controls, never from the renderer,
 //     and never added to the preload allowlist.
@@ -29,6 +37,9 @@ const RENDERER_CHANNELS = [
   'providers:get',
   'notifications:read',
   'reminders:read',
+  // The ONE exception (blueprint 3j.4 option C): a user-gesture
+  // acknowledgement request. Id-only; see the header comment.
+  'notifications:ack',
 ];
 
 // Documented main-process-only operations. These names are deliberately
@@ -70,6 +81,11 @@ const FIELD_RULES = {
   'notifications:read': {
     limit: { type: 'int', range: intIn(1, 500), optional: true },
   },
+  'notifications:ack': {
+    // Id-only request: exactly one field, the record id. No timestamps,
+    // no 'displayed' claims, no verdicts are accepted from the renderer.
+    id: { type: 'string', max: 16 },
+  },
   'reminders:read': {
     limit: { type: 'int', range: intIn(1, 500), optional: true },
   },
@@ -93,7 +109,15 @@ function validateRequest(channel, payload) {
   if (typeof channel !== 'string' || !RENDERER_CHANNELS.includes(channel)) {
     return { ok: false, reason: 'unknown_channel' };
   }
-  if (payload === undefined || payload === null) return { ok: true, payload: {} };
+  const rules0 = FIELD_RULES[channel] || {};
+  // A required field must be present: an empty payload is NOT a valid
+  // request for a channel that declares one (notifications:ack's id).
+  if (payload === undefined || payload === null) {
+    const required = Object.keys(rules0).find((k) => !rules0[k].optional);
+    return required
+      ? { ok: false, reason: 'missing_field:' + required }
+      : { ok: true, payload: {} };
+  }
   if (!isPlainObject(payload)) return { ok: false, reason: 'bad_payload' };
   const rules = FIELD_RULES[channel];
   const out = {};
@@ -127,6 +151,10 @@ function validateRequest(channel, payload) {
       return { ok: false, reason: 'bad_rule:' + key };
     }
     out[key] = v; // primitive copy; accessors were refused, so no getter runs
+  }
+  // Presence pass: every non-optional declared field must have arrived.
+  for (const key of Object.keys(rules)) {
+    if (!rules[key].optional && !(key in out)) return { ok: false, reason: 'missing_field:' + key };
   }
   return { ok: true, payload: out };
 }

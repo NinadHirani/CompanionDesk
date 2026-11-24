@@ -146,9 +146,18 @@ test('panel: the renderer file stays free of markup-setting surfaces and mutatio
     assert.equal(banned.test(src), false, 'panel code must not match ' + banned);
   }
   assert.ok(src.includes('textContent'));
-  // the display path must not send anything back: no invoke of a write, no
-  // ack, no markRead, no persistence call
-  for (const banned of ['markRead', 'acknowledg', 'run_start', 'run:step', 'approval', 'grants', 'persistence']) {
+  // the panel's only write-ish path is the explicit id-only acknowledge
+  // gesture (blueprint 3j.5): notifications_ack, called only from the
+  // button's click listener. No markRead, no run/approval/grant/
+  // persistence references, and nothing sends data back from a read.
+  for (const banned of ['markRead', 'run_start', 'run:step', 'approval', 'grants', 'persistence']) {
+    assert.equal(src.toLowerCase().includes(banned.toLowerCase()), false, 'panel code must not reference ' + banned);
+  }
+  // The word acknowledge appears only as button labels/state text; the
+  // single channel reference is the notifications_ack request.
+  assert.equal(src.split('notifications_ack').length - 1, 2, 'guard plus the one id-only call');
+  assert.ok(src.includes("notifications_ack({ id: n.id })"), 'the request is id-only');
+  for (const banned of ['acknowledg(', 'acknowledgement(', 'markread']) {
     assert.equal(src.toLowerCase().includes(banned.toLowerCase()), false, 'panel code must not reference ' + banned);
   }
 });

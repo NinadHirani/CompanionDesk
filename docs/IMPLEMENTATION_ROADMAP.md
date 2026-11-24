@@ -304,13 +304,13 @@ byte-for-byte intact, sanitized code-only error, no in-place write of
 the target; atomicity is never traded for availability), and start()
 never throws (every failure path returns blocked with the store closed
 and sanitized reasons).
-Remaining Gate 2 work: the user's acknowledgement decision (blueprint
-3j.1/3j.2/3j.3: the read-only renderer display slice is done and the
-main-owned in-memory display store exists as a read-only foundation;
-nothing appends to it yet and no ack policy is decided; the ack decision
-is a separate reviewed gate that stays with the user), delivery-wiring
-into the store, scheduling and file output, each an explicitly-reviewed
-gate (the pure delivery bridge is implemented; blueprint 3j).
+Remaining Gate 2 work: the acknowledgement gate is DONE (option C,
+blueprint 3j.5: id-only notifications:ack from an explicit per-record
+gesture, durable-before-state, replay idempotent; the display store
+stays ack-free). Still remaining, each an explicitly-reviewed gate:
+delivery wiring into the display store (per the ack decision the store
+is ready and unwired), scheduling, and file output (the pure delivery
+bridge is implemented; blueprint 3j).
 Acceptance: policy
 engine refuses ungranted calls (tested); payments, purchases, destructive
 deletion, and legal or binding submissions are denied unless fresh,

@@ -29,6 +29,7 @@ function fixtures(overrides) {
     listNotifications: (limit) => [{ id: 'ntf-000001', title: 't', body: 'b', priority: 'normal', createdAt: 1, read: false }].slice(0, limit),
     listReminders: (limit) => [{ id: 'rem-000001', title: 't', dueAt: 2, notes: null, createdAt: 1, cancelled: false }].slice(0, limit),
     listDisplayNotifications: () => [],
+    acknowledgeNotification: (id) => ({ ok: true, idempotent: false, persisted: true }),
   };
   return Object.assign(base, overrides || {});
 }
@@ -125,7 +126,7 @@ test('surface: non-plain records are dropped, not rendered', () => {
   assert.deepEqual(boundedRecords([null, 'x', 5, { id: 'ok' }], 10), [{ id: 'ok' }]);
 });
 
-test('surface: registerIpc registers exactly the six channels on the dispatcher', () => {
+test('surface: registerIpc registers exactly the contract channels on the dispatcher', () => {
   const s = createAgentSurface(fixtures());
   const registered = [];
   s.registerIpc({ handle: (c, fn) => registered.push([c, typeof fn]) });

@@ -205,7 +205,7 @@ claims to literally experience emotions.
 - Update policy that never auto-installs unsigned builds; update modes
   disabled/auto/manual-download (`src/update-policy.js`, `src/updater.js`).
 - Health check and onboarding interview (`src/health.js`, `src/onboarding.js`).
-- 689 passing unit/integration tests (258 baseline; model selection +18, conversation history +17, optional key storage +13, M1 provider registry/task router/cloud gate +25, M1 per-ask routing integration +18, M1 review fixes +18, M1 hardware profiles +12, M1 provider status +11, M1 provider contract tests +18, M1 provider fault diagnostics +18, fault-detail sanitization review fix +3, offline memory-v2 retrieval harness +12, memory-v2 harness slice 4 fold fix and bridges +5, memory-v2 store contract tests +9, Gate 2 agent safety foundation +35, Gate 2 security hardening +8, Gate 2 persistence +17, M1 diagnostics hardening +2, Gate 2 orchestrator +13, orchestrator audit hardening +13, first harmless tools +18, ICS
+- 701 passing unit/integration tests (258 baseline; model selection +18, conversation history +17, optional key storage +13, M1 provider registry/task router/cloud gate +25, M1 per-ask routing integration +18, M1 review fixes +18, M1 hardware profiles +12, M1 provider status +11, M1 provider contract tests +18, M1 provider fault diagnostics +18, fault-detail sanitization review fix +3, offline memory-v2 retrieval harness +12, memory-v2 harness slice 4 fold fix and bridges +5, memory-v2 store contract tests +9, Gate 2 agent safety foundation +35, Gate 2 security hardening +8, Gate 2 persistence +17, M1 diagnostics hardening +2, Gate 2 orchestrator +13, orchestrator audit hardening +13, first harmless tools +18, acknowledgement gate (3j.5) +12, ICS
   hardening +5, injection corpus +27, IPC contract +5, IPC contract review hardening +11, agent surface
   wiring +21, persistence hardening +6 (strict records, acknowledged
   appends flush to disk immediately, unacknowledged appends roll back),
@@ -780,6 +780,113 @@ Recommendation shape, not a decision: if any ack exists at all, C is the
 honest variant; if the desk's purpose stays "a bounded log of what was
 delivered", A is coherent and nothing needs building. The display store
 as built (3j.3) is compatible with every option and requires no change.
+
+DECISION RECORDED 24 Nov 2026: the user chose option C, acknowledge only
+after an explicit user gesture. Implemented and verified as blueprint
+section 3j.5 (commit and CI run ids recorded there). Nothing else in this
+memo was adopted.
+
+## 3j.5. Acknowledgement gate, option C (24 Nov 2026): implemented and verified
+
+The user chose option C from the 3j.4 memo: a notification is
+acknowledged only after an explicit user gesture on that specific
+record. This section describes what was built, verified, and what it
+deliberately does not do.
+
+Policy, as implemented:
+
+- Rendering, listing, opening the panel, polling, focus, visibility and
+  receiving NEVER acknowledge. The only code path that can request an
+  acknowledgement is the panel's per-record acknowledge button's click
+  listener; tests pin it to exactly one call site (the display-store
+  and view scans now ban every auto-ack trigger: no timers, no focus,
+  hover, mouseenter or visibilitychange references in the panel).
+- The request is id-only. A new renderer channel, notifications:ack,
+  was added to the contract as THE ONE exception to the read-only
+  surface, with a required single string field id (max 16). The contract
+  now enforces required fields, so an empty or null payload is refused
+  with missing_field:id; the other six channels are unchanged (all
+  optional). No renderer claim is accepted: there is no field for
+  'displayed', timestamps, or verdicts, and extra fields are refused by
+  the existing unknown_field rule. The handler additionally enforces the
+  exact record-id format (ntf- + six digits) before anything runs.
+- Main stays authoritative. The handler forwards the validated id to
+  the persistence layer's acknowledgeNotification(); the renderer
+  performs no write itself. The writer is required at surface
+  construction (fail closed, like the display reader); a blocked or
+  failed runtime refuses with persistence_unavailable.
+- The persisted desk's existing read flag (agent_notifications.read) is
+  the ONLY canonical acknowledgement state. No parallel ack ledger or
+  ack state exists anywhere; the display store (3j.3) stays ack-free and
+  was not changed.
+- Durability before state: the acknowledgement is recorded through the
+  persistence layer's existing durable audit wrapper (appendAudit), which
+  writes the audit row and the chain anchor in ONE transaction and
+  flushes to disk BEFORE returning (the same log-before-commit boundary
+  the orchestrator uses). Only after that acknowledged append does the
+  desk record flip to read, and only then does save() converge the desk
+  row. On any integrity failure, audit failure or persist failure the
+  function refuses and the record stays unread. No silent fallback.
+- Idempotent replay: a repeat for an already-read record returns
+  idempotent and appends NO second audit entry (no misleading
+  duplicates). It still converges the desk row so a previously failed
+  save is retried, and reports honestly whether that worked.
+- Audit entry shape: actor=user, action=notification.acknowledge,
+  decision=allowed, reason=user_gesture, detail={notification_id}. The
+  detail carries ONLY the id: never the title or body (audit sanitizer
+  allowlist already bounds it).
+- The panel shows one clearly labelled button per UNREAD record
+  (text: 'acknowledge <id>', aria-label 'Acknowledge notification
+  <id>'), rendered with textContent only. It is a real <button
+  type=button>, so Enter and Space activate it natively; the disabled
+  state and 'acknowledged <id>' label reflect the RESPONSE from main,
+  never an optimistic local assumption. Read records get no button.
+
+Security review of the previous read-only assertions: adding the ack
+request DOES narrow the renderer's read-only guarantee, by exactly one
+capability, and that is documented in the contract, the app allowlist
+(ipc-channels.js) and the preload inline list, each with the rationale
+inline. Everything else was re-checked, not assumed: the main-only
+channel list is unchanged; the handler set still equals the contract
+exactly; the display store and view modules still contain no ack or
+write semantics (their scans still ban markRead); the panel still
+cannot start/step/resume/abort a run, approve, grant, stop or write
+persistence; and the read responses are untouched. Tests were updated
+precisely where the exception lives; no test was weakened broadly (the
+panel scans were narrowed, not dropped, and now also ban auto-ack
+triggers).
+
+Verification: 701/701 unit and integration tests pass (689 before;
++12 in the new dedicated adversarial suite tests/
+gate2-notification-ack.test.js), plus the repo selftest. The adversarial
+suite covers: non-gesture reads never ack; only the explicit request
+does; malformed/hostile ids and payloads refused (accessors, symbols,
+prototypes, wrong types, wrong formats, other desks' id shapes); unknown
+and stale ids refused with nothing changed; replay idempotency within a
+session and across a restart; a durability failure (forced flush
+failure) preserves the unread state, rolls the unacknowledged append
+back, and the same record can then be acknowledged for real; a failed
+save reports persisted:false instead of claiming convergence; a
+tampered audit row inside the database fails closed on load and every
+write then refuses with integrity_failure; restart round-trip reopens
+the read flag with the chain verified; renderer reload (surface
+fixtures) and unauthorized channels are refused; the display store
+carries no ack state and is untouched by an ack; end-to-end through the
+surface flips the read flag the read channel reports.
+
+Known limits, stated honestly: if save() fails after the durable audit
+append, the in-memory desk is read while the desk row stays unread
+until the next successful save converges it (the same convergence-
+pending reporting before-quit already uses; a restart after such a
+failure would show the record unread again, and re-acknowledging it
+then appends one honest audit entry, not a misleading duplicate). No
+device testing was done (validation targets only; nothing here is
+platform-specific). Desktop/main-process wiring only: the web and
+mobile builds do not include the panel or the surface, and the
+required display reader stays desktop-renderer-only by design.
+
+Commit: <code commit sha, filled by the docs commit>. CI: <run ids,
+filled by the docs commit>.
 
 ## 4. Planned, NOT implemented
 

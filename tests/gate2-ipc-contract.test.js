@@ -1,11 +1,14 @@
 'use strict';
-// Gate 2 slice 6: the IPC contract is fail-closed and read-only for the
-// renderer. These tests are the boundary the wiring layer must satisfy.
+// Gate 2 slice 6: the IPC contract is fail-closed: six reads for the
+// renderer plus ONE narrow, deliberate exception, notifications:ack
+// (blueprint 3j.4 option C, the user's decision of 24 Nov 2026), an
+// id-only acknowledgement request driven by an explicit per-record user
+// gesture. These tests are the boundary the wiring layer must satisfy.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { RENDERER_CHANNELS, MAIN_ONLY_CHANNELS, validateRequest, validatePreloadAllowlist, refusalResponse } = require('../src/ipc-contract.js');
 
-test('the renderer surface is read-only by construction', () => {
+test('the renderer surface is six reads plus the one acknowledged exception', () => {
   for (const ch of RENDERER_CHANNELS) {
     assert.match(ch, /^(status|runs|audit|providers|notifications|reminders):/, 'renderer channels are reads only: ' + ch);
   }
@@ -19,6 +22,10 @@ test('the renderer surface is read-only by construction', () => {
       assert.equal(ch.includes(':' + w), false, 'renderer channel ' + ch + ' must not carry a write verb');
     }
   }
+  // The exception is exactly one channel, id-only by rule, documented in
+  // the contract header. Its rules must carry no optional fields and no
+  // field other than id, so no renderer claim can ever ride along.
+  assert.deepEqual(RENDERER_CHANNELS.filter((c) => c.endsWith(':ack')), ['notifications:ack']);
 });
 
 test('unknown and main-only channels are refused (fail closed)', () => {
@@ -59,6 +66,26 @@ test('payloads validate strictly: shapes, types, and no extra keys', () => {
   assert.notEqual(ok.payload, inPayload);
   assert.deepEqual(validateRequest('audit:read', { limit: 100, fromSeq: 5 }).payload, { limit: 100, fromSeq: 5 });
   assert.deepEqual(validateRequest('reminders:read', { limit: 10 }).payload, { limit: 10 });
+  // The ack request is id-only: missing id, extra claims, wrong types and
+  // malformed ids are all refused before anything is forwarded.
+  assert.deepEqual(validateRequest('notifications:ack', { id: 'ntf-000001' }).payload, { id: 'ntf-000001' });
+  assert.equal(validateRequest('notifications:ack', {}).ok, false);
+  assert.equal(validateRequest('notifications:ack', { id: 'ntf-000001', displayed: true }).ok, false);
+  assert.equal(validateRequest('notifications:ack', { id: 'ntf-000001', displayedAt: 123 }).ok, false);
+  assert.equal(validateRequest('notifications:ack', { id: 42 }).ok, false);
+  assert.equal(validateRequest('notifications:ack', { id: 'x'.repeat(17) }).ok, false);
+  // A well-formed-shaped but wrong-format id passes the contract on
+  // purpose: exact format is the handler layer's check (its own regex).
+  assert.equal(validateRequest('notifications:ack', { id: 'ntf-00000x' }).ok, true);
+  assert.equal(validateRequest('notifications:ack', new Date()).ok, false);
+  // A required field must be present: an empty or null payload is not a
+  // valid request for the ack channel.
+  assert.equal(validateRequest('notifications:ack', null).ok, false);
+  assert.equal(validateRequest('notifications:ack', undefined).ok, false);
+  // The other channels declare no required field, so their behaviour is
+  // exactly as before.
+  assert.deepEqual(validateRequest('status:get', null).payload, {});
+  assert.deepEqual(validateRequest('status:get', undefined).payload, {});
 });
 
 test('validatePreloadAllowlist proves the wiring surface equals the contract', () => {

@@ -70,15 +70,21 @@ const IPC_CHANNELS = [
   'ollama:pullStart',
   'ollama:pullCancel',
 
-  // Gate 2 read-only agent surface. Mirrors RENDERER_CHANNELS in
-  // ipc-contract.js exactly; no main-only channel (run start/step/resume/
-  // abort, approvals, grants, stop, persistence) may ever be added here.
+  // Gate 2 agent surface. Mirrors RENDERER_CHANNELS in ipc-contract.js
+  // exactly: six reads plus ONE narrow exception, notifications:ack
+  // (blueprint 3j.4 option C, chosen by the user on 24 Nov 2026): an
+  // id-only acknowledgement REQUEST the panel emits only from an explicit
+  // per-record user gesture. The renderer performs no write itself; main
+  // validates the id and stays authoritative. No main-only channel (run
+  // start/step/resume/abort, approvals, grants, stop, persistence) may
+  // ever be added here.
   'status:get',
   'runs:get',
   'audit:read',
   'providers:get',
   'notifications:read',
   'reminders:read',
+  'notifications:ack',
 ];
 
 // Messages main may push to this window. Mirrors IPC_EVENTS in ipc-channels.js.

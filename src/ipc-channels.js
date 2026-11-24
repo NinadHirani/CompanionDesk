@@ -68,8 +68,13 @@ const IPC_CHANNELS = Object.freeze([
   'ollama:pullStart',
   'ollama:pullCancel',
 
-  // Gate 2 read-only agent surface (ipc-contract.js RENDERER_CHANNELS).
-  // Every one of these is a read; run start/step/resume/abort, approvals,
+  // Gate 2 agent surface (ipc-contract.js RENDERER_CHANNELS): six reads
+  // plus ONE narrow exception, notifications:ack (blueprint 3j.4 option C,
+  // the user's decision of 24 Nov 2026): an id-only acknowledgement
+  // REQUEST emitted only from an explicit per-record user gesture in the
+  // panel. Main stays authoritative: it validates the id, performs the
+  // transition through the persistence layer's durable audit guarantees,
+  // and refuses everything else. Run start/step/resume/abort, approvals,
   // grants, stop and persistence stay main-only and are never listed here.
   'status:get',
   'runs:get',
@@ -77,6 +82,7 @@ const IPC_CHANNELS = Object.freeze([
   'providers:get',
   'notifications:read',
   'reminders:read',
+  'notifications:ack',
 ]);
 
 // Messages main may PUSH to a window (streaming tokens and the like). The

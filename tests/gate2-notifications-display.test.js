@@ -5,7 +5,10 @@
 // retention, survives duplicate delivery, cannot be mutated through
 // returned references, closes fail-closed, and reaches the renderer only
 // through the EXISTING notifications:read channel as an additive display
-// section, with no ack/markRead semantics and no new privileged IPC.
+// section, with no ack/markRead semantics of its own. The acknowledgement
+// capability lives in the persistence layer and the notifications:ack
+// channel (blueprint 3j.5); the DISPLAY STORE itself still carries no ack
+// state and no new privileged IPC.
 const test = require('node:test');
 const assert = require('node:assert');
 const fs = require('node:fs');
@@ -35,6 +38,9 @@ function readers(store, over = {}) {
     listNotifications: () => [],
     listReminders: () => [],
     listDisplayNotifications: (limit) => store.list(limit),
+    // The writer is required by the surface now (blueprint 3j.5); these
+    // display tests never drive it, so the fixture reports a refusal.
+    acknowledgeNotification: () => ({ ok: false, reason: 'fixture_refuses' }),
   }, over);
 }
 
@@ -203,8 +209,8 @@ test('agent surface: reading twice never mutates the store', () => {
   assert.equal(st.isClosed(), false);
 });
 
-test('ipc contract: the channel set is unchanged and display is not a channel', () => {
-  assert.deepEqual(RENDERER_CHANNELS, ['status:get', 'runs:get', 'audit:read', 'providers:get', 'notifications:read', 'reminders:read']);
+test('ipc contract: six reads plus the one ack request; display is not a channel', () => {
+  assert.deepEqual(RENDERER_CHANNELS, ['status:get', 'runs:get', 'audit:read', 'providers:get', 'notifications:read', 'reminders:read', 'notifications:ack']);
 });
 
 test('main wiring: the store is created in main, exposed read-only, and closed at quit', () => {
@@ -217,12 +223,26 @@ test('main wiring: the store is created in main, exposed read-only, and closed a
   assert.equal(src.includes('notificationsDisplay.append'), false);
 });
 
-test('renderer panel: the display section is read-only presentation', () => {
+test('renderer panel: display stays read-only; the ack path is the single id-only gesture', () => {
   const src = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'agent-panel.js'), 'utf8');
   assert.ok(src.includes('notifications.data.display'));
   const code = src.replace(/\/\*[\s\S]*?\*\//g, '').split('\n').map((l) => l.replace(/\/\/.*$/, '')).join('\n');
-  for (const banned of ['markRead', 'acknowledg', 'invoke', 'send(']) {
+  // The display section itself never writes: no markRead, no direct ipc
+  // access, no generic invoke. 'display' records get no ack button.
+  for (const banned of ['markRead', 'ipcRenderer', 'invoke']) {
     assert.equal(code.includes(banned), false, 'panel code must not reference ' + banned);
+  }
+  // The ONE write-ish call in the panel is notifications_ack, and it
+  // appears exactly twice: the typeof guard and the id-only call inside
+  // the button's click listener. No polling, focus, hover or visibility
+  // path may trigger it, and no renderer claim rides along.
+  assert.equal(code.split('notifications_ack').length - 1, 2, 'exactly the guard and the click call');
+  const callIdx = code.indexOf('notifications_ack({ id: n.id })');
+  assert.ok(callIdx > -1, 'the ack call is the id-only shape');
+  const listenerIdx = code.lastIndexOf("addEventListener('click'", callIdx);
+  assert.ok(listenerIdx > -1 && listenerIdx < callIdx, 'the ack call sits inside the click listener');
+  for (const banned of ['setInterval', 'setTimeout', 'visibilitychange', "addEventListener('focus'", "addEventListener('hover'", 'mouseover', 'mouseenter']) {
+    assert.equal(code.includes(banned), false, 'no auto-ack trigger: panel code must not reference ' + banned);
   }
 });
 

@@ -4,8 +4,10 @@
 // modules), so the proof reads the shipped source: the inlined channel
 // list must contain every contract renderer channel, no main-only channel
 // may appear anywhere in its surface, and the push-event allowlist carries
-// no agent operation. The renderer panel may call only the six read
-// methods.
+// no agent operation. The renderer panel calls the six read methods plus
+// ONE narrow exception, notifications_ack (blueprint 3j.5, option C): an
+// id-only acknowledgement request emitted only from the panel's explicit
+// per-record acknowledge button.
 
 const test = require('node:test');
 const assert = require('node:assert');
@@ -74,7 +76,7 @@ test('renderer: the agent panel is wired into the page', () => {
   assert.ok(htmlSrc.includes('agent-panel.js'));
 });
 
-test('renderer: the panel calls only the six read methods', () => {
+test('renderer: the panel calls the six read methods plus the one id-only ack request', () => {
   const readMethods = RENDERER_CHANNELS.map((c) => c.replace(':', '_'));
   for (const m of readMethods) assert.ok(panelSrc.includes(m), 'panel should call ' + m);
   const forbidden = MAIN_ONLY_CHANNELS.map((c) => c.replace(':', '_'));

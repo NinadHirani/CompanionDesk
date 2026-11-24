@@ -44,6 +44,9 @@
   const sanitizeEntry = auditModule.sanitize;
 
   const ID64_RE = /^[a-f0-9]{64}$/;
+  // Notification record id, exactly as the desk builds it ('ntf-' + six
+  // digits). acknowledgeNotification accepts ONLY this shape.
+  const NOTIF_ID_RE = /^ntf-\d{6}$/;
   const RUN_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
   const RUN_KIND_RE = /^[a-z][a-z0-9_.]{0,47}$/;
   const RUN_STATES = ['running', 'succeeded', 'failed', 'aborted'];
@@ -536,6 +539,61 @@
       }
     }
 
+    // Blueprint 3j.5 (option C, the user's decision of 24 Nov 2026): the
+    // ONLY acknowledged transition a renderer request can drive. The
+    // renderer sends just a record id from an explicit user gesture; main
+    // re-derives everything here. Semantics:
+    //   - The persisted desk's existing read flag is the canonical
+    //     acknowledgement state (agent_notifications.read). No duplicate
+    //     state is created; nothing about the record itself changes.
+    //   - Rendering, listing, polling or receiving NEVER reaches this
+    //     function: the only caller is main's notifications:ack handler.
+    //   - The acknowledgement is durably recorded BEFORE the desk flips
+    //     (log-before-commit): appendAudit persists the audit row and the
+    //     chain anchor in ONE transaction and flushes before returning.
+    //     If that fails, nothing is marked read and the refusal preserves
+    //     the unread state. No silent fallback, ever.
+    //   - A repeat for an already-read record is idempotent and appends
+    //     NO second audit entry (a replay must not create misleading
+    //     duplicates); it still converges the desk row so a previously
+    //     failed save is retried, and reports honestly whether it did.
+    //   - On integrity failure every write refuses fail-closed.
+    // Known limit: if save() fails after the durable append, the
+    // in-memory desk is read while the desk row stays unread until the
+    // next successful save converges it; that is the same honest
+    // convergence-pending reporting before-quit already uses, never a
+    // silent success claim.
+    function acknowledgeNotification(id) {
+      if (!status.ok) return { ok: false, reason: 'integrity_failure', problems: [...status.problems] };
+      if (typeof id !== 'string' || !NOTIF_ID_RE.test(id)) return { ok: false, reason: 'id_invalid' };
+      if (!notifications || typeof notifications.exportAll !== 'function' || typeof notifications.markRead !== 'function') {
+        return { ok: false, reason: 'no_notifications_desk' };
+      }
+      const recs = notifications.exportAll();
+      const rec = Array.isArray(recs) ? recs.find((r) => r && r.id === id) : null;
+      if (!rec) return { ok: false, reason: 'notification_unknown' };
+      if (rec.read === true) {
+        const saved = save();
+        return { ok: true, idempotent: true, persisted: saved.ok === true, reason: saved.ok === true ? undefined : 'persist_failure' };
+      }
+      const aud = appendAudit({
+        actor: 'user',
+        action: 'notification.acknowledge',
+        decision: 'allowed',
+        reason: 'user_gesture',
+        detail: { notification_id: id },
+      });
+      if (!aud.ok) return { ok: false, reason: aud.reason === 'persist_failure' ? 'audit_not_durable' : 'audit_refused' };
+      // The durable record exists; only now may the desk flip. markRead on
+      // a record found above cannot fail, and a failure here would leave
+      // the desk untouched with an audit entry for a transition main
+      // refused to perform, so it is reported as a hard refusal.
+      const marked = notifications.markRead(id);
+      if (!marked.ok) return { ok: false, reason: 'ack_failed' };
+      const saved = save();
+      return { ok: true, idempotent: false, persisted: saved.ok === true, reason: saved.ok === true ? undefined : 'persist_failure' };
+    }
+
     function exportArchive() {
       if (!status.ok) return { ok: false, reason: 'integrity_failure', problems: [...status.problems] };
       if (!audit) return { ok: false, reason: 'no_audit' };
@@ -695,6 +753,7 @@
       listRuns,
       status: getAuditStatus,
       durableAudit,
+      acknowledgeNotification,
       // NOTE: intentionally no resume API. A 'running' agent_runs row after a
       // restart stays exactly as it is; resuming a run is an explicit
       // orchestrator decision, never an automatic one.

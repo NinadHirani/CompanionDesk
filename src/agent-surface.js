@@ -2,15 +2,23 @@
 // Gate 2 wiring slice 1 (main side): the read-only agent surface.
 //
 // Main owns the agent runtime. The renderer sees exactly the six read
-// channels of src/ipc-contract.js, every request validated, every refusal
-// bounded. This module is pure: it builds handlers from reader functions
-// and can register them on any dispatcher with a handle(channel, fn)
-// method, so tests drive it without Electron.
+// channels of src/ipc-contract.js plus ONE narrow exception,
+// notifications:ack (blueprint 3j.4 option C, the user's decision of
+// 24 Nov 2026): an id-only acknowledgement REQUEST driven by an explicit
+// per-record user gesture. The request performs no write itself; main
+// validates the id, re-derives the state, performs the transition through
+// the persistence layer's durable guarantees, and stays authoritative.
+// Every request validated, every refusal bounded. This module is pure: it
+// builds handlers from reader functions and can register them on any
+// dispatcher with a handle(channel, fn) method, so tests drive it without
+// Electron.
 //
 // Boundaries this module enforces:
 //   - Handlers exist ONLY for RENDERER_CHANNELS. No main-only channel
 //     (run start/step/resume/abort, approvals, grants, emergency stop,
-//     persistence) is built, named, or reachable here.
+//     persistence) is built, named, or reachable here. The ack handler
+//     forwards only the validated id; it never writes state itself and
+//     never accepts renderer claims such as 'displayed' or verdicts.
 //   - Every payload passes validateRequest before a reader runs; a
 //     request that fails validation is never forwarded.
 //   - Reader output is shaped to bounded plain data before it leaves:
@@ -113,7 +121,7 @@ function createAgentSurface(readers) {
   // listDisplayNotifications is REQUIRED (fail closed): main cannot build
   // the surface without a display store reader. It reads only the
   // main-owned display store; it never writes anything.
-  for (const name of ['status', 'listRuns', 'readAudit', 'listProviders', 'listNotifications', 'listReminders', 'listDisplayNotifications']) {
+  for (const name of ['status', 'listRuns', 'readAudit', 'listProviders', 'listNotifications', 'listReminders', 'listDisplayNotifications', 'acknowledgeNotification']) {
     if (typeof r[name] !== 'function') throw new TypeError('agent surface needs a ' + name + ' reader');
   }
 
@@ -166,6 +174,25 @@ function createAgentSurface(readers) {
     'reminders:read': handlerFor('reminders:read', (f) => {
       const found = r.listReminders(f.limit);
       return { reminders: boundedRecords(Array.isArray(found) ? found : [], f.limit) };
+    }),
+    'notifications:ack': handlerFor('notifications:ack', (f) => {
+      // The ONE non-read request (blueprint 3j.5). Id-only by contract
+      // rule; the exact format is checked again here so the writer only
+      // ever sees a well-formed record id. The writer's bounded outcome
+      // (acknowledged / idempotent / persisted / reason) is the whole
+      // answer: nothing else about the record, the store or the audit
+      // crosses to the renderer. No renderer claim is trusted.
+      if (typeof f.id !== 'string' || !/^ntf-\d{6}$/.test(f.id)) {
+        return { acknowledged: false, idempotent: false, persisted: false, reason: 'id_invalid' };
+      }
+      const out = r.acknowledgeNotification(f.id);
+      const o = out && typeof out === 'object' ? out : {};
+      return {
+        acknowledged: o.ok === true,
+        idempotent: o.idempotent === true,
+        persisted: o.persisted === true,
+        reason: typeof o.reason === 'string' ? o.reason.slice(0, 64) : null,
+      };
     }),
   };
 

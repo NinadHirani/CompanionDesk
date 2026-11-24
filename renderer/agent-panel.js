@@ -1,10 +1,16 @@
 'use strict';
-// Read-only agent status panel (Gate 2 wiring). Every call goes through
-// window.companiondesk's six read-only channels. This file cannot start,
-// step, resume or abort a run, approve anything, change grants, touch the
-// emergency stop, or write persistence: the preload never exposes those
-// operations. The panel renders text only (textContent, never innerHTML)
-// and stays silent when a channel is refused or missing.
+// Agent status panel (Gate 2 wiring). Every call goes through
+// window.companiondesk's six read-only channels plus ONE narrow
+// exception, notifications_ack (blueprint 3j.4 option C): an id-only
+// acknowledgement request emitted ONLY from the explicit per-record
+// acknowledge button below. Rendering, listing, opening the panel,
+// polling, focus, visibility and receiving NEVER acknowledge anything.
+// This file cannot start, step, resume or abort a run, approve anything,
+// change grants, touch the emergency stop, or write persistence: the
+// preload never exposes those operations, and the ack request carries
+// only a record id while main stays authoritative. The panel renders
+// text only (textContent, never innerHTML) and stays silent when a
+// channel is refused or missing.
 (function () {
   const READ_METHODS = ['status_get', 'runs_get', 'audit_read', 'providers_get', 'notifications_read', 'reminders_read'];
 
@@ -91,6 +97,34 @@
           if (shaped.skipped > 0) {
             panel.appendChild(line('notifications: ' + shaped.skipped + ' malformed record(s) not shown'));
           }
+        }
+      }
+      // Acknowledge actions (blueprint 3j.5, option C): the explicit
+      // per-record gesture is the ONLY thing that requests an
+      // acknowledgement. One clearly labelled button per UNREAD record;
+      // read records get no button. The request is id-only and main
+      // stays authoritative: the button's disabled state reflects the
+      // RESPONSE, never an optimistic local assumption.
+      const unread = (notifications && notifications.ok && notifications.data && Array.isArray(notifications.data.notifications))
+        ? notifications.data.notifications.filter((n) => n && n.id && n.read === false)
+        : [];
+      if (unread.length && a && typeof a.notifications_ack === 'function') {
+        for (const n of unread) {
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.textContent = 'acknowledge ' + n.id;
+          btn.setAttribute('aria-label', 'Acknowledge notification ' + n.id);
+          btn.addEventListener('click', () => {
+            a.notifications_ack({ id: n.id }).then((res) => {
+              if (res && res.ok === true && res.data && res.data.acknowledged === true) {
+                btn.disabled = true;
+                btn.textContent = 'acknowledged ' + n.id;
+              }
+            }).catch(() => {
+              // Refusals and failures keep the panel quiet; nothing retries.
+            });
+          });
+          panel.appendChild(btn);
         }
       }
       // Display store section: the same notifications:read response also

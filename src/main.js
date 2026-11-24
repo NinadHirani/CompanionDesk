@@ -78,6 +78,7 @@ let agentRegistry = null;
 let agentApprovals = null;
 let agentStop = null;
 let agentAudit = null;
+  let agentPersistence = null;
 let agentOrchestrator = null;
 let agentNotifications = null;
 // Main-owned notification display store (blueprint 3j.3): separate from the
@@ -172,6 +173,9 @@ async function init() {
       agentApprovals = stack.approvals;
       agentStop = stack.emergencyStop;
       agentAudit = stack.audit;
+      // The acknowledgement writer needs the persistence LAYER (its
+      // durable appendAudit and save), not the raw log. Blueprint 3j.5.
+      agentPersistence = stack.persistence;
       agentOrchestrator = stack.orchestrator;
       agentNotifications = stack.notifications;
       agentReminders = stack.reminders;
@@ -249,6 +253,14 @@ async function init() {
     listNotifications: (limit) => (agentRuntime.isActive() ? agentNotifications.list().slice(0, Number.isInteger(limit) ? limit : 500) : []),
     listDisplayNotifications: (limit) => notificationsDisplay.list(limit),
     listReminders: (limit) => (agentRuntime.isActive() ? agentReminders.list().slice(0, Number.isInteger(limit) ? limit : 500) : []),
+    // Blueprint 3j.5 (option C): the ONE writer the renderer can reach,
+    // and only through the notifications:ack id-only request. The
+    // persistence layer performs the transition and stays authoritative;
+    // a blocked or failed runtime refuses here (fail closed), it never
+    // falls back.
+    acknowledgeNotification: (id) => (agentRuntime.isActive() && agentPersistence
+      ? agentPersistence.acknowledgeNotification(id)
+      : { ok: false, reason: 'persistence_unavailable' }),
   });
 }
 
@@ -609,6 +621,13 @@ app.whenReady().then(async () => {
     ipcMain.handle('providers:get', agentSurface.handlers['providers:get']);
     ipcMain.handle('notifications:read', agentSurface.handlers['notifications:read']);
     ipcMain.handle('reminders:read', agentSurface.handlers['reminders:read']);
+    // The ONE non-read channel (blueprint 3j.4 option C): an id-only
+    // acknowledgement request from an explicit per-record user gesture.
+    // Main stays authoritative: the persistence layer validates the id,
+    // records the acknowledgement durably (audit row + anchor in ONE
+    // transaction, flushed before the desk flips) and refuses on any
+    // integrity or durability failure.
+    ipcMain.handle('notifications:ack', agentSurface.handlers['notifications:ack']);
   } catch (e) {
     console.error('[agent] read-only surface unavailable:', e && e.message);
   }
