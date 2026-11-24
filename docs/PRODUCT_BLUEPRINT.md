@@ -723,7 +723,13 @@ unchanged RENDERER_CHANNELS; static main wiring (create, read-only expose,
 close at quit, no append call); a panel source scan keeping the renderer
 presentation-only; and an end-to-end pass from store to surface to shaper
 proving the desk and display read semantics stay separate (the desk's own
-markRead adds its marker; the display record never claims one).
+markRead adds its marker; the display record never claims one). Committed
+at `8f1aaa6` with CI 45335857546, CI macOS + Linux 45335857429 and a
+dispatched Android APK run 45335903179 all green on it (Android is
+dispatched here because the workflow's push filter does not cover src/ and
+renderer/ changes). The web and mobile builds do not construct the agent
+surface, so the fail-closed required reader cannot break them; the web
+build still gains nothing (the panel section is desktop-renderer-only).
 
 ## 4. Planned, NOT implemented
 
