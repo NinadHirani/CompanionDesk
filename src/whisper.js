@@ -15,13 +15,42 @@ const { execFile } = require('child_process');
 const { pcm16ToWav } = require('./wav');
 
 const BIN_CANDIDATES = ['/opt/homebrew/bin/whisper-cli', '/usr/local/bin/whisper-cli', '/opt/homebrew/bin/whisper-cpp', '/usr/local/bin/whisper-cpp', '/usr/bin/whisper-cli'];
-const MODEL_NAMES = ['ggml-base.en.bin', 'ggml-small.en.bin', 'ggml-tiny.en.bin'];
+// Fixed allowlist: English .en models plus the multilingual twins, so a
+// multilingual (e.g. Hindi) model can be added later just by placing its
+// file in the models folder. preferredModel names the file the user
+// configured; it is only an order hint inside this fixed list, never a path.
+const MODEL_NAMES = [
+  'ggml-small.en.bin', 'ggml-base.en.bin', 'ggml-tiny.en.bin',
+  'ggml-small.bin', 'ggml-base.bin', 'ggml-tiny.bin',
+];
+const MODEL_RE = /^[a-z0-9.]+\.bin$/;
+
+function normalizePreferred(preferred) {
+  if (typeof preferred !== 'string' || !MODEL_RE.test(preferred)) return null;
+  return MODEL_NAMES.includes(preferred) ? preferred : null;
+}
 
 // -> { available: true, bin, model } | { available: false, reason: 'no_binary' | 'no_model' }
-function findWhisper({ env = process.env, modelsDir, exists = fs.existsSync } = {}) {
+function findWhisper({ env = process.env, modelsDir, preferred, exists = fs.existsSync } = {}) {
   const bin = [env.WHISPER_BIN, ...BIN_CANDIDATES].filter(Boolean).find((p) => exists(p));
   if (!bin) return { available: false, reason: 'no_binary' };
-  const models = [env.WHISPER_MODEL, ...(modelsDir ? MODEL_NAMES.map((n) => path.join(modelsDir, n)) : [])].filter(Boolean);
+  const preferredModel = normalizePreferred(preferred);
+  const names = [
+    ...(preferredModel ? [preferredModel] : []),
+    ...MODEL_NAMES.filter((n) => n !== preferredModel),
+  ];
+  // The user's own WHISPER_MODEL env stays an explicit path override (as
+  // before); the allowlist constrains only what the app itself can select.
+  // A bare allowlisted name in the env resolves inside the models folder;
+  // anything else is taken as the explicit path it looks like.
+  const envValue = env.WHISPER_MODEL;
+  const envPath = (typeof envValue === 'string' && MODEL_NAMES.includes(envValue) && modelsDir)
+    ? path.join(modelsDir, envValue)
+    : envValue;
+  const models = [
+    envPath,
+    ...(modelsDir ? names.map((n) => path.join(modelsDir, n)) : []),
+  ].filter(Boolean);
   const model = models.find((p) => exists(p));
   if (!model) return { available: false, reason: 'no_model' };
   return { available: true, bin, model };

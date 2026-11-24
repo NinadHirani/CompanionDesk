@@ -1,77 +1,31 @@
-# M6 voice decisions - what needs Ninad's call
+# M6 voice decisions
 
-Status: PROPOSAL, written 24 Nov 2026. Nothing here is decided or
-implemented beyond M6 slice 1 (the groundwork now on main). Voice is off
-until Ninad enables it in settings; nothing listens, nothing downloads.
+## Decided (24 Nov 2026, Ninad)
 
-## 1. Local speech-to-text (the transcriber behind Speak)
+- STT: whisper.cpp `small.en` is the initial model. The app must support adding and selecting multilingual models later, Hindi included. Implemented as a fixed allowlist of the six small/base/tiny English/multilingual ggml names; `voice_model` setting selects inside it (default `small.en`); the renderer can never point at an arbitrary path. A user-set `WHISPER_MODEL` env var remains an explicit override, as before.
+- Wake word: REQUIRED, not optional. It must work. No wake-word engine or model may ship until its licensing is verified from primary sources; nothing non-commercial or proprietary is silently chosen; nothing fake or questionable is bundled.
 
-The existing pipeline already runs entirely on-device: audio stays in the
-overlay page, goes to a local whisper.cpp binary over a fixed-path
-allowlist, and the temp WAV is deleted after each run. The decision is only
-WHICH model file is allowed, and whether multilingual is wanted.
+## Wake-word research (primary sources, 24 Nov 2026)
 
-| Option | Licence | Model size (approx) | Fit on 8 GB Air M1 / OnePlus 12R | Notes |
-|---|---|---|---|---|
-| whisper.cpp tiny.en (smallest currently supported) | MIT (whisper.cpp code + OpenAI Whisper weights) | ~75 MiB | trivial | Fast, weakest accuracy; already in the allowlist |
-| whisper.cpp base.en (current default) | MIT | ~142 MiB | fine | The README-recommended default |
-| whisper.cpp small.en | MIT | ~466 MiB | fine on M1; usable on 12R | Best accuracy/size balance for English |
-| whisper.cpp multilingual (tiny/base/small, no .en) | MIT | similar, slightly larger | same | Needed only for non-English input; the language setting is already plumbed |
-| Vosk streaming | Apache-2.0 (verify per model) | ~40-50 MiB en-us | very light | Real-time streaming but clearly weaker accuracy than whisper |
-| sherpa-onnx streaming zipformer | Apache-2.0 code; VERIFY each model's training-data terms (some corpora are non-commercial research only) | ~50-200 MiB | fine | Streaming; personal use is unaffected by corpus terms, redistribution is not |
+| Engine / path | License (code / included models) | Ships in CompanionDesk? |
+| --- | --- | --- |
+| openWakeWord, included pretrained models | Apache-2.0 / **CC BY-NC-SA 4.0** | **No.** Non-commercial models cannot ship in an app Ninad may commercialize. |
+| openWakeWord, custom model trained on 100% synthetic speech over the frozen Apache-2.0 shared feature extractor | Own output asset; feature extractor Apache-2.0; third-party training centre (openwakeword.com/train) claims Apache-2.0-licensed outputs, sub-100 KB, on-device | **Recommended path**, with conditions below |
+| Picovoice Porcupine | Proprietary SDK; free tier is personal non-commercial only; Foundation tier US$6,000/yr (eligibility-gated); AccessKey validated online at runtime | **No.** Terms conflict with local-first (online key validation), non-commercial free tier, and silent proprietary licensing is excluded. |
+| microWakeWord | ESP32-S3-focused engine | Not applicable to M1 / OnePlus 12R app builds. |
 
-Recommendation to react to: keep whisper.cpp, add small.en as the optional
-higher-quality model, and enable a multilingual twin of whatever size he
-picks only if he wants non-English input. No download happens until he
-names the model; the app finds model files the user places in the models
-folder. Size figures are the commonly published approximations; verify the
-exact file size on the download page before committing disk.
+Conditions on the custom-training path, to verify before any model ships:
 
-## 2. Wake word
+1. Train our own model for a chosen wake phrase on fully synthetic speech, the same way the openWakeWord project made its own models, so the model is our asset, not their non-commercial one.
+2. Every dataset piece (wake utterances, background speech, false-positive noise) must carry permissive provenance we can document and redistribute.
+3. Verify the third-party training centre's actual terms and data handling, or run the training ourselves (openWakeWord's pipeline is open source; the project documents the process at openwakeword.com/train).
+4. Confirm runtime behavior on both targets: small ONNX models run locally on Apple M1 and Android via onnxruntime; frame-based scoring, adjustable threshold for false-trigger control.
 
-Roadmap rule: wake word only after the licensing decision, behind a
-separate auto-listening toggle, off by default, visible mic state, immediate
-stop. What the licensing actually looks like (checked 24 Nov 2026):
+Design requirements for wake word (unchanged): explicit opt-in, OS microphone permission requested only on first use after a user action, visible listening indicator, local-only keyword detection, no raw audio retention or upload, pause/stop controls, adjustable false-trigger threshold.
 
-- openWakeWord: the CODE is Apache-2.0, but its README says all included
-  pre-trained models are CC BY-NC-SA 4.0 (non-commercial), and the licence
-  of the shared feature models is unclear. Fine for a private hobby build;
-  a problem for anything distributed.
-- Picovoice Porcupine: proprietary. A free personal tier exists, but
-  commercial use needs a paid agreement with unpublished pricing; the terms
-  also restrict modification and ML training.
-- Android platform SpeechRecognizer (on-device on recent Android): no
-  third-party licence at all, but it is a platform service, not a
-  portable model, and behaviour varies by device.
+Until a model is trained and verified, wake word stays disabled in the app; voice remains push-to-talk through the chosen STT model. This is deliberate, not a skip: wake word is a required feature and the search for a compliant path continues.
 
-Recommendation to react to: skip wake word for now (push-to-talk covers
-the real use case, and the strongest open option is non-commercial anyway);
-revisit only if Ninad says auto-listening matters to him.
+## Not yet decided
 
-## 3. Test checklist (needs his device time; nothing here can be self-certified)
-
-MacBook Air M1 (macOS):
-1. Fresh install: no microphone permission prompt at startup.
-2. Voice toggle off (default): Speak does nothing but explain where to turn it on.
-3. Enable in About > Voice input: first Speak press triggers the macOS mic
-   prompt once; deny, then allow, both paths behave.
-4. Speak a sentence, check the transcript lands in the overlay input.
-5. Escape mid-recording and mid-transcription: mic releases, no stray
-   notification, no crash; the temp WAV is gone (temp dirs clean).
-6. Record past the cap: it auto-stops at 30 s.
-7. Whisper missing / model missing: the health page and the overlay both
-   say exactly what to install.
-
-OnePlus 12R (Android build):
-1. RECORD_AUDIO runtime permission appears only on first Speak press.
-2. Foreground-service mic rules: verify the capture runs inside a service
-   with the microphone type per current Android docs (RISK_REGISTER flags
-   this for verification before M6 lands on Android).
-3. Same enable-gate, cap, cancel and no-retention checks as desktop.
-4. Backgrounding mid-recording: capture stops, nothing keeps the mic.
-
-Sources checked 24 Nov 2026: whisper.cpp README (github.com/ggml-org/whisper.cpp, MIT);
-wake-word licensing survey in kernel-ai-assistant issue #2021 (openWakeWord model
-licence CC BY-NC-SA 4.0, Porcupine commercial terms unpublished); outspoken.cloud
-wake-word comparison (Oct 2026). Item sizes and Vosk details are approximations
-to re-verify at download time.
+- The wake phrase itself.
+- Whether to self-train or use a third-party training service (verify terms first).

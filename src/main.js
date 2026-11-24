@@ -643,12 +643,12 @@ function registerIpc() {
   });
 
   ipcMain.handle('voice:status', async () => {
-    const s = voice.status({ modelsDir: modelsDir() });
+    const s = voice.status({ modelsDir: modelsDir(), preferredModel: db.getSetting('voice_model', 'small.en') });
     return { ...s, enabled: db.getSetting('voice_enabled', false) === true };
   });
   ipcMain.handle('voice:transcribe', async (_e, payload) => {
     if (!db.getSetting('voice_enabled', false)) return { ok: false, error: 'voice_disabled' };
-    return voice.transcribe(payload, { modelsDir: modelsDir(), language: process.env.WHISPER_LANG || 'en' });
+    return voice.transcribe(payload, { modelsDir: modelsDir(), preferredModel: db.getSetting('voice_model', 'small.en'), language: process.env.WHISPER_LANG || 'en' });
   });
   ipcMain.handle('voice:cancel', async () => voice.cancelActiveRun());
 

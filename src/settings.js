@@ -31,6 +31,7 @@ const DEFAULTS = Object.freeze({
   proactive_quiet_start: '22:00',
   proactive_quiet_end: '08:00',
   voice_enabled: false, // M6 slice 1: voice stays off until the user enables it
+  voice_model: 'small.en', // M6 decision: small.en is the initial STT model
   screen_observation_enabled: false, // M7: master switch; stays off until the user enables it
   // M7 slice 2 (Ninad's decision): screen observation is a mode choice.
   // 'manual' (default) is option A, 'session' option B, 'background'
@@ -47,6 +48,9 @@ const ENUMS = Object.freeze({
   brevity: ['short', 'normal', 'detailed'],
   hardware_profile: ['auto', 'lightweight', 'balanced', 'powerful'],
   screen_mode: ['manual', 'session', 'background'],
+  // M6 (decided 24 Nov 2026): whisper.cpp small.en is the initial STT model;
+  // the multilingual twins are selectable so Hindi can be added later.
+  voice_model: ['small.en', 'base.en', 'tiny.en', 'small', 'base', 'tiny'],
 });
 const BOOLEANS = ['learn_from_activity', 'suggest_memories', 'cloud_personal', 'cloud_enabled', 'onboarding_done', 'proactive_enabled', 'proactive_scope_reminder', 'proactive_scope_deadline', 'proactive_quiet_enabled', 'voice_enabled', 'screen_observation_enabled', 'screen_background_consent'];
 // 'HH:MM' 24h local clock times bounding the quiet window.

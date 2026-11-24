@@ -18,8 +18,8 @@ function toBuffer(v) {
   return null;
 }
 
-function status({ find = whisper.findWhisper, modelsDir } = {}) {
-  const w = find({ modelsDir });
+function status({ find = whisper.findWhisper, modelsDir, preferredModel } = {}) {
+  const w = find({ modelsDir, preferred: preferredModel });
   return w.available ? { ok: true, available: true } : { ok: true, available: false, reason: w.reason };
 }
 
@@ -36,13 +36,13 @@ function cancelActiveRun() {
 }
 
 // payload: { pcm: bytes }. deps lets tests substitute the finder and transcriber.
-async function transcribe(payload, { modelsDir, find = whisper.findWhisper, run = whisper.transcribe, language = 'en' } = {}) {
+async function transcribe(payload, { modelsDir, preferredModel, find = whisper.findWhisper, run = whisper.transcribe, language = 'en' } = {}) {
   const buf = payload ? toBuffer(payload.pcm) : null;
   if (!buf || buf.length % 2 !== 0) return { ok: false, error: 'bad_request' };
   if (buf.length > MAX_BYTES) return { ok: false, error: 'too_long' };
   if (buf.length < MIN_BYTES) return { ok: false, error: 'no_speech' };
 
-  const w = find({ modelsDir });
+  const w = find({ modelsDir, preferred: preferredModel });
   if (!w.available) return { ok: false, error: 'voice_unavailable', reason: w.reason };
 
   const samples = new Int16Array(buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.length));
