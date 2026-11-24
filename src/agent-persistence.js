@@ -706,6 +706,41 @@
       return db.all('SELECT run_id, kind, status, started_at, ended_at, summary FROM agent_runs ORDER BY id');
     }
 
+    // Gate 2 slice 3j.9, Stage A, decision D4: restart reconciliation. A
+    // ledger row still marked 'running' when the app starts belongs to a
+    // session that is gone; this marks every such row 'aborted' with a
+    // bounded summary and appends exactly ONE system audit entry covering
+    // the batch (not one per row). No notification is created here: the
+    // interrupted run was never driven by this session. Audit-first:
+    // if the audit append fails, the rows are left untouched and the
+    // refusal is reported. With no rows to reconcile, no entry is written.
+    function reconcileInterruptedRuns() {
+      if (!status.ok) return { ok: false, reason: 'integrity_failure', problems: [...status.problems] };
+      const rows = db.all("SELECT id FROM agent_runs WHERE status = 'running'");
+      if (!rows.length) return { ok: true, interrupted: 0 };
+      const aud = appendAudit({
+        actor: 'system',
+        action: 'run.interrupted',
+        decision: 'allowed',
+        reason: 'startup_reconciliation',
+        detail: { interrupted: rows.length },
+      });
+      if (!aud || aud.ok !== true) {
+        return { ok: false, reason: 'audit_refused', errors: (aud && aud.errors) || [(aud && aud.reason) || 'unknown'] };
+      }
+      try {
+        tx(() => {
+          const ended = nowIso();
+          for (const r of rows) {
+            db.run("UPDATE agent_runs SET status = 'aborted', ended_at = ?, summary = 'interrupted_by_restart' WHERE id = ?", [ended, r.id]);
+          }
+        });
+        return { ok: true, interrupted: rows.length };
+      } catch (err) {
+        return { ok: false, reason: 'persist_failure', error: String((err && err.message) || err) };
+      }
+    }
+
     function getAuditStatus() {
       return { ok: status.ok, problems: [...status.problems] };
     }
@@ -754,9 +789,12 @@
       status: getAuditStatus,
       durableAudit,
       acknowledgeNotification,
+      reconcileInterruptedRuns,
       // NOTE: intentionally no resume API. A 'running' agent_runs row after a
       // restart stays exactly as it is; resuming a run is an explicit
-      // orchestrator decision, never an automatic one.
+      // orchestrator decision, never an automatic one. Stage A's
+      // reconcileInterruptedRuns is the one startup pass that touches those
+      // rows, and it marks them 'aborted' rather than resuming them.
     };
   }
 

@@ -1107,6 +1107,68 @@ Summary of the proposal (the document is authoritative):
 
 Docs commit: (this commit). No code changed. Design awaits review.
 
+## 3j.9. Run driver Stage A (24 Nov 2026): driver foundation, EMPTY registry, nothing enabled
+
+Ninad approved all seven design decisions exactly as proposed (D1 explicit
+user-initiated plans; D2 write-capable tools stay out until a separately
+approved approval mechanism exists; D3 paused runs park indefinitely; D4
+interrupted runs get an audited system event; D5 notifications for
+completed and aborted only; D6 sensitive step arguments are redacted from
+renderer-facing projections; D7 user-requested runs are distinguished from
+future scheduled runs). Stage A ONLY was implemented, directly on main,
+strictly inside the design proposal:
+
+  - src/agent-run-driver.js: createRunDriver({ orchestrator, persistence,
+    notifications, registry, clock, randomHex }). The ONLY main-side caller
+    of orchestrator startRun/step/resume. It pre-validates a fully-formed
+    main-side plan fail-closed (shape, id uniqueness, retries 0-3,
+    recovery abort|skip, registry existence, capability != forbidden,
+    per-step args against the registry schema), then drives step() in one
+    synchronous pass until terminal, pause, refusal, or a defensive loop
+    guard. It never executes tools, forms plans, grants, schedules, or
+    touches the network. resume(runId, {approvalId}) exists for the
+    orchestrator's pause states; nothing in the app calls it yet.
+  - D1: the driver is constructed in main and tested, but nothing calls
+    run(); the entry point that turns a user gesture into a run request is
+    a later gate. The shipped app cannot start a run.
+  - D2: the production registry stays EMPTY (createRegistry() registers
+    nothing; main registers nothing). Pre-validation refuses every plan on
+    an empty registry (plan_tool_unknown), so no step can execute even if
+    a run were started.
+  - D3: a paused run keeps its 'running' ledger row and parks indefinitely;
+    Stage A auto-resumes nothing.
+  - D4: persistence.reconcileInterruptedRuns(): at startup, every ledger
+    row still 'running' is marked 'aborted' with summary
+    'interrupted_by_restart' and exactly ONE bounded system audit entry
+    (run.interrupted, actor system, detail {interrupted: n}); no
+    notification is created for an interrupted run. Audit-first: an audit
+    refusal leaves the rows untouched. Wired in main right after the
+    agent runtime starts; refusals are logged, never fatal.
+  - D5: terminal notifications for completed ("Agent run completed") and
+    aborted ("Agent run stopped") only, generic allowlisted copy plus the
+    sanitized run id, priority normal, created through the existing desk
+    so runDisplayDelivery() reaches the panel unchanged. Ledger transition
+    first; a notification failure never changes the run outcome. Dedupe:
+    the ledger is the primary source (a replayed finish is run_not_running
+    and notifies nothing) plus a desk-scan fallback for exact-body
+    duplicates.
+  - D6: verified already true and now locked by test: projectRun in
+    agent-surface.js projects pendingStepId/pendingTool only; step
+    arguments and approval ids never reach the renderer.
+  - D7: the ledger records kind; the driver allowlist contains exactly
+    'user'. 'scheduled' is refused until the scheduling gate itself lands.
+  - NOT in this slice (Stage B/C): real tool implementations, approval
+    mechanics end to end, renderer run controls, model-driven execution,
+    auto-resume, scheduling, timers, network egress, shell/filesystem/
+    browser. The orchestrator's poison rule and stop race bound are
+    unchanged.
+
+Tests: tests/gate2-run-driver.test.js (16 tests: constructor guards, the
+full transition table, pre-validation refusal table, empty-registry
+refusal, restart replay, desk-scan dedupe, notification-failure immunity,
+D4 reconciliation success/refusal, D6 projection, loop guard, static
+guards). Full suite 735/735, selftest pass.
+
 ## 4. Planned, NOT implemented
 
 A secure credential-vault adapter

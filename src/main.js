@@ -53,6 +53,7 @@ const { createOrchestrator } = require('./agent-orchestrator');
 const { createNotificationDesk } = require('./agent-notifications');
 const { createNotificationsDisplayStore } = require('./agent-notifications-display');
 const { createDisplayDelivery } = require('./agent-display-delivery');
+const { createRunDriver } = require('./agent-run-driver');
 const { createReminderBook } = require('./agent-reminders');
 const { createAgentSurface } = require('./agent-surface');
 const { createAgentRuntime, createAgentStack } = require('./agent-runtime');
@@ -80,6 +81,7 @@ let agentApprovals = null;
 let agentStop = null;
 let agentAudit = null;
   let agentPersistence = null;
+  let agentRunDriver = null;
 let agentOrchestrator = null;
 let agentNotifications = null;
 // Main-owned notification display store (blueprint 3j.3): separate from the
@@ -194,6 +196,17 @@ async function init() {
       // The acknowledgement writer needs the persistence LAYER (its
       // durable appendAudit and save), not the raw log. Blueprint 3j.5.
       agentPersistence = stack.persistence;
+      // Gate 2 3j.9 Stage A: the run driver is constructed and ready but
+      // nothing in this build calls it (decision D1: runs come only from
+      // explicit user-initiated plans, whose entry point is a later gate).
+      // The registry stays EMPTY (nothing registers tools), so no step can
+      // execute even if a run were started.
+      agentRunDriver = createRunDriver({
+        orchestrator: stack.orchestrator,
+        persistence: stack.persistence,
+        notifications: stack.notifications,
+        registry: stack.registry,
+      });
       agentOrchestrator = stack.orchestrator;
       agentNotifications = stack.notifications;
       agentReminders = stack.reminders;
@@ -211,6 +224,15 @@ async function init() {
   // display store from the desk's unread records. A blocked runtime makes
   // this pass refuse honestly; the desk keeps every record either way.
   runDisplayDelivery();
+  // Gate 2 3j.9 Stage A, decision D4: reconcile ledger rows still marked
+  // 'running' from a previous session. Best effort: a refusal is logged and
+  // never blocks startup.
+  if (agentPersistence) {
+    const rec = agentPersistence.reconcileInterruptedRuns();
+    if (!rec || rec.ok !== true) {
+      console.warn('[agent] run reconciliation refused: ' + String((rec && rec.reason) || 'unknown'));
+    }
+  }
   agentSurface = createAgentSurface({
     status: () => {
       if (!agentRuntime.isActive()) {

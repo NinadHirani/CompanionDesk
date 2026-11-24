@@ -320,9 +320,15 @@ terminal outcome ever fires; the notification creation source belongs to
 the future run-driver gate, and until then the desk stays
 creation-empty by design. A design-only run-driver proposal now exists
 (docs/RUN_DRIVER_DESIGN.md, blueprint 3j.8): staged gates A/B/C with
-explicit approval checkpoints, an empty production registry in Stage A,
-and open decisions D1-D7 (including the D2 approval-delivery contract
-tension) awaiting Ninad's review; no execution capability is enabled.
+explicit approval checkpoints. Ninad approved all seven decisions
+(D1-D7) on 24 Nov 2026 and Stage A is IMPLEMENTED (blueprint 3j.9):
+driver foundation with an empty production registry, ledger mirroring,
+restart reconciliation (D4), completed/aborted terminal notifications
+(D5), arg-free renderer projections (D6), and a 'user'-only kind
+allowlist (D7). Nothing can execute: no tools are registered and no
+source calls the driver yet. Stage B (real tools, approval mechanics)
+and Stage C (renderer run controls) await separate explicit review;
+no execution capability is enabled.
 Acceptance: policy
 engine refuses ungranted calls (tested); payments, purchases, destructive
 deletion, and legal or binding submissions are denied unless fresh,
