@@ -8,6 +8,24 @@
   const answer = document.getElementById('ov-answer');
   const hint = document.getElementById('ov-hint');
   const micBtn = document.getElementById('ov-mic');
+  // M6 slice 3: OS-native speech output. The engine is this machine's own
+  // voice stack through the standard speechSynthesis interface; nothing is
+  // downloaded, nothing leaves the computer, and the setting
+  // voice_output_enabled (default off) plus an explicit button press are
+  // both required before anything is ever spoken.
+  const readBtn = document.getElementById('ov-readout');
+  const speechApi = window.CompanionSpeechOutput;
+  const speechCap = speechApi.detectSpeech(window);
+  let outputEnabled = false;
+  const READING_HINT = 'Reading aloud. Press Read aloud or Esc to stop.';
+  const speech = speechApi.createSpeechOutput({
+    engine: speechCap.available ? speechApi.webSpeechEngine(window) : null,
+    enabled: () => outputEnabled,
+    onSettled: (st) => {
+      readBtn.textContent = 'Read aloud';
+      if (st.phase === 'failed') hint.textContent = window.friendlyError(st.failure);
+    },
+  });
   let busy = false;
   let recording = null; // the active recorder, if any
   let processing = false; // a transcription is in flight in the main process
@@ -17,6 +35,7 @@
   function cancelRecording() {
     if (recording) { recording.cancel(); recording = null; }
     if (processing) { api.voice_cancel(); processing = false; }
+    if (speech.isSpeaking()) speech.stop();
     micBtn.textContent = 'Speak';
   }
 
@@ -27,6 +46,9 @@
     busy = false;
     input.disabled = false;
     input.value = '';
+    if (speech.isSpeaking()) speech.stop();
+    readBtn.hidden = true;
+    readBtn.textContent = 'Read aloud';
     answer.textContent = '';
     answer.classList.remove('error');
     hint.textContent = IDLE_HINT;
@@ -45,6 +67,8 @@
     if (!prompt || busy) return;
     busy = true;
     input.disabled = true;
+    stopSpeaking();
+    readBtn.hidden = true;
     answer.textContent = '';
     answer.classList.remove('error');
     hint.textContent = thinking;
@@ -52,7 +76,18 @@
     busy = false;
     input.disabled = false;
     // The final text replaces whatever streamed, in case a fallback answered.
-    if (res.ok) { answer.textContent = res.answer; hint.textContent = 'Enter to ask again. Esc to close.'; }
+    if (res.ok) {
+      answer.textContent = res.answer;
+      hint.textContent = 'Enter to ask again. Esc to close.';
+      // The Read aloud control appears only after the setting and this
+      // machine's speech capability have both said yes, this turn.
+      try {
+        const vs = await api.voice_status();
+        outputEnabled = !!(vs && vs.outputEnabled === true);
+      } catch (e) { outputEnabled = false; }
+      readBtn.hidden = !(outputEnabled && speechCap.available);
+      readBtn.textContent = 'Read aloud';
+    }
     else showError(res.error, res.detail);
     input.select();
     input.focus();
@@ -149,6 +184,18 @@
     answer.classList.remove('error');
     micBtn.textContent = 'Stop';
     hint.textContent = 'Listening. Click Stop when you are done.';
+  });
+
+  readBtn.addEventListener('click', () => {
+    if (speech.isSpeaking()) {
+      speech.stop();
+      readBtn.textContent = 'Read aloud';
+      hint.textContent = 'Enter to ask again. Esc to close.';
+      return;
+    }
+    const r = speech.start(answer.textContent, { userInitiated: true });
+    if (r.ok) { readBtn.textContent = 'Stop'; hint.textContent = READING_HINT; }
+    else hint.textContent = window.friendlyError(r.reason);
   });
 
   api.on('overlay:reset', reset);

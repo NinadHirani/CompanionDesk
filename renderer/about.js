@@ -121,6 +121,7 @@
     quietStart: document.getElementById('s-quiet-start'),
     quietEnd: document.getElementById('s-quiet-end'),
     voice: document.getElementById('s-voice'),
+    voiceOutput: document.getElementById('s-voice-output'),
     screenMode: document.getElementById('s-screen-mode'),
     screenConsent: document.getElementById('s-screen-consent'),
     screenNote: document.getElementById('screen-mode-note'),
@@ -146,6 +147,7 @@
     if (F.quietStart) F.quietStart.value = s.proactive_quiet_start || '22:00';
     if (F.quietEnd) F.quietEnd.value = s.proactive_quiet_end || '08:00';
     if (F.voice) F.voice.checked = s.voice_enabled === true;
+    if (F.voiceOutput) F.voiceOutput.checked = s.voice_output_enabled === true;
     if (F.screenMode) F.screenMode.value = s.screen_mode || 'manual';
     if (F.screenConsent) F.screenConsent.checked = s.screen_background_consent === true;
     syncScreenMode();
@@ -248,6 +250,7 @@
     if (F.quietStart) payload.proactive_quiet_start = F.quietStart.value;
     if (F.quietEnd) payload.proactive_quiet_end = F.quietEnd.value;
     if (F.voice) payload.voice_enabled = F.voice.checked;
+    if (F.voiceOutput) payload.voice_output_enabled = F.voiceOutput.checked;
     if (F.screenMode) {
       payload.screen_mode = F.screenMode.value;
       payload.screen_background_consent = F.screenMode.value === 'background' && F.screenConsent.checked;

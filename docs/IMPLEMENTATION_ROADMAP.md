@@ -611,11 +611,36 @@ asset, local-only. Tests: table integrity against the primary source,
 mapping/precedence/fail-closed cases, and transcribe-level tests that
 chain through the real whisper.transcribe to pin the exact `-l` value.
 
-Remaining in M6: OS-native text-to-speech first (Piper deferred pending
-verification of its successor project); wake word only after the
-licensing decision, behind a separate auto-listening toggle, off by
-default, visible mic state, immediate stop; Android foreground service
-compliant with platform rules.
+**Slice 3 (landed 24 Nov 2026): OS-native speech-output groundwork.**
+`renderer/speech-output.js` is the pure speech-output state machine and
+capability detector, the same dual-mode fail-closed pattern as the
+push-to-talk machine. The only engine is the operating system's own
+voice stack reached through the standard `speechSynthesis` interface
+(on macOS Chromium that is the OS voice): no bundled model or asset, no
+download, no external service, no paid dependency, no third-party TTS
+engine. Speech output has its own setting, `voice_output_enabled`,
+defaulting to false (About > Voice input), and the machine refuses to
+start while it is off. Nothing ever speaks on its own: creation and
+startup speak nothing, and `start` refuses any call that is not an
+explicit button press (`user_action_required`). One utterance at a
+time; `stop` cancels through the engine and late engine callbacks
+cannot resurrect the session; failure reasons are an allowlist with
+user-facing wording in the shared error map, unknown engine errors
+failing closed to `synthesis_failed`; the machine retains no text or
+utterance (no audio or text retention); the adapter sets no voice,
+rate, pitch, or volume, so the OS keeps audio focus, level, routing,
+and interruption. The overlay shows Read aloud only after a successful
+answer, only when the setting is on and the runtime actually exposes
+speech synthesis, and the button doubles as the visible playback state
+(Read aloud / Stop); Escape, close, reset, and a new question all stop
+speech. Honest limits: whether any specific machine actually speaks is
+a physical-device question and no such claim is made; where
+`speechSynthesis` is missing the UI says so instead of guessing.
+
+Remaining in M6: wake word only after the licensing decision, behind a
+separate auto-listening toggle, off by default, visible mic state,
+immediate stop; Piper deferred pending verification of its successor
+project; Android foreground service compliant with platform rules.
 
 ## M7 - Screen understanding v2 (2-3 wks)
 

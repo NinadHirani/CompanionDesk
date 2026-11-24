@@ -644,7 +644,9 @@ function registerIpc() {
 
   ipcMain.handle('voice:status', async () => {
     const s = voice.status({ modelsDir: modelsDir(), preferredModel: db.getSetting('voice_model', 'small.en') });
-    return { ...s, enabled: db.getSetting('voice_enabled', false) === true };
+    return { ...s, enabled: db.getSetting('voice_enabled', false) === true,
+      // M6 slice 3: spoken answers have their own gate, off by default.
+      outputEnabled: db.getSetting('voice_output_enabled', false) === true };
   });
   ipcMain.handle('voice:transcribe', async (_e, payload) => {
     if (!db.getSetting('voice_enabled', false)) return { ok: false, error: 'voice_disabled' };
