@@ -93,6 +93,26 @@
           }
         }
       }
+      // Display store section: the same notifications:read response also
+      // carries the main-owned display store's records under data.display.
+      // Rendered like everything else: bounded, textContent only, nothing
+      // marked read, nothing sent back. Displaying is not acknowledging.
+      const displayRecords = (notifications && notifications.ok && notifications.data && Array.isArray(notifications.data.display))
+        ? notifications.data.display
+        : [];
+      panel.appendChild(line('display: ' + (displayRecords.length ? String(displayRecords.length) + ' shown' : 'none')));
+      if (view && typeof view.shape === 'function') {
+        const dshaped = view.shape(displayRecords);
+        if (dshaped && dshaped.ok === true) {
+          for (const text of dshaped.lines) panel.appendChild(line(text));
+          if (dshaped.hidden > 0) {
+            panel.appendChild(line('display: ' + dshaped.hidden + ' older not shown'));
+          }
+          if (dshaped.skipped > 0) {
+            panel.appendChild(line('display: ' + dshaped.skipped + ' malformed record(s) not shown'));
+          }
+        }
+      }
       panel.appendChild(line('reminders: ' + count(reminders && reminders.ok && reminders.data, 'reminders').length + ' scheduled'));
     } catch (e) {
       // Refusals and absences keep the panel quiet; nothing retries here.

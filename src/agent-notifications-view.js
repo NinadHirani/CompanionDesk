@@ -11,10 +11,13 @@
 //   - Display cap: at most MAX_DISPLAY (10) lines per call, newest first
 //     (the read channel's list is oldest first). A caller may only lower
 //     the cap.
-//   - Allowlisted fields only: id, title, body, priority, createdAt, read.
-//     A record carrying any other own enumerable key, a symbol key, an
-//     accessor property, an array or exotic prototype is skipped, never
-//     displayed; descriptors are inspected before any value is read.
+//   - Allowlisted fields only: id, title, body, priority, createdAt, and
+//     read (read is OPTIONAL: desk records carry it and get a (read)
+//     marker, display-store records omit it and claim nothing about
+//     acknowledgement). A record carrying any other own enumerable key, a
+//     symbol key, an accessor property, an array or exotic prototype is
+//     skipped, never displayed; descriptors are inspected before any value
+//     is read.
 //   - Records are never mutated: the input is read, never written; the
 //     output is fresh plain strings.
 //   - Title and body are truncated for display; hostile characters are
@@ -51,7 +54,11 @@
       if (!d || !('value' in d) || d.get || d.set) return null;
     }
     for (const k of ALLOWED) {
-      if (!Object.prototype.hasOwnProperty.call(r, k)) return null;
+      if (!Object.prototype.hasOwnProperty.call(r, k)) {
+        // read is the one optional field: display-store records omit it
+        if (k === 'read') continue;
+        return null;
+      }
       const v = r[k];
       if (k === 'id') { if (typeof v !== 'string' || !ID_RE.test(v)) return null; }
       else if (k === 'createdAt') { if (typeof v !== 'number' || !Number.isFinite(v)) return null; }

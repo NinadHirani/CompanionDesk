@@ -51,6 +51,7 @@ const { createAuditLog } = require('./audit');
 const { createPolicyEngine } = require('./policy-engine');
 const { createOrchestrator } = require('./agent-orchestrator');
 const { createNotificationDesk } = require('./agent-notifications');
+const { createNotificationsDisplayStore } = require('./agent-notifications-display');
 const { createReminderBook } = require('./agent-reminders');
 const { createAgentSurface } = require('./agent-surface');
 const { createAgentRuntime, createAgentStack } = require('./agent-runtime');
@@ -79,6 +80,13 @@ let agentStop = null;
 let agentAudit = null;
 let agentOrchestrator = null;
 let agentNotifications = null;
+// Main-owned notification display store (blueprint 3j.3): separate from the
+// persisted desk, in-memory only, no read semantics. The renderer reads it
+// through the existing notifications:read channel and can never write it.
+// Delivery wiring does NOT exist yet (blueprint 3j.1): nothing appends to
+// this store today, and nothing will until the acknowledgement decision is
+// made by the user.
+const notificationsDisplay = createNotificationsDisplayStore();
 let agentReminders = null;
 let agentSurface = null;
 let agentRuntime = null;
@@ -239,6 +247,7 @@ async function init() {
       return name ? list.filter((x) => x && x.name === name) : list;
     },
     listNotifications: (limit) => (agentRuntime.isActive() ? agentNotifications.list().slice(0, Number.isInteger(limit) ? limit : 500) : []),
+    listDisplayNotifications: (limit) => notificationsDisplay.list(limit),
     listReminders: (limit) => (agentRuntime.isActive() ? agentReminders.list().slice(0, Number.isInteger(limit) ? limit : 500) : []),
   });
 }
@@ -645,6 +654,9 @@ app.on('before-quit', () => {
 
 app.on('will-quit', () => {
   if (overlay) overlay.unregisterAll();
+  // The display store is in-memory only: closing it just refuses further
+  // appends; its frozen snapshot stays readable and is then discarded.
+  notificationsDisplay.close();
   // The main store closes with the app; a failed close changes nothing.
   if (db) {
     try { db.close(); } catch (err) { /* closing is best effort */ }

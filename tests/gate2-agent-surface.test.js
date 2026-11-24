@@ -28,6 +28,7 @@ function fixtures(overrides) {
     listProviders: () => [{ name: 'ollama', up: true }],
     listNotifications: (limit) => [{ id: 'ntf-000001', title: 't', body: 'b', priority: 'normal', createdAt: 1, read: false }].slice(0, limit),
     listReminders: (limit) => [{ id: 'rem-000001', title: 't', dueAt: 2, notes: null, createdAt: 1, cancelled: false }].slice(0, limit),
+    listDisplayNotifications: () => [],
   };
   return Object.assign(base, overrides || {});
 }

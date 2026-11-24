@@ -205,7 +205,7 @@ claims to literally experience emotions.
 - Update policy that never auto-installs unsigned builds; update modes
   disabled/auto/manual-download (`src/update-policy.js`, `src/updater.js`).
 - Health check and onboarding interview (`src/health.js`, `src/onboarding.js`).
-- 672 passing unit/integration tests (258 baseline; model selection +18, conversation history +17, optional key storage +13, M1 provider registry/task router/cloud gate +25, M1 per-ask routing integration +18, M1 review fixes +18, M1 hardware profiles +12, M1 provider status +11, M1 provider contract tests +18, M1 provider fault diagnostics +18, fault-detail sanitization review fix +3, offline memory-v2 retrieval harness +12, memory-v2 harness slice 4 fold fix and bridges +5, memory-v2 store contract tests +9, Gate 2 agent safety foundation +35, Gate 2 security hardening +8, Gate 2 persistence +17, M1 diagnostics hardening +2, Gate 2 orchestrator +13, orchestrator audit hardening +13, first harmless tools +18, ICS
+- 689 passing unit/integration tests (258 baseline; model selection +18, conversation history +17, optional key storage +13, M1 provider registry/task router/cloud gate +25, M1 per-ask routing integration +18, M1 review fixes +18, M1 hardware profiles +12, M1 provider status +11, M1 provider contract tests +18, M1 provider fault diagnostics +18, fault-detail sanitization review fix +3, offline memory-v2 retrieval harness +12, memory-v2 harness slice 4 fold fix and bridges +5, memory-v2 store contract tests +9, Gate 2 agent safety foundation +35, Gate 2 security hardening +8, Gate 2 persistence +17, M1 diagnostics hardening +2, Gate 2 orchestrator +13, orchestrator audit hardening +13, first harmless tools +18, ICS
   hardening +5, injection corpus +27, IPC contract +5, IPC contract review hardening +11, agent surface
   wiring +21, persistence hardening +6 (strict records, acknowledged
   appends flush to disk immediately, unacknowledged appends roll back),
@@ -216,8 +216,9 @@ claims to literally experience emotions.
   with the old file byte-for-byte intact, sanitized errors, startup
   exception proof), delivery bridge +16 (fail-closed drain to a
   wiring-supplied sink), notifications display +12 (read-only record
-  rendering, display cap 10, malformed records skipped), +50 total since
-  the 622 count above); CI,
+  rendering, display cap 10, malformed records skipped), delivery display
+  store +17 (main-owned in-memory store, renderer display section,
+  read-optional shaper), +67 total since the 622 count above); CI,
   CI macOS + Linux and Android APK all green on the
   current baseline `9addfdb` (runs 45323544121, 45323543975, 45323765018)
   and re-proven on the delivery gate commit `d84b1aa` (CI 45331634733,
@@ -666,6 +667,63 @@ write-path surface (comments stripped before scanning so the documented prohibit
 not trip it), the index.html include order and unchanged CSP, and the shaper's export
 surface. Desktop renderer only: the web build does not include agent-panel.js and gains
 nothing. Full suite 672/672.
+
+## 3j.3. Main-owned notification display store (24 Nov 2026): a read-only foundation, decided and implemented separately from acknowledgement
+
+What exists: `src/agent-notifications-display.js`, an in-memory store owned
+and mutated only by the main process. It is separate from the persisted
+notification desk (`src/agent-notifications.js`) in state and lifecycle: it
+never reads, writes or flips the desk's read/unread state, and it carries NO
+read semantics. The renderer receives its records as an additive `display`
+section on the EXISTING `notifications:read` channel (no new channel, no
+renderer-to-main write), and the agent panel renders that section through
+the same bounded view shaper as the desk section. Displaying is not
+acknowledging: this module implements no acknowledgement, and the 3j.1
+decision stays with the user.
+
+Decisions, recorded so nothing is silent:
+
+- In-memory, NOT persisted (deliberate choice for this gate): the store is
+  not a record of truth; the desk remains the record. Records are lost on
+  restart by design (fail to empty, never to stale display). No persistence
+  and no migrations are added here.
+- Capacity 50 records with deterministic FIFO eviction (oldest first).
+- Duplicate ids are ignored: the first record for an id stands; a
+  redelivery changes nothing.
+- Strict allowlisted plain-data validation: id must match the desk's format
+  (`ntf-` + 6 digits), title at most 200 characters, body at most 500,
+  priority in {low, normal, high}, finite numeric createdAt. Extra keys
+  (secrets and internal metadata cannot enter), symbol keys, accessor
+  properties, arrays and exotic prototypes are refused. Hostile or
+  malformed input is refused with a reason, never thrown on.
+- Stored records are frozen and `list()` returns fresh copies: no returned
+  reference can mutate the store.
+- `close()` runs at will-quit: appends after close are refused (fail
+  closed); the frozen snapshot stays readable and is then discarded.
+- The desk's `read` field is OPTIONAL in the view shaper: desk records
+  carry it and get a `(read)` marker; display-store records omit it and
+  claim nothing about acknowledgement.
+- The surface REQUIRES a `listDisplayNotifications` reader (fail closed at
+  construction), but that reader is read-only. Main wires it to the store;
+  no code appends to the store yet: delivery wiring is still absent per
+  3j.1, and nothing will append until the acknowledgement decision is made.
+
+Test scope (17 tests; full suite 672 to 689): isolation from the desk
+(appends leave the desk and its read flags untouched; desk records never
+appear in the store and vice versa); refusal of null, arrays, exotic
+prototypes, extra keys including secret-like keys, symbol keys, accessor
+properties, bad ids, priorities, timestamps, lengths and desk-shaped `read`
+fields; duplicate-id handling; bounded capacity with deterministic
+eviction; fresh-copy mutation resistance; list limit handling; the close()
+lifecycle and fail-closed appends; a zero-write export surface and a source
+scan banning markRead, acknowledgement, ipc, timers, network and file
+writes; fuzzing that never throws; the surface's fail-closed constructor
+requirement; the bounded, clipped wire section; non-mutating reads; the
+unchanged RENDERER_CHANNELS; static main wiring (create, read-only expose,
+close at quit, no append call); a panel source scan keeping the renderer
+presentation-only; and an end-to-end pass from store to surface to shaper
+proving the desk and display read semantics stay separate (the desk's own
+markRead adds its marker; the display record never claims one).
 
 ## 4. Planned, NOT implemented
 

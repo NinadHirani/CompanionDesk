@@ -110,7 +110,10 @@ function projectRun(state) {
 
 function createAgentSurface(readers) {
   const r = readers || {};
-  for (const name of ['status', 'listRuns', 'readAudit', 'listProviders', 'listNotifications', 'listReminders']) {
+  // listDisplayNotifications is REQUIRED (fail closed): main cannot build
+  // the surface without a display store reader. It reads only the
+  // main-owned display store; it never writes anything.
+  for (const name of ['status', 'listRuns', 'readAudit', 'listProviders', 'listNotifications', 'listReminders', 'listDisplayNotifications']) {
     if (typeof r[name] !== 'function') throw new TypeError('agent surface needs a ' + name + ' reader');
   }
 
@@ -151,7 +154,14 @@ function createAgentSurface(readers) {
     }),
     'notifications:read': handlerFor('notifications:read', (f) => {
       const found = r.listNotifications(f.limit);
-      return { notifications: boundedRecords(Array.isArray(found) ? found : [], f.limit) };
+      // additive display section on the SAME read channel: the main-owned
+      // display store's records, bounded like every other read response.
+      // No new channel, no write path; a missing array stays empty.
+      const display = r.listDisplayNotifications(f.limit);
+      return {
+        notifications: boundedRecords(Array.isArray(found) ? found : [], f.limit),
+        display: boundedRecords(Array.isArray(display) ? display : [], f.limit),
+      };
     }),
     'reminders:read': handlerFor('reminders:read', (f) => {
       const found = r.listReminders(f.limit);
