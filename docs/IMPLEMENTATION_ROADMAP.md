@@ -1,16 +1,17 @@
 # CompanionDesk Implementation Roadmap
 
 Status: M0 and M1 are COMPLETE on main (verified 24 Nov 2026; current
-baseline `5b643be`, 437 passing tests, Fo-reported from a full `npm test`
-run at that head (437/437, selftest included). CI (run 45238046955) and
-CI macOS + Linux (run 45238047043) are green on that head. The Android APK
-workflow was last green on `40946f4` (run 45232214311) and has not been
-rerun on the current head because every commit since was
-experiment-scripts/docs-only and touches no app code. Work since the
-previous baseline is preparation/harness only, NOT product memory-v2
-wiring: the slice-6 sanitizer hardening, the Gate 1 repo-only benchmark
-scripts + selftest and the comparison assembler, and the M4 memory-v2
-harness slices. No actual OnePlus device measurements exist). Supersedes `docs/COMPANIONDESK_ROADMAP.md` and
+baseline `988ce68`, 480 passing tests, Fo-reported from a full `npm test`
+run at that head (480/480, selftest included). All three main-branch CI
+workflows are green on that head: CI (run 45312967934), CI macOS + Linux
+(run 45312967957), Android APK (run 45312978262). Gate 2 slice 1 (agent
+safety foundation) and its security hardening are pure, isolated modules
+only: NO product wiring, NO tools registered beyond test fixtures, NO UI
+or IPC, no DB migration, and the audit log is in-memory only. Earlier
+prep/harness work (slice-6 sanitizer hardening, Gate 1 repo-only benchmark
+scripts + selftest and comparison assembler, M4 memory-v2 harness) remains
+harness only, NOT product memory-v2 wiring. No actual OnePlus device
+measurements exist). Supersedes `docs/COMPANIONDESK_ROADMAP.md` and
 `docs/FEATURE_GAP.md` once approved; those files stay until then. Phases
 are dependency-ordered with explicit gates. Phases M2-M8 below are planned
 unless stated as implemented; M0 and M1 are the only implemented phases.
@@ -199,17 +200,48 @@ feasible until these numbers exist.
 
 ## GATE 2 - Agent foundation (3-4 wks)
 
-Work: `src/tools/registry.js` (typed schemas, capability classes read-only /
-reversible-write / sensitive / forbidden), `src/agent/orchestrator.js`
-(plan, act, observe, verify, recover), `src/agent/policy.js` (enforcement
-outside the model), `src/agent/audit.js` (append-only log), `src/agent/stop.js`
-(global emergency stop), `agent_runs` table. First tools: notifications,
-reminders, app open/switch/close (per-OS adapters), ICS events. NO shell or
-filesystem tools in this phase. Acceptance: policy engine refuses ungranted
-calls (tested); payments, purchases, destructive deletion, and legal or
-binding submissions are denied unless fresh, explicit user approval
-immediately precedes execution (tested); prompt-injection corpus passes
-before any grant widening.
+STATUS: slice 1 (agent safety foundation) is IMPLEMENTED on main
+(24 Nov 2026, `3d4d5f7` + hardening `988ce68`) as pure, isolated modules
+with NO product wiring: no UI, no IPC, no DB migration, no orchestrator,
+no tool adapters, and no real tool registered anywhere in the app (the
+registry ships empty; only test fixtures define tools). The audit log is
+in-memory only. Landed as flat modules in the existing src/ layout:
+`src/tool-registry.js` (immutable typed definitions, capability classes
+read_only / reversible_write / sensitive / forbidden, strict argument
+validation over plain JSON-like data only), `src/policy-engine.js` (deny
+by default; check order: emergency stop, unknown tool, forbidden
+capability, misclassified critical name, malformed args, exact-tool grant,
+expiry/revocation, fresh one-time approval for sensitive or critical
+tools; wildcard and capability-name grants are refused at grant time),
+`src/approval.js` (one-time approvals bound by digest to the exact tool
+and exact argument set, unpredictable 32-byte ids from crypto.randomBytes
+/ crypto.getRandomValues, fail closed if secure randomness is
+unavailable), `src/audit.js` (append-only, allowlisted sanitized event
+schema, no update or delete API, SHA-256 hash chain with contiguous
+sequence verification; detects edits, deletions and rehashed gaps),
+`src/emergency-stop.js` (blocks every tool authorization while active;
+reset only by explicit user action), `src/digest.js` (canonical JSON and
+self-contained SHA-256; refuses sparse arrays, symbol keys, non-enumerable
+properties, accessors and non-finite numbers, so digesting never executes
+a getter or collapses distinct args). Critical namespaces (payments,
+purchases, checkout, billing, legal, compliance, signatures, filings,
+contracts, submissions, deletion) and destructive-deletion segments
+(delete/destroy/erase/wipe/purge/permanent*) are enforced conservatively:
+the registry refuses to register such a tool unless it is 'sensitive' or
+flagged critical:true, and the policy engine separately refuses to
+authorize any misclassified one that somehow exists. AUDIT LIMITATION: the
+audit log is in-memory and its chain has no persisted anchor, so a fully
+renumbered and rehashed tail is not detectable by local chaining alone;
+the persisted anchor hash in the wiring slice closes this. Remaining Gate
+2 work: persistence for grants, approvals, audit and the agent_runs table
+(with the persisted anchor hash), the orchestrator (plan, act, observe,
+verify, recover), the first harmless tools (notifications, reminders, ICS
+events; NO shell or filesystem tools in this phase), the prompt-injection
+corpus before any grant widening, and UI/IPC wiring. Acceptance: policy
+engine refuses ungranted calls (tested); payments, purchases, destructive
+deletion, and legal or binding submissions are denied unless fresh,
+explicit user approval immediately precedes execution (tested);
+prompt-injection corpus passes before any grant widening.
 
 ## M4 - Memory v2 (1-2 wks)
 

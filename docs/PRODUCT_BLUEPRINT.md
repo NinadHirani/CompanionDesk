@@ -1,19 +1,19 @@
 # CompanionDesk Product Blueprint
 
 Status: **proposed** in direction; M0 and M1 are COMPLETE on main, verified
-24 Nov 2026. The current verified baseline is main `5b643be` with 437
-passing tests, Fo-reported from a full `npm test` run at that head (437/437,
-selftest included). CI (run 45238046955) and CI macOS + Linux (run
-45238047043) are green on that head. The Android APK workflow was last
-green on `40946f4` (run 45232214311) and has not been rerun on the current
-head because every commit since was experiment-scripts/docs-only and
-touches no app code. Work since the previous baseline is
-preparation/harness only, NOT product memory-v2 wiring: the slice-6
-sanitizer hardening, the Gate 1 repo-only benchmark scripts + selftest and
-the comparison assembler, and the M4 memory-v2 harness slices. No actual
-OnePlus device measurements exist; the OnePlus 12R and MacBook Air M1 are
-validation targets only. Doc-only commits after the baseline do not change
-these numbers. This document states the agreed product vision and the
+24 Nov 2026. The current verified baseline is main `988ce68` with 480
+passing tests, Fo-reported from a full `npm test` run at that head
+(480/480, selftest included). All three main-branch CI workflows are green
+on that head: CI (run 45312967934), CI macOS + Linux (run 45312967957) and
+Android APK (run 45312978262). Gate 2 slice 1 (agent safety foundation)
+and its security hardening are pure, isolated modules only: NO product
+wiring, NO tools registered beyond test fixtures, NO UI or IPC, no DB
+migration, and the audit log is in-memory only. Earlier prep/harness work
+(slice-6 sanitizer hardening, Gate 1 repo-only benchmark scripts + selftest
+and comparison assembler, M4 memory-v2 harness) remains harness only, NOT
+product memory-v2 wiring. No actual OnePlus device measurements exist; the
+OnePlus 12R and MacBook Air M1 are validation targets only. Doc-only
+commits after the baseline do not change these numbers. This document states the agreed product vision and the
 verified current state. No decision here is accepted until Ninad approves
 it. Every feature is marked **implemented** (verified against the
 current baseline named in the Status header) or **planned** (not built; do not assume otherwise).
@@ -191,12 +191,34 @@ claims to literally experience emotions.
 - Update policy that never auto-installs unsigned builds; update modes
   disabled/auto/manual-download (`src/update-policy.js`, `src/updater.js`).
 - Health check and onboarding interview (`src/health.js`, `src/onboarding.js`).
-- 437 passing unit/integration tests (258 baseline; model selection +18, conversation history +17, optional key storage +13, M1 provider registry/task router/cloud gate +25, M1 per-ask routing integration +18, M1 review fixes +18, M1 hardware profiles +12, M1 provider status +11, M1 provider contract tests +18, M1 provider fault diagnostics +18, fault-detail sanitization review fix +3, offline memory-v2 retrieval harness +12, memory-v2 harness slice 4 fold fix and bridges +5, memory-v2 store contract tests +9); CI and CI macOS + Linux green on the
-  current baseline `5b643be` (runs 45238046955 and 45238047043); the
-  Android APK workflow was last green on `40946f4` (run 45232214311) and
-  has not been rerun since, because every commit after it was
-  experiment-scripts/docs-only;
+- 480 passing unit/integration tests (258 baseline; model selection +18, conversation history +17, optional key storage +13, M1 provider registry/task router/cloud gate +25, M1 per-ask routing integration +18, M1 review fixes +18, M1 hardware profiles +12, M1 provider status +11, M1 provider contract tests +18, M1 provider fault diagnostics +18, fault-detail sanitization review fix +3, offline memory-v2 retrieval harness +12, memory-v2 harness slice 4 fold fix and bridges +5, memory-v2 store contract tests +9, Gate 2 agent safety foundation +35, Gate 2 security hardening +8); CI, CI macOS + Linux and Android APK all green on the
+  current baseline `988ce68` (runs 45312967934, 45312967957 and
+  45312978262);
   public Android debug-APK preview release.
+
+## 3b. Gate 2 slice 1 (implemented as pure modules, 24 Nov 2026)
+
+Agent safety foundation, isolated and unwired: `src/tool-registry.js`
+(immutable typed definitions, capability classes read_only /
+reversible_write / sensitive / forbidden, strict argument validation that
+accepts only plain JSON-like data), `src/policy-engine.js` (deny by
+default; emergency stop, unknown tool, forbidden capability, misclassified
+critical name, malformed args, exact-tool grant, expiry/revocation, fresh
+one-time approval for sensitive or critical tools), `src/approval.js`
+(one-time approvals bound by digest to the exact tool and exact args,
+unpredictable 32-byte ids from secure randomness, fail closed without it),
+`src/audit.js` (append-only, allowlisted sanitized schema, no update or
+delete API, SHA-256 hash chain with contiguous-sequence verification,
+currently IN-MEMORY only), `src/emergency-stop.js` (blocks every tool
+authorization; user-only reset), `src/digest.js` (canonical JSON +
+self-contained SHA-256). Critical namespaces (payments, purchases,
+checkout, billing, legal, compliance, signatures, filings, contracts,
+submissions, deletion) and destructive-deletion segments are enforced
+conservatively at registration and authorization. Documented audit limit:
+a fully renumbered and rehashed tail is not detectable by local chaining
+alone; a persisted anchor hash in the wiring slice closes it. No tool is
+registered anywhere in the app beyond test fixtures until Gate 2
+acceptance.
 
 ## 4. Planned, NOT implemented
 
