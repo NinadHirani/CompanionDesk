@@ -93,7 +93,9 @@ function createAgentRuntime({ openDb, buildAgent, closeDb } = {}) {
       db = await openDb();
     } catch (err) {
       mode = 'blocked';
-      problems = ['db_open_failed: ' + String((err && err.message) || err)];
+      // Sanitized: error code only, never the raw message (paths and
+      // machine details stay out of anything the surface can show).
+      problems = ['db_open_failed: ' + String((err && err.code) || 'open_failed')];
       return result();
     }
 
@@ -103,7 +105,8 @@ function createAgentRuntime({ openDb, buildAgent, closeDb } = {}) {
     } catch (err) {
       closeStore(db);
       mode = 'blocked';
-      problems = ['agent_build_failed: ' + String((err && err.message) || err)];
+      // Sanitized: error code only, never the raw message.
+      problems = ['agent_build_failed: ' + String((err && err.code) || 'build_failed')];
       return result();
     }
     if (!built || !built.persistence || !built.db) {
@@ -113,6 +116,20 @@ function createAgentRuntime({ openDb, buildAgent, closeDb } = {}) {
       return result();
     }
 
+    try {
+      return await startTail(built);
+    } catch (err) {
+      // Catch-all: no exception escapes start(). Any unexpected failure
+      // (a throwing load or save) leaves the app blocked with the store
+      // closed and no exception detail or partial stack exposed.
+      try { closeStore(built.db); } catch (e2) { /* closing is best effort */ }
+      agent = null;
+      mode = 'blocked';
+      problems = ['startup_failed: ' + String((err && err.code) || 'startup_error')];
+      return result();
+    }
+
+    async function startTail(built) {
     const loaded = built.persistence.load();
     if (!loaded.ok) {
       // Fail closed: nothing was written to the store, so close and report.
@@ -139,6 +156,7 @@ function createAgentRuntime({ openDb, buildAgent, closeDb } = {}) {
     agent = built;
     mode = 'active';
     return result();
+    }
   }
 
   return {

@@ -627,11 +627,27 @@ app.on('activate', () => {
 app.on('before-quit', () => {
   // The agent state store converges and closes first: an acknowledged
   // transition is already durable (each append flushes), so this final save
-  // only converges desk state. A blocked runtime saves nothing.
-  if (agentRuntime) agentRuntime.beforeQuit();
-  if (db) db.flush();
+  // only converges desk state. A blocked runtime saves nothing. The result
+  // is reported bounded: outcome and reason code only, never paths,
+  // machine details, or secrets.
+  if (agentRuntime) {
+    const q = agentRuntime.beforeQuit();
+    console.log('[agent-state] ' + (q.ok ? 'converged and closed' : 'save failed (' + String(q.reason || 'persist_failure') + '); store closed'));
+  }
+  if (db) {
+    try {
+      db.flush();
+    } catch (err) {
+      console.error('[store] flush failed (' + String((err && err.code) || (err && err.message) || 'unknown') + ')');
+    }
+  }
 });
 
 app.on('will-quit', () => {
   if (overlay) overlay.unregisterAll();
+  // The main store closes with the app; a failed close changes nothing.
+  if (db) {
+    try { db.close(); } catch (err) { /* closing is best effort */ }
+    db = null;
+  }
 });

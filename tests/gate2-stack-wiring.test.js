@@ -125,3 +125,54 @@ test('beforeQuit reports a failed save honestly and still closes the store', asy
   assert.match(quit.reason, /persist_failure|save_threw/);
   assert.equal(closed.length, 1, 'the store still closed deterministically');
 });
+
+test('start() never throws: openDb, buildAgent, and load failures return blocked, sanitized, with the store closed', async () => {
+  const closed = [];
+
+  // openDb throws: sanitized reason, no path, no exception escapes.
+  const r1 = createAgentRuntime({
+    openDb: () => { const e = new Error('EACCES: permission denied, open /secret/path/x.db'); e.code = 'EACCES'; throw e; },
+    buildAgent: () => null,
+    closeDb: (db) => closed.push(db),
+  });
+  const s1 = await r1.start();
+  assert.equal(s1.mode, 'blocked');
+  assert.equal(s1.ok, false);
+  assert.match(s1.problems[0], /^db_open_failed/);
+  assert.ok(!JSON.stringify(s1.problems).includes('/secret/path'), 'no path leaks from the open failure');
+
+  // buildAgent throws: the opened store is closed, reason sanitized.
+  const storage = { load: async () => null, save: async () => {} };
+  const r2 = createAgentRuntime({
+    openDb: async () => LocalDb.open({ storage }),
+    buildAgent: () => { throw new Error('boom with /secret/path'); },
+    closeDb: (db) => closed.push(db),
+  });
+  const s2 = await r2.start();
+  assert.equal(s2.mode, 'blocked');
+  assert.equal(s2.ok, false);
+  assert.match(s2.problems[0], /^agent_build_failed/);
+  assert.ok(!JSON.stringify(s2.problems).includes('/secret/path'), 'no path leaks from the build failure');
+  assert.equal(closed.length, 1, 'the opened store was closed after the build failure');
+
+  // persistence.load() throws: the catch-all blocks, closes the store, and
+  // exposes no exception detail or partial stack.
+  const r3 = createAgentRuntime({
+    openDb: async () => LocalDb.open({ storage }),
+    buildAgent: ({ db }) => ({
+      db,
+      persistence: {
+        load: () => { throw new Error('load exploded /secret/path'); },
+        save: () => ({ ok: true }),
+      },
+    }),
+    closeDb: (db) => closed.push(db),
+  });
+  const s3 = await r3.start();
+  assert.equal(s3.mode, 'blocked');
+  assert.equal(s3.ok, false);
+  assert.match(s3.problems[0], /^startup_failed/);
+  assert.ok(!JSON.stringify(s3.problems).includes('/secret/path'), 'no exception detail leaks');
+  assert.ok(!JSON.stringify(s3.problems).includes('exploded'), 'no raw message leaks');
+  assert.equal(closed.length, 2, 'the store closed on the load throw');
+});

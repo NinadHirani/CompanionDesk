@@ -191,40 +191,55 @@ CREATE TABLE IF NOT EXISTS agent_schema (
   function fsSaver(file) {
     return {
       save(bytes) {
-        fs.mkdirSync(path.dirname(file), { recursive: true });
         // Atomic swap with a process-unique temp file, then rename over the
         // target. A crash or power loss mid-write leaves the PREVIOUS file
         // intact; the live store is only ever replaced whole. POSIX rename
         // replaces the target atomically; on Windows the same overwrite
         // semantics apply, but an antivirus or backup tool holding the file
-        // can surface EPERM/EACCES, so a couple of quick retries happen
-        // before the weaker in-place write is used as a last resort (the
-        // load path verifies the store and fails closed, so a torn last-
-        // resort write is never trusted). The temp file is always removed
-        // on the failure path. Error messages carry no file contents.
-        const tmp = file + '.' + process.pid + '.tmp';
+        // can surface EPERM/EACCES, so a couple of quick retries happen.
+        // If the rename still cannot replace the target, we FAIL CLOSED:
+        // the previous file stays byte-for-byte intact, the temp file is
+        // removed, and a sanitized persistence error is thrown. Atomicity
+        // is never traded for availability: there is deliberately NO
+        // in-place write of the target, because a crash during one could
+        // corrupt the previously valid store and file-level verification
+        // cannot resurrect a torn SQLite image. Callers treat the failure
+        // as a persist failure and the runtime blocks until a verified
+        // restart. Error messages carry error codes only: no paths, no
+        // file contents.
+        let tmp = null;
         try {
-          fs.writeFileSync(tmp, Buffer.from(bytes));
+          try {
+            fs.mkdirSync(path.dirname(file), { recursive: true });
+          } catch (err) {
+            throw new Error('persist_failed_write (' + String((err && err.code) || 'write_failed') + ')');
+          }
+          tmp = file + '.' + process.pid + '.tmp';
+          try {
+            fs.writeFileSync(tmp, Buffer.from(bytes));
+          } catch (err) {
+            throw new Error('persist_failed_write (' + String((err && err.code) || 'write_failed') + ')');
+          }
           try {
             fs.renameSync(tmp, file);
           } catch (err) {
             const code = err && err.code;
-            if (code === 'EPERM' || code === 'EEXIST' || code === 'EACCES') {
-              let renamed = false;
-              for (let i = 0; i < 2 && !renamed; i++) {
-                try { fs.renameSync(tmp, file); renamed = true; } catch (err2) { /* brief lock; retry */ }
-              }
-              if (!renamed) {
-                // Last resort, documented weaker: in-place replace. The
-                // verification on load fails closed if this is torn.
-                fs.writeFileSync(file, Buffer.from(bytes));
-              }
-            } else {
-              throw err;
+            if (code !== 'EPERM' && code !== 'EEXIST' && code !== 'EACCES') {
+              throw new Error('persist_failed_write (' + String(code || 'write_failed') + ')');
+            }
+            let renamed = false;
+            let lastCode = String(code);
+            for (let i = 0; i < 2 && !renamed; i++) {
+              try { fs.renameSync(tmp, file); renamed = true; } catch (err2) { lastCode = String((err2 && err2.code) || 'rename_failed'); }
+            }
+            if (!renamed) {
+              // Fail closed: never write the target in place. The old file
+              // is untouched; the caller blocks or retries.
+              throw new Error('persist_failed_rename (' + lastCode + ')');
             }
           }
         } finally {
-          try { if (fs.existsSync(tmp)) fs.unlinkSync(tmp); } catch (err3) { /* cleanup is best effort */ }
+          if (tmp) { try { if (fs.existsSync(tmp)) fs.unlinkSync(tmp); } catch (err3) { /* cleanup is best effort */ } }
         }
       },
     };
@@ -268,7 +283,14 @@ CREATE TABLE IF NOT EXISTS agent_schema (
     persist() {
       if (!this.saver) return;
       if (this._persistTimer) clearTimeout(this._persistTimer);
-      this._persistTimer = setTimeout(() => this.flush(), PERSIST_DELAY_MS);
+      this._persistTimer = setTimeout(() => {
+        try {
+          this.flush();
+        } catch (err) {
+          // Bounded report: error code only, no paths or file contents.
+          console.error('local store flush failed (' + String((err && err.code) || (err && err.message) || 'unknown') + ')');
+        }
+      }, PERSIST_DELAY_MS);
     }
 
     flush() {
