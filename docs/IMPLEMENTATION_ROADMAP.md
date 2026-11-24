@@ -460,6 +460,18 @@ a failed delivery is never retried by re-ticking, so a broken notifier can
 never spam. Renderer schedule creation UI is the next M5 slice; until a
 user creates a schedule and enables delivery, nothing fires.
 
+**Slice 2 (landed 24 Nov 2026): the user surface.** `renderer/schedules-panel.js`
+lists, creates, pauses, resumes and cancels via the five user-facing product
+channels only; every write is an explicit button click, rendering is
+textContent-only, and a refused channel keeps the panel quiet. `src/schedules-view.js`
+is the pure fail-closed shaper (allowlisted fields only, display cap 10 that a
+caller may only lower, malformed records skipped and counted, no mutation).
+The About settings card gained the proactive controls (master delivery toggle
+off by default, per-scope reminder/deadline toggles, quiet hours with time
+inputs, all carried through `settings:save` and normalizeSettings). Next M5
+slice: OPEN — per-scope tuning and deadline-scope UX polish; conservative
+defaults stand until reviewed.
+
 ## M6 - Voice v2 (2-3 wks)
 
 Multilingual whisper model option wired to the existing `language` setting;

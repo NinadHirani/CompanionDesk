@@ -114,6 +114,12 @@
     visionmodel: document.getElementById('s-visionmodel'),
     hwprofile: document.getElementById('s-hwprofile'),
     hwnote: document.getElementById('hw-note'),
+    proactive: document.getElementById('s-proactive'),
+    proactiveRem: document.getElementById('s-proactive-rem'),
+    proactiveDeadline: document.getElementById('s-proactive-deadline'),
+    proactiveQuiet: document.getElementById('s-proactive-quiet'),
+    quietStart: document.getElementById('s-quiet-start'),
+    quietEnd: document.getElementById('s-quiet-end'),
   };
 
   function fillSettings(s) {
@@ -129,6 +135,12 @@
     F.aimodel.value = s.ai_model_local || '';
     F.visionmodel.value = s.ai_model_vision || '';
     if (F.hwprofile) F.hwprofile.value = s.hardware_profile;
+    if (F.proactive) F.proactive.checked = s.proactive_enabled === true;
+    if (F.proactiveRem) F.proactiveRem.checked = s.proactive_scope_reminder === true;
+    if (F.proactiveDeadline) F.proactiveDeadline.checked = s.proactive_scope_deadline === true;
+    if (F.proactiveQuiet) F.proactiveQuiet.checked = s.proactive_quiet_enabled !== false;
+    if (F.quietStart) F.quietStart.value = s.proactive_quiet_start || '22:00';
+    if (F.quietEnd) F.quietEnd.value = s.proactive_quiet_end || '08:00';
   }
 
   // Model choices come only from what Ollama already has installed; nothing
@@ -209,6 +221,12 @@
       ai_model_vision: F.visionmodel.value,
     };
     if (F.hwprofile) payload.hardware_profile = F.hwprofile.value;
+    if (F.proactive) payload.proactive_enabled = F.proactive.checked;
+    if (F.proactiveRem) payload.proactive_scope_reminder = F.proactiveRem.checked;
+    if (F.proactiveDeadline) payload.proactive_scope_deadline = F.proactiveDeadline.checked;
+    if (F.proactiveQuiet) payload.proactive_quiet_enabled = F.proactiveQuiet.checked;
+    if (F.quietStart) payload.proactive_quiet_start = F.quietStart.value;
+    if (F.quietEnd) payload.proactive_quiet_end = F.quietEnd.value;
     const res = await api.settings_save(payload);
     if (res.ok) { fillSettings(res.settings); msg.textContent = 'Saved.'; msg.className = 'hint'; UI.today.refresh(); }
     else { msg.textContent = UI.friendlyError(res.error); msg.className = 'hint error'; }

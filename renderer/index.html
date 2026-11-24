@@ -200,6 +200,14 @@
         <p id="cloud-status" class="hint" role="status"></p>
         <p class="hint">Off by default. Saving a key enables the cloud fallback: the current prompt, plus only the context you explicitly allowed, is sent to Google. Conversation history is never sent. Your Google plan may charge for usage or limit how often the key may be used.</p>
       </div>
+      <h2>Proactive reminders</h2>
+      <p class="hint">Off by default. Nothing is monitored and nothing fires until you both add a schedule and turn delivery on. Quiet hours defer a due reminder to the end of the window; they never drop it. Everything stays on this computer.</p>
+      <label class="check"><input id="s-proactive" type="checkbox" /> Show OS notifications for schedules I set</label>
+      <label class="check"><input id="s-proactive-rem" type="checkbox" /> Reminder scope</label>
+      <label class="check"><input id="s-proactive-deadline" type="checkbox" /> Deadline scope</label>
+      <label class="check"><input id="s-proactive-quiet" type="checkbox" /> Quiet hours</label>
+      <div class="field"><label for="s-quiet-start">Quiet from</label><input id="s-quiet-start" type="time" /></div>
+      <div class="field"><label for="s-quiet-end">Quiet until</label><input id="s-quiet-end" type="time" /></div>
       <button id="settings-save" class="primary">Save</button>
       <p id="settings-msg" class="hint" role="status"></p>
     </section>
@@ -248,7 +256,9 @@
   <script src="onboarding.js"></script>
   <script src="update.js"></script>
   <script src="../src/agent-notifications-view.js"></script>
+  <script src="../src/schedules-view.js"></script>
   <script src="agent-panel.js"></script>
+  <script src="schedules-panel.js"></script>
   <script src="boot.js"></script>
 </body>
 </html>
