@@ -3,7 +3,8 @@
 ## Governing programme order (evidence-based, 24 Nov 2026)
 
 This file is the PRIMARY product programme and it governs the sequence.
-Main head at this writing: `897b5d0`.
+Main head at this writing (24 Nov 2026 evening): `2ca99d4`; the summary
+table below was refreshed in the next commit, which is docs-only.
 
 | Phase | Status | Evidence |
 |---|---|---|
@@ -11,13 +12,16 @@ Main head at this writing: `897b5d0`.
 | M1 intelligence core | COMPLETE | completion head `bccfa75` is an ancestor of main (verified `git merge-base --is-ancestor` 24 Nov 2026); six slices landed 23 Nov 2026 incl. provider health (`provider-status.js`, slice 4) and per-ask routing with live Ollama probes (slice 2); review fix `d36dc01` also an ancestor |
 | GATE 1 Android intelligence | PREPARED, NOT RUN | repo-only scaffold `experiments/android-inference-benchmark/` (metrics, fairness rules, acceptance criteria, owner runbook, desktop matrix below); no device measurement exists; blocked on physical OnePlus 12R time |
 | GATE 2 agent foundation | IN PROGRESS (security workstream, SUPPORTS the product phases) | slices 1-4, persistence wiring, 3j.3-3j.6 notification gates, run-driver Stage A (3j.9) implemented; remaining gates (scheduling, file output) and run-driver Stage B/C await separate explicit review; the Stage B proposal (3j.10) is docs-only. Per Ninad's 24 Nov direction the run-driver work is PAUSED at the proposal; it is not the product roadmap |
-| M4 memory v2 | design + harness complete, NOT implemented in product | `docs/M2_MEMORY_V2_DESIGN.md`, `experiments/memory-v2-harness/`; FOUR open decisions gate implementation |
-| M5 proactive / M6 voice / M7 screen understanding v2 / M8 integrations + workspace UI | NOT IMPLEMENTED | definitions below are plans only |
+| M4 memory v2 | DECIDED + WIRED SLICE 1 | the owner resolved all four decisions 24 Nov 2026 (`docs/M4_MEMORY_DECISIONS.md`, Resolution) and commit `189e3a7` wired them: measured ranker in the persona/chat path, budgets chat 12/screen 6/goal 8/vision 0, screen-derived asks pull zero memory, fail-closed sensitive storage gate (session-only). The v2 store contract stays unwired (replacing the file-backed `src/memory.js` flow is a later reviewed slice); the on-disk home for sensitive marks remains the owner's sub-decision |
+| M5 proactive / M6 voice / M7 screen understanding v2 / M8 integrations + workspace UI | SLICES LANDED, MILESTONES OPEN | M5 complete as specified (slices 1-4, scheduler + panel + settings + quiet-hours visibility). M6 slices 1-4 landed incl. wake milestone 2 (dynamic-name engine, platform gate, honest listener state; training pipeline, provenance `docs/WAKE_PROVENANCE.md`, reproducible eval `scripts/wake/repro_eval.py`); wake stays default-off pending physical mic validation on macOS/Windows/Linux/Android. M7 policy slice + observation-session machine landed; the capture engine stays unbuilt pending real permission flows and device testing. M8 slices 1-3 landed (integrations registry, Device Access Centre policy core, workspace-views groundwork); real connectors, further view schemas and floating-companion customization await the owner's picks |
 
-Verified current state: full `npm test` at `897b5d0` on 24 Nov 2026:
-735/735 pass, selftest PASS; CI and CI macOS+Linux green on that head
-(runs 45353283588, 45353283702). The last src-affecting commit is Stage A
-`83dbcda` (CI green; Android APK run 45344402037).
+Verified state: full `npm test` at `2ca99d4` on 24 Nov 2026:
+937/937 pass, selftest PASS; CI and CI macOS+Linux green on that head
+(runs 45426721777, 45426721768). The same day also landed, each with both
+workflows green: M4 wiring slice `189e3a7`, wake milestones `4547f7a`,
+`a624d5e` and `0125061`. Earlier verified snapshot: `897b5d0` 735/735
+(runs 45353283588, 45353283702); last src-affecting commit there was
+Stage A `83dbcda` (Android APK run 45344402037).
 
 History note: the branch `companiondesk/m0-product-foundation` (head
 `a080573`) was the M0 docs review vehicle. Nothing on it is lost: its

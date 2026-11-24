@@ -1,19 +1,48 @@
 # M4 memory v2: the four open decisions (recommendation sheet, 24 Nov 2026)
 
-Status: RECOMMENDATION SHEET ONLY. Nothing here is decided. The four
-decisions below are quoted from `docs/M2_MEMORY_V2_DESIGN.md` ("Open
-decisions for the owner") and remain the owner's calls. This sheet exists
-so decision-dependent work has a concrete, reviewable recommendation to
-approve or overrule, and so implementation work that does NOT depend on
-them is separable from work that does.
+Status: RESOLVED (24 Nov 2026) AND WIRED. The owner accepted the
+conservative recommendations and authorized the wiring in the same
+session; commit `189e3a7` implemented the decisions as working defaults
+with explicit guardrails. The option discussion below is kept as the
+record of what was weighed; where it says a decision is still open, that
+sentence is historical. What ACTUALLY remains open is listed under
+"What stays gated" at the bottom.
 
-## What was implemented WITHOUT any of the four decisions
+## Resolution (24 Nov 2026, wiring commit `189e3a7`)
+
+Verbatim from the wiring commit (the authoritative record):
+
+- D1 sensitive entries: explicit per-bullet mark, never a `Sensitive:`
+  prefix; a mark is a sensitivity CLASSIFICATION, not consent. The
+  storage gate is fail-closed: sensitive bullets are NEVER written to
+  the About-me file (`toMarkdown` excludes them), addMemory/markSensitive
+  report `persisted:false`, and `persistSensitive()` refuses even an
+  explicit yes because no on-disk format preserves the mark yet.
+  Flagged entries stay session-only.
+- D2 synonyms: the frozen map ships exactly as measured; a test pins its
+  exact contents so any change is a documented benchmark event.
+- D3 budgets: chat=12, screen=6, goal=8, vision=0 as frozen tunable
+  defaults. Vision AND screen-derived asks (derivedFrom:'screen')
+  retrieve ZERO memory, always-on sections included, before any
+  selection runs.
+- D4 embeddings: deferred; the 70%/0.5 numbers are a measurement gate
+  only, never permission to download or install anything.
+
+Wiring: `src/memory-retrieval.js` carries BUDGETS + selectForTask with
+the screen-derived force-zero rule; `src/persona.js` selectMemories runs
+the measured ranker (BM25 + section boost + bigram bonus + frozen
+synonyms), budget-capped per task; `src/personal.js` passes task 'chat'
+(budget 12); `src/screen-service.js` passes task 'vision' and its persona
+carries zero memory lines.
+
+## What the pure port contained as of `89b9b70` (true then; wiring superseded it)
 
 `src/memory-retrieval.js` and `src/memory-store.js` are a direct port of
 the measured harness core (slices 0-5) into product-shaped pure modules:
 
-- NO product wiring: no `src/` file outside the pair requires them (a test
-  scans and pins this), and no behavior of the running app changes.
+- NO product wiring at the time of `89b9b70`: no `src/` file outside the
+  pair required them. Superseded by `189e3a7`, which wires the ranker into
+  the persona/chat path and the storage gate into the store.
 - NO sensitive convention: flags stay explicit caller input
   (`sensitiveIds` at parse, `markSensitive` at runtime); nothing parses a
   `Sensitive:` prefix (decision 1 untouched); `toMarkdown()` writes plain
@@ -50,7 +79,7 @@ per-bullet mark. (The harness uses the explicit flag.)"
   persistence home raised as its own sub-decision before any wiring. It
   keeps the strongest failure mode (a silently lost prefix on a hand
   edit) out of the design, and it is what the measured harness behavior
-  already pins. Do NOT implement either convention until you decide.
+  already pins. Do NOT implement either convention until you decide. (Superseded 24 Nov 2026: decided and wired, see Resolution.)
 
 ## Decision 2: the seeded synonym map
 
@@ -81,7 +110,7 @@ defaults." (chat 12, screen 6, goal 8, vision 0 bullets.)
 - RECOMMENDED CONSERVATIVE DEFAULT: A, as shipped-in-code constants the
   owner can later tune, precisely because vision 0 and small chat/screen
   caps are the fail-safe direction (less memory surfaced, never more).
-  Untouched until you say so; nothing in product code carries them now.
+  Untouched until you say so; nothing in product code carries them now. (Superseded 24 Nov 2026: adopted as wired defaults, see Resolution.)
 
 ## Decision 4: revisiting embeddings
 
@@ -98,12 +127,15 @@ real-content recall is measured, and on what threshold."
   (remaining misses are ranking-quality, not vocabulary). The threshold
   number itself is yours to set; 70%/0.5 is a placeholder, not a decision.
 
-## What stays gated on these decisions
+## What actually stays gated (after the 24 Nov 2026 resolution)
 
-- Any wiring of retrieval into chat/screen/goal ask paths (decisions 2+3).
-- Any persistence or on-disk format for sensitive flags (decision 1).
-- Any embeddings work (decision 4).
-- Any change to `src/memory.js`'s public behavior.
+- The ON-DISK persistence home for sensitive marks: `persistSensitive()`
+  still refuses because no format preserves the mark; designing that
+  format is the owner's remaining sub-decision.
+- Any embeddings work (decision 4): revisits only through the measured
+  70%/0.5 gate, and even then a model download needs separate approval.
+- Replacing the file-backed `src/memory.js` flow with the v2 store
+  contract remains a later reviewed slice (roadmap M4).
 
 Gate 1 device validation is unaffected: the desktop runbook matrix stands
 in the roadmap; no device validation is claimed here.

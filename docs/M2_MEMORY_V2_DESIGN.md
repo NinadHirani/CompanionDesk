@@ -114,6 +114,10 @@ by this slice.
 
 ## Open decisions for the owner
 
+RESOLVED 24 Nov 2026, wired in commit `189e3a7`: see
+`docs/M4_MEMORY_DECISIONS.md` (Resolution section) for the adopted
+options and guardrails. The list below is the original question sheet.
+
 1. Sensitive-entry convention: `Sensitive:` prefix parsed at load vs an
    explicit per-bullet mark. (The harness uses the explicit flag.)
 2. Whether the seeded synonym map ships as-is, grows with the corpus, or
