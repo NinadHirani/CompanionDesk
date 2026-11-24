@@ -1,15 +1,22 @@
 # CompanionDesk Product Blueprint
 
 Status: **proposed** in direction; M0 and M1 are COMPLETE on main, verified
-24 Nov 2026. The current verified baseline is main `05cea22` with 544
+24 Nov 2026. The current verified baseline is main `de1e284` with 582
 passing tests, Fo-reported from a full `npm test` run at that head
-(544/544, selftest included). CI, CI macOS + Linux and Android APK are all
-green on that head (runs 45319482959, 45319482716 and 45319501624, the APK
-explicitly dispatched). Gate 2 slices 1-4 (agent safety foundation,
-hardening, persistence, orchestrator, first harmless tools) are pure,
-isolated modules with NO product wiring, NO UI and NO IPC; slice 2
-persists the audit log, slice 3 adds the orchestrator and slice 4 adds the
-notifications/reminders/ics tools (see 3d and 3e), still unwired. The
+(582/582, selftest included). CI, CI macOS + Linux and Android APK are all
+green on that head (runs 45321563591, 45321563695 and , the APK
+explicitly dispatched). Gate 2 slices 1-6 (agent safety foundation,
+hardening, persistence, orchestrator, first harmless tools, injection
+corpus, IPC contract) are pure, isolated modules with NO product wiring,
+NO UI and NO IPC beyond the slice 6 CONTRACT module, which is itself
+unwired data; slice 2 persists the audit log, slice 3 adds the
+orchestrator, slice 4 adds the notifications/reminders/ics tools (see 3d
+and 3e), slice 5 adds the prompt-injection red-team corpus (3f), and
+slice 6 defines the fail-closed read-only renderer-to-main IPC contract
+(3g), all still unwired. The ICS tool was hardened after Ninad's review
+(commit 9adf493): strict date/time component validation replaced the
+shape-only regex and the byte counter now counts exact UTF-8 (recorded
+in 3e). The
 orchestrator was hardened after Ninad's review (commit e699c64): every
 audit append result is checked, ANY refusal or throwing sink poisons the
 instance, and every transition is log-before-commit. The M1 slice 6
@@ -199,10 +206,10 @@ claims to literally experience emotions.
 - Update policy that never auto-installs unsigned builds; update modes
   disabled/auto/manual-download (`src/update-policy.js`, `src/updater.js`).
 - Health check and onboarding interview (`src/health.js`, `src/onboarding.js`).
-- 544 passing unit/integration tests (258 baseline; model selection +18, conversation history +17, optional key storage +13, M1 provider registry/task router/cloud gate +25, M1 per-ask routing integration +18, M1 review fixes +18, M1 hardware profiles +12, M1 provider status +11, M1 provider contract tests +18, M1 provider fault diagnostics +18, fault-detail sanitization review fix +3, offline memory-v2 retrieval harness +12, memory-v2 harness slice 4 fold fix and bridges +5, memory-v2 store contract tests +9, Gate 2 agent safety foundation +35, Gate 2 security hardening +8, Gate 2 persistence +17, M1 diagnostics hardening +2, Gate 2 orchestrator +13, orchestrator audit hardening +13, first
-  harmless tools +18); CI, CI macOS + Linux and Android APK all green on
-  the current baseline `05cea22` (runs 45319482959, 45319482716 and
-  45319501624, the APK explicitly dispatched);
+- 582 passing unit/integration tests (258 baseline; model selection +18, conversation history +17, optional key storage +13, M1 provider registry/task router/cloud gate +25, M1 per-ask routing integration +18, M1 review fixes +18, M1 hardware profiles +12, M1 provider status +11, M1 provider contract tests +18, M1 provider fault diagnostics +18, fault-detail sanitization review fix +3, offline memory-v2 retrieval harness +12, memory-v2 harness slice 4 fold fix and bridges +5, memory-v2 store contract tests +9, Gate 2 agent safety foundation +35, Gate 2 security hardening +8, Gate 2 persistence +17, M1 diagnostics hardening +2, Gate 2 orchestrator +13, orchestrator audit hardening +13, first harmless tools +18, ICS
+  hardening +5, injection corpus +27, IPC contract +5); CI, CI macOS + Linux
+  and Android APK all green on the current baseline `de1e284` (runs
+  45321563591, 45321563695 and , the APK explicitly dispatched);
   public Android debug-APK preview release.
 
 ## 3b. Gate 2 slice 1 (implemented as pure modules, 24 Nov 2026)
@@ -340,6 +347,54 @@ and that a full three-step orchestrator run creates real records and
 audits every transition, with a tool-level refusal inside a run stored as
 nothing and handled by skip recovery. Delivery, scheduling and file
 output stay unwired and are separate, explicitly-reviewed gates.
+
+## 3f. Gate 2 slice 5: prompt-injection red-team corpus (24 Nov 2026)
+
+src/agent-injection-corpus.js holds 23 adversarial payloads across 8
+categories (tool-output injection, retrieved documents, quoted user
+text, hidden Unicode: zero-width characters, RTL overrides, isolates,
+invisible joiners and mathematical-alphanumeric spoofing; control
+characters: ANSI CSI and C0/C1; role spoofing; approval laundering;
+exfiltration). The corpus is DATA, not a detector: per the standing
+boundary, grants are never widened based on prompt content and no
+content-based policy is added; model-driven interpretation stays out of
+scope and excluded by design. The red-team tests (tests/
+gate2-injection-corpus.test.js, 27 tests) feed every payload through
+the REAL orchestrator/policy/approval/audit stack and prove the
+structural boundaries hold regardless of content: a step result is
+inert data observed as { ok, summary } only, so a sensitive step still
+demands its own approval and never runs, the plan stays fixed with
+declared args untouched and no dynamic insertion; approval ids quoted
+in content are unknown to the desk and resuming with them never
+executes anything (positive control: the honest caller path completes
+the same run with the target executed exactly once); every audit entry
+passes the sanitizer, hostile keys never appear, and the hash chain
+verifies over every hostile run; a tool named only inside injected
+content aborts the run with the denial audited; policy refusals follow
+the same ladder (no_grant, then approval_required) with hostile text in
+args; role spoofing leaves no persistent state change.
+
+## 3g. Gate 2 slice 6 (narrow): the renderer-to-main IPC contract
+(24 Nov 2026)
+
+First piece of the approved UI/IPC wiring: the pure security contract
+every wiring step must conform to (src/ipc-contract.js). No Electron
+files are touched yet; the contract is the consequential security
+decision and goes in front of review before anything renderer-facing
+changes. It encodes the standing boundaries as enforced data:
+RENDERER_CHANNELS is a read-only allowlist (status, run state, audit
+snapshot, provider status, harmless-tool record reads) that never
+exposes anything that executes, grants, approves or stops;
+MAIN_ONLY_CHANNELS spells out every write path (run start/step/resume/
+abort, approvals, grants, stop activate/reset, persistence) so a review
+can diff the preload surface against it; validateRequest fails closed
+on unknown channels and on payloads that miss the declared shape
+(strict types, no extra keys, no undefined fields, valid payloads
+copied never aliased); validatePreloadAllowlist proves a wiring layer's
+exposed surface equals the contract exactly, so the shell cannot
+silently widen it; refusalResponse renders one bounded fail-closed
+answer. 5 tests cover the read-only construction proof, refusals,
+strict validation, the allowlist equality proof and the refusal shape.
 
 ## 4. Planned, NOT implemented
 

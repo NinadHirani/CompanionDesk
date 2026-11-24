@@ -63,6 +63,14 @@ complete protection (acknowledged in CLAUDE.md).
 foundation: typed tool registry, external policy engine, approval classes,
 audit log, and emergency stop BEFORE any computer-control tool. The
 propose-then-confirm principle is unchanged.
+    Gate 2 progress (24 Nov 2026): the agent safety foundation, security
+    hardening, persistence, the orchestrator plus its audit fail-closed
+    hardening, the first harmless tools (notifications, reminders, ics,
+    with the ICS date/time and UTF-8 byte-count hardening from review),
+    the prompt-injection red-team corpus, and the read-only renderer-to-
+    main IPC contract are implemented as pure, isolated, UNWIRED modules
+    (blueprint sections 3a-3g; baseline de1e284, 582 tests). UI/IPC
+    wiring is the next, explicitly-reviewed step.
 
 Risks unchanged: per-OS permissions (Accessibility, Screen Recording,
 Android foreground-service types) must fail closed; privacy expectations are
