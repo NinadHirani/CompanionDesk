@@ -224,20 +224,27 @@ test('audit entries and the anchor are written atomically; a failed write rolls 
   const p2 = createAgentPersistence({ db: flaky, clock: () => w.state.now, registry: w.registry, audit: w.audit, approvals: w.approvals, engine: w.engine, emergencyStop: w.stop });
   p2.load();
   const before = w.db.all('SELECT COUNT(*) AS n FROM agent_audit')[0].n;
+  const lastHashBefore = w.audit.lastHash;
   const res = p2.appendAudit({ actor: 'agent', action: 'tools.result', tool: 'notes.search' });
   assert.equal(res.ok, false);
   assert.equal(res.reason, 'persist_failure');
   const after = w.db.all('SELECT COUNT(*) AS n FROM agent_audit')[0].n;
   assert.equal(after, before, 'rolled back: no partial audit row');
-  // The in-memory log keeps the entry; the next healthy save converges.
-  assert.equal(w.audit.length, before + 1);
+  // The in-memory append rolls back too: the log holds acknowledged
+  // entries only, so no false record of a transition that did not commit
+  // can ever converge to disk.
+  assert.equal(w.audit.length, before, 'unacknowledged entry rolled back');
+  assert.equal(lastHashBefore, w.audit.lastHash, 'chain head restored');
   failNextAnchor = false;
-  const retry = p2.save();
-  assert.equal(retry.ok, true, 'retry save: ' + JSON.stringify(retry));
+  // A fresh append after the write path recovers: the seq is reused (the
+  // rolled-back entry no longer exists), the chain verifies.
+  const retry = p2.appendAudit({ actor: 'agent', action: 'tools.result', tool: 'notes.search' });
+  assert.equal(retry.ok, true, 'recovered append: ' + JSON.stringify(retry));
+  assert.equal(retry.seq, before + 1, 'the seq is reused');
   const w3 = await restart(w);
   assert.equal(w3.loaded.ok, true);
   const actions = w3.audit.read({}).map((e) => e.action);
-  assert.ok(actions.includes('tools.result'), 'converged entry persisted');
+  assert.ok(actions.includes('tools.result'), 'the recovered entry persisted');
 });
 
 test('a tampered audit row fails startup closed and nothing is deleted or repaired', async () => {

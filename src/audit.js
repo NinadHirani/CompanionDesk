@@ -173,6 +173,21 @@
         return { ok: true, seq, hash };
       },
 
+      // Undo the most recent append. Used only by the persistence layer
+      // when a persist leg failed: the entry never became durable, the
+      // transition it recorded never committed (log-before-commit), and the
+      // log must hold acknowledged entries only. A converged-but-unwritten
+      // record of something that never happened would be a false audit
+      // record. Refuses unless the last entry is exactly expectedSeq.
+      rollbackLast(expectedSeq) {
+        const lastEntry = entries[entries.length - 1];
+        if (!lastEntry || lastEntry.seq !== expectedSeq) return { ok: false, reason: 'rollback_mismatch' };
+        entries.pop();
+        seq = entries.length ? entries[entries.length - 1].seq : base.seq;
+        prevHash = entries.length ? entries[entries.length - 1].hash : base.hash;
+        return { ok: true, seq: expectedSeq };
+      },
+
       read({ fromSeq = 1, limit } = {}) {
         const out = [];
         for (const e of entries) {

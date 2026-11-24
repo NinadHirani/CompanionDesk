@@ -411,19 +411,29 @@
         }
         if (status.ok && approvals && invalidatedApprovals > 0 && audit) {
           const pending = approvalRecords.filter((r) => r.state === 'pending').map((r) => r.id);
+          let appended = null;
           try {
-            tx(() => {
-              for (const id of pending) db.run("UPDATE agent_approvals SET state = 'invalidated' WHERE id = ? AND state = 'pending'", [id]);
-            });
-            // appendAudit appends to the live log AND persists the entry and
-            // anchor atomically; a persist failure leaves the entry in memory
-            // for the next save() to converge.
-            const written = appendAudit({ actor: 'system', action: 'approvals.invalidated_on_restart', detail: { count: pending.length } });
-            if (!written.ok && written.reason !== 'persist_failure') {
-              fail('persist_failure');
-              problems.push('persist_failure:invalidation_audit');
+            appended = audit.append({ actor: 'system', action: 'approvals.invalidated_on_restart', detail: { count: pending.length } });
+            if (!appended.ok) {
+              fail('audit_append_refused');
+              problems.push('audit_append_refused:invalidation');
+            } else {
+              // ONE transaction: the invalidation UPDATEs, the audit row and
+              // the anchor commit together or not at all. On failure the
+              // in-memory append rolls back too and load fails closed.
+              tx(() => {
+                for (const id of pending) db.run("UPDATE agent_approvals SET state = 'invalidated' WHERE id = ? AND state = 'pending'", [id]);
+                insertAuditRow(audit.read({ fromSeq: appended.seq, limit: 1 })[0]);
+                const snap = audit.snapshot();
+                const lastEntry = snap.entries.length ? snap.entries[snap.entries.length - 1] : null;
+                putAnchor(snap.base.seq, snap.base.hash, lastEntry ? lastEntry.seq : snap.base.seq, lastEntry ? lastEntry.hash : snap.base.hash);
+              });
+              lastPersistedSeq = appended.seq;
             }
           } catch (err) {
+            if (appended && appended.ok) {
+              try { audit.rollbackLast(appended.seq); } catch (e2) { /* nothing further */ }
+            }
             fail('persist_failure');
             problems.push('persist_failure:invalidation');
           }
@@ -497,6 +507,11 @@
         lastPersistedSeq = res.seq;
         return { ok: true, seq: res.seq, hash: res.hash };
       } catch (err) {
+        // The transaction rolled back: the entry never became durable, and
+        // the transition it recorded never committed. Roll the in-memory
+        // append back too, so the log holds acknowledged entries only and
+        // can never converge a record of a transition that did not happen.
+        try { audit.rollbackLast(res.seq); } catch (e2) { /* nothing further */ }
         return { ok: false, reason: 'persist_failure', seq: res.seq, error: String((err && err.message) || err) };
       }
     }
@@ -620,10 +635,11 @@
     // Wraps the real audit log so every append is persisted and acknowledged
     // before the caller may treat a transition as committed: append() returns
     // success only after the entry and the anchor were written in one
-    // transaction. A persist leg failure reports failure (the entry stays in
-    // memory for the next save() to converge; the caller must NOT treat the
-    // transition as durable), an integrity failure refuses, and the audit's
-    // own validation result passes through untouched. Reads and verification
+    // transaction. A persist leg failure reports failure AND rolls the
+    // in-memory append back (the log holds acknowledged entries only; the
+    // caller must NOT treat the transition as durable or retry-blur it), an
+    // integrity failure refuses, and the audit's own validation result
+    // passes through untouched. Reads and verification
     // pass through to the real log.
     function durableAudit() {
       if (!audit) throw new Error('no audit configured');
