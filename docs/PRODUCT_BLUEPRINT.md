@@ -205,7 +205,7 @@ claims to literally experience emotions.
 - Update policy that never auto-installs unsigned builds; update modes
   disabled/auto/manual-download (`src/update-policy.js`, `src/updater.js`).
 - Health check and onboarding interview (`src/health.js`, `src/onboarding.js`).
-- 644 passing unit/integration tests (258 baseline; model selection +18, conversation history +17, optional key storage +13, M1 provider registry/task router/cloud gate +25, M1 per-ask routing integration +18, M1 review fixes +18, M1 hardware profiles +12, M1 provider status +11, M1 provider contract tests +18, M1 provider fault diagnostics +18, fault-detail sanitization review fix +3, offline memory-v2 retrieval harness +12, memory-v2 harness slice 4 fold fix and bridges +5, memory-v2 store contract tests +9, Gate 2 agent safety foundation +35, Gate 2 security hardening +8, Gate 2 persistence +17, M1 diagnostics hardening +2, Gate 2 orchestrator +13, orchestrator audit hardening +13, first harmless tools +18, ICS
+- 660 passing unit/integration tests (258 baseline; model selection +18, conversation history +17, optional key storage +13, M1 provider registry/task router/cloud gate +25, M1 per-ask routing integration +18, M1 review fixes +18, M1 hardware profiles +12, M1 provider status +11, M1 provider contract tests +18, M1 provider fault diagnostics +18, fault-detail sanitization review fix +3, offline memory-v2 retrieval harness +12, memory-v2 harness slice 4 fold fix and bridges +5, memory-v2 store contract tests +9, Gate 2 agent safety foundation +35, Gate 2 security hardening +8, Gate 2 persistence +17, M1 diagnostics hardening +2, Gate 2 orchestrator +13, orchestrator audit hardening +13, first harmless tools +18, ICS
   hardening +5, injection corpus +27, IPC contract +5, IPC contract review hardening +11, agent surface
   wiring +21, persistence hardening +6 (strict records, acknowledged
   appends flush to disk immediately, unacknowledged appends roll back),
@@ -214,7 +214,8 @@ claims to literally experience emotions.
   injection proof, the reset lifecycle, and honest before-quit reporting),
   saver fail-closed hardening +5 (rename failure proven per error code
   with the old file byte-for-byte intact, sanitized errors, startup
-  exception proof), +22 total since the 622 count above); CI,
+  exception proof), delivery bridge +16 (fail-closed drain to a
+  wiring-supplied sink), +38 total since the 622 count above); CI,
   CI macOS + Linux and Android APK all green on the
   current baseline `9addfdb` (runs 45323544121, 45323543975, 45323765018);
   public Android debug-APK preview release.
@@ -392,7 +393,9 @@ without a grant, authorized with valid args and no approvalId with one,
 and that a full three-step orchestrator run creates real records and
 audits every transition, with a tool-level refusal inside a run stored as
 nothing and handled by skip recovery. Delivery, scheduling and file
-output stay unwired and are separate, explicitly-reviewed gates.
+output stay unwired as separate, explicitly-reviewed gates; the pure
+delivery bridge (3j) now implements delivery's drain side, with its sink
+wiring still to come.
 
 ## 3f. Gate 2 slice 5: prompt-injection red-team corpus (24 Nov 2026)
 
@@ -541,6 +544,32 @@ schema stamping (fresh, additive, newer-refused), append durability without
 an explicit save, convergence after a persist failure, hydrate overflow and
 malformed-record refusals, and the durable wrapper's acknowledge/report
 semantics. Full suite 622/622.
+
+## 3j. Gate 2 delivery gate (24 Nov 2026): the pure delivery bridge
+
+src/agent-delivery.js is the delivery mediator between the agent
+notification desk and a user-visible surface. It drains pending records
+oldest-first to a wiring-supplied sink (a plain function that records one
+notification in the app's own surface) and acknowledges delivery by
+marking the record read in the desk itself, so there is no second source
+of delivery state. Boundaries, all fail closed: no OS notification APIs,
+no network, no timers (the sink is injectable and this module calls
+nothing else); a record is handed to the sink only while unread, with the
+acknowledgment in the same step (documented limit: the desk's read flag is
+the only delivery state, so an ack failure after a successful sink call
+can, on a later drain, hand the same record to the sink again, which the
+sink must tolerate); the sink receives a fresh plain copy of allowlisted
+fields only (id, title, body, priority, createdAt), accessors refused
+before any read, symbol keys never copied, exotic prototypes refused, so
+mutating the copy cannot reach the desk; the sink's verdict is read
+defensively (ok must be exactly true, refusal reasons sanitized to bounded
+printable strings, a throwing sink caught as sink_error); the drain stops
+at the first failure so later records stay unread for a later drain; the
+batch is bounded (default 10, only lowerable); malformed records are
+refused unread (record_invalid) before reaching the sink. 16 tests cover
+the real-desk normal paths and stub-desk hostile paths. The sink wiring
+into the app's real surface is the next, separately reviewed step;
+scheduling and file output remain unwired gates after it.
 
 ## 4. Planned, NOT implemented
 

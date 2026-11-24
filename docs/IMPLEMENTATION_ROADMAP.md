@@ -304,8 +304,9 @@ byte-for-byte intact, sanitized code-only error, no in-place write of
 the target; atomicity is never traded for availability), and start()
 never throws (every failure path returns blocked with the store closed
 and sanitized reasons).
-Remaining Gate 2 work: delivery/scheduling/file output, each an
-explicitly-reviewed gate.
+Remaining Gate 2 work: the delivery sink wiring, scheduling and file
+output, each an explicitly-reviewed gate (the pure delivery bridge is
+implemented; blueprint 3j).
 Acceptance: policy
 engine refuses ungranted calls (tested); payments, purchases, destructive
 deletion, and legal or binding submissions are denied unless fresh,
