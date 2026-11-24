@@ -12,7 +12,11 @@
 //    model family: "llama3.2" is not "llama3.2:latest", and a different tag
 //    is a different entry that needs its own verified metadata.
 //  - License, context length, and cost are UNKNOWN until verified. They are
-//    null here on purpose. Never fill them in from family knowledge.
+//    null here on purpose. Never fill them in from family knowledge. When a
+//    fact IS verified against a primary source, it carries a `verified`
+//    object with the verification date and the exact sources; anything not
+//    sourced stays null. No benchmark or quality claim is recorded here:
+//    those come only from measured runs (Gate 1), never from model cards.
 //  - Privacy attributes state where data goes for that provider, which is a
 //    fact of the transport, not a claim about any specific model.
 // Dual-mode: require() in Electron/Node, plain <script> in the web/mobile
@@ -44,33 +48,58 @@
     }),
   });
 
+  // Fixed capability vocabulary. A capability is recorded on an entry only
+  // when its primary source documents it for that exact id; reasoning and
+  // coding stay UNRECORDED for every current entry (no verified source
+  // claims them here; model-card marketing is not a verified claim).
+  const CAPABILITIES = Object.freeze(['chat', 'vision', 'reasoning', 'coding', 'tool_use', 'multilingual']);
+
   // Exact-id model entries. license: verified license name, null until
   // verified (never inferred from the family). contextTokens: verified
   // context window, null until verified. cost: verified cost note, null
   // until verified. privacy states where the prompt and attachments go.
+  // verified: null until facts are checked against a primary source, then
+  // { at, sources, notes? } - the date, the exact URLs read, and anything
+  // the sources could NOT settle (open questions are recorded, never
+  // resolved by guesswork).
   const MODELS = Object.freeze({
     ollama: Object.freeze({
       'llama3.2:latest': Object.freeze({
         id: 'llama3.2:latest',
         provider: 'ollama',
         version: 'latest tag as served by the installed model',
-        capabilities: Object.freeze(['chat']),
-        license: null, // unverified for this exact id
-        contextTokens: null, // unverified
+        capabilities: Object.freeze(['chat', 'multilingual']),
+        license: 'Llama 3.2 Community License', // custom, commercial; not an OSI open-source license
+        contextTokens: 128000, // text models 1B and 3B, per Meta's model card
         cost: 'free (runs on this device; no data leaves it)',
         privacy: 'prompt, history and any images stay on this device',
         role: 'default local chat model',
+        verified: Object.freeze({
+          at: '2026-11-24',
+          sources: [
+            'https://github.com/meta-llama/llama-models/blob/main/models/llama3_2/MODEL_CARD.md',
+            'https://github.com/meta-llama/llama-models/blob/main/models/llama3_2/LICENSE',
+          ],
+          notes: ['1B and 3B are text models, 128k context, multilingual text in/out; Hindi is in the officially supported language list', 'community license terms govern use and redistribution; read before any redistribution'],
+        }),
       }),
       'gemma3:4b': Object.freeze({
         id: 'gemma3:4b',
         provider: 'ollama',
         version: '4b as served by the installed model',
-        capabilities: Object.freeze(['chat', 'vision']),
-        license: null, // unverified for this exact id
-        contextTokens: null, // unverified
+        capabilities: Object.freeze(['chat', 'vision', 'multilingual']),
+        license: 'Gemma Terms of Use', // Google's custom open-weight terms, not an OSI license
+        contextTokens: 128000, // 4B size, per the Gemma 3 model card
         cost: 'free (runs on this device; no data leaves it)',
         privacy: 'prompt, history and any images stay on this device',
         role: 'default local vision (screen/image) model',
+        verified: Object.freeze({
+          at: '2026-11-24',
+          sources: [
+            'https://ai.google.dev/gemma/docs/core/model_card_3',
+          ],
+          notes: ['4B takes image+text input and outputs text; 128K-token context; 140+ languages', 'images are encoded at 896x896 to 256 tokens each, per the model card'],
+        }),
       }),
     }),
     gemini: Object.freeze({
@@ -78,12 +107,22 @@
         id: 'gemini-2.0-flash',
         provider: 'gemini',
         version: '2.0-flash as served by the API',
-        capabilities: Object.freeze(['chat']),
-        license: null, // unverified for this exact id
-        contextTokens: null, // unverified
-        cost: null, // unverified; free-tier quotas may apply, verify before enabling
+        capabilities: Object.freeze(['chat', 'tool_use', 'multilingual']),
+        license: null, // an API model, not redistributed weights; no verified license fact to record
+        contextTokens: 1048576, // input context, per Google's documented model spec
+        cost: null, // free-tier quotas may apply; verify current terms before enabling
         privacy: 'prompt, cloudArgs and any attached images are sent to Google',
         role: 'optional cloud chat fallback',
+        verified: Object.freeze({
+          at: '2026-11-24',
+          sources: [
+            'https://ai.google.dev/gemini-api/docs/models (renders blank in our tooling; context and tool-use facts rest on multiple consistent secondary reports)',
+          ],
+          notes: [
+            'OPEN QUESTION for Ninad: multiple third-party indexes report this id was RETIRED around June 2026; Google\'s own deprecation pages did not render for us (404/blank), so the retirement is UNVERIFIED against a primary source. The default cloud model is unchanged; replacing it with a current Flash id is a product decision held for explicit approval, not made silently.',
+            'function calling (tool_use) is documented for this id by those same sources; treated as verified-by-consensus, not primary-source-confirmed',
+          ],
+        }),
       }),
     }),
   });
@@ -116,10 +155,11 @@
     return (m && m[modelId]) || null; // exact id only; no family fallback
   }
   function isKnownTask(task) { return TASKS.includes(task); }
+  function isKnownCapability(cap) { return CAPABILITIES.includes(cap); }
 
   return {
-    PROVIDERS, MODELS, DEFAULTS, TASKS, LOCAL_ONLY_TASKS, CLOUD_ELIGIBLE_TASKS,
-    isLocalOnlyTask, isCloudEligibleTask, isKnownTask,
+    PROVIDERS, MODELS, DEFAULTS, TASKS, LOCAL_ONLY_TASKS, CLOUD_ELIGIBLE_TASKS, CAPABILITIES,
+    isLocalOnlyTask, isCloudEligibleTask, isKnownTask, isKnownCapability,
     listProviders, getProvider, listModels, getModel,
   };
 });

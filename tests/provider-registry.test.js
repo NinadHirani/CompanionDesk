@@ -31,21 +31,47 @@ test('models are exact ids; no family-level entries, no inference across tags', 
   for (const id of Object.keys(Registry.MODELS.gemini)) assert.ok(/^[a-z0-9.-]+$/.test(id) && id.includes('-'), id);
 });
 
-test('license, context and cost are unknown until verified, for every entry', () => {
+test('every fact is either verified with sources or stays null; capabilities stay in the fixed vocabulary', () => {
   for (const providerId of Object.keys(Registry.MODELS)) {
     for (const m of Registry.listModels(providerId)) {
-      assert.equal(m.license, null, `${providerId}/${m.id} license must stay unverified`);
-      assert.equal(m.contextTokens, null, `${providerId}/${m.id} context must stay unverified`);
       assert.equal(typeof m.privacy, 'string', `${providerId}/${m.id} privacy is a transport fact`);
       assert.ok(Array.isArray(m.capabilities) && m.capabilities.length, `${providerId}/${m.id} capabilities listed`);
+      for (const cap of m.capabilities) {
+        assert.equal(Registry.isKnownCapability(cap), true, `${providerId}/${m.id} capability ${cap} must be in the vocabulary`);
+      }
+      if (m.verified) {
+        assert.equal(typeof m.verified.at, 'string', `${providerId}/${m.id} verified.at`);
+        assert.ok(Array.isArray(m.verified.sources) && m.verified.sources.every((s) => s.startsWith('https://')), `${providerId}/${m.id} verified.sources are URLs`);
+        assert.ok(m.license || m.contextTokens, `${providerId}/${m.id} a verified entry carries at least one verified fact`);
+      }
+      // nothing is ever recorded without a verified object backing it
+      if (m.license !== null || m.contextTokens !== null) assert.ok(m.verified, `${providerId}/${m.id} verified facts carry their verification`);
+      // no benchmark or quality numbers live here
+      assert.ok(!('benchmark' in m) && !('quality' in m), `${providerId}/${m.id} no quality claims in the registry`);
     }
   }
 });
 
+test('verified metadata: the three current ids carry their checked facts and open questions', () => {
+  const llama = Registry.getModel('ollama', 'llama3.2:latest');
+  assert.equal(llama.license, 'Llama 3.2 Community License');
+  assert.equal(llama.contextTokens, 128000);
+  assert.ok(llama.capabilities.includes('multilingual')); // Hindi is in the officially supported list
+  const gemma = Registry.getModel('ollama', 'gemma3:4b');
+  assert.equal(gemma.license, 'Gemma Terms of Use');
+  assert.equal(gemma.contextTokens, 128000);
+  assert.ok(gemma.capabilities.includes('vision') && gemma.capabilities.includes('multilingual'));
+  const gemini = Registry.getModel('gemini', 'gemini-2.0-flash');
+  assert.equal(gemini.license, null); // API model: no weights license fact to record
+  assert.equal(gemini.contextTokens, 1048576);
+  assert.ok(gemini.capabilities.includes('tool_use'));
+  assert.ok(gemini.verified.notes.some((n) => n.includes('OPEN QUESTION'))); // the reported retirement is recorded, not resolved
+});
+
 test('capabilities and defaults match current app behavior', () => {
-  assert.deepEqual(Registry.getModel('ollama', 'llama3.2:latest').capabilities, ['chat']);
+  assert.deepEqual(Registry.getModel('ollama', 'llama3.2:latest').capabilities, ['chat', 'multilingual']);
   assert.ok(Registry.getModel('ollama', 'gemma3:4b').capabilities.includes('vision'));
-  assert.deepEqual(Registry.getModel('gemini', 'gemini-2.0-flash').capabilities, ['chat']);
+  assert.deepEqual(Registry.getModel('gemini', 'gemini-2.0-flash').capabilities, ['chat', 'tool_use', 'multilingual']);
   assert.equal(Registry.DEFAULTS.localChat, 'llama3.2:latest');
   assert.equal(Registry.DEFAULTS.localVision, 'gemma3:4b');
   assert.equal(Registry.DEFAULTS.cloudChat, 'gemini-2.0-flash');
@@ -57,4 +83,16 @@ test('task eligibility: chat may go cloud; vision is local-only', () => {
   assert.equal(Registry.isLocalOnlyTask('vision'), true);
   assert.equal(Registry.isLocalOnlyTask('chat'), false);
   assert.equal(Registry.isKnownTask('summarize'), false);
+});
+
+test('capability vocabulary is fixed and conservative; unknown names are refused', () => {
+  assert.deepEqual(Registry.CAPABILITIES, ['chat', 'vision', 'reasoning', 'coding', 'tool_use', 'multilingual']);
+  assert.equal(Registry.isKnownCapability('tool_use'), true);
+  assert.equal(Registry.isKnownCapability('agent-execution'), false);
+  // no current entry claims reasoning or coding: nothing verified said they do
+  for (const providerId of Object.keys(Registry.MODELS)) {
+    for (const m of Registry.listModels(providerId)) {
+      assert.ok(!m.capabilities.includes('reasoning') && !m.capabilities.includes('coding'), `${providerId}/${m.id} must not claim unverified reasoning/coding`);
+    }
+  }
 });

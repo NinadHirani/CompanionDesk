@@ -223,6 +223,59 @@ chat/vision/tags/show and the Gemini REST path); the fault-detail
 sanitization review fix is merged (d36dc01) with adversarial tests, and
 docs were reconciled to this state.
 
+## Language-model backlog reconciliation (24 Nov 2026)
+
+Every backlog item below was re-verified against LIVE source and tests on
+main `9bb1991` (not from memory), then the next safe model slice was landed
+as M1 follow-on work (see below). Nothing in the governing programme order
+changed; no phase was rewritten.
+
+| Backlog item | Verified status on main `9bb1991` | Evidence |
+|---|---|---|
+| M0 model registry + routing foundation | COMPLETE | `src/model-selection.js`, `src/provider-registry.js`, `src/task-router.js` + their tests |
+| M0 configurable local model selection | COMPLETE | separate `ai_model_local` / `ai_model_vision` settings, installed-model-only picker, safe fallback (`src/model-selection.js`, `tests/model-selection.test.js`) |
+| M0 Gemini key configuration + fallback | COMPLETE | `src/secure-store.js` (OS credential vault, fail-closed), explicit `cloudEnabled` gate default false, per-request consent in `completeRouted` (`src/ai.js`, `tests/ai-routed.test.js`, `tests/secure-store.test.js`) |
+| M0 conversation history | COMPLETE | `src/chat-history.js` device-only storage, last ten turns local-only, cloud never receives history |
+| M1 provider health monitoring | COMPLETE | `src/provider-status.js` read-only on-demand snapshot (`tests/provider-status.test.js`); health stays KNOWN-true-required in the router |
+| M1 provider routing | COMPLETE | deterministic policy router, vision local-only, cloud needs eligibility+consent+key+known-healthy+verified capability (`tests/task-router.test.js`, `tests/provider-contracts.test.js`) |
+| M1 typed provider faults | COMPLETE | `src/provider-faults.js` fixed vocabulary, sanitized details (`tests/provider-faults.test.js`) |
+| Default Ollama model | UNCHANGED | still `llama3.2:latest` (`Registry.DEFAULTS.localChat`, `model-selection.js` default) |
+| Reasoning / coding / tool-use capability | NEWLY RECORDED (24 Nov 2026) | fixed capability vocabulary + verified metadata in `src/provider-registry.js`; reasoning/coding remain UNRECORDED for all current ids (no verified source claims them); `tool_use` verified for the cloud id only |
+| Context/memory integration | DESIGN + HARNESS ONLY | M4 memory v2 is gated on FOUR open decisions; product wiring stays blocked until Ninad decides |
+
+Exact last completed model task before this slice: M1 slice 6 typed provider
+fault diagnostics + review fix `d36dc01` (M1 complete at `bccfa75`, 23 Nov
+2026). Exact next model task after this slice: still gated, per the table
+above (Gate 1 device benchmarking, M4 decisions); the registry metadata work
+below is the follow-on groundwork that those decisions will consume.
+
+### M1 follow-on slice: verified registry metadata (landed 24 Nov 2026)
+
+`src/provider-registry.js` now carries primary-source-verified metadata
+instead of permanent nulls, with the same fail-closed rule: every fact is
+either verified (a `verified` object with date + exact source URLs + open
+questions) or stays null, and no benchmark or quality claim is recorded
+anywhere (quality comes only from measured Gate 1 runs).
+
+- `llama3.2:latest`: Llama 3.2 Community License (custom, commercial, not
+  OSI); 128k context (1B/3B text); capabilities now `['chat','multilingual']`
+  (Meta's model card: multilingual text in/out, Hindi in the officially
+  supported list, directly relevant to the Hindi-STT/voice direction).
+- `gemma3:4b`: Gemma Terms of Use; 128K context for 4B; capabilities
+  `['chat','vision','multilingual']` (Gemma 3 model card: image+text in,
+  text out, 140+ languages, 896x896 images to 256 tokens).
+- `gemini-2.0-flash`: 1,048,576-token input context; capabilities
+  `['chat','tool_use','multilingual']` (function calling); license stays
+  null (API model, no weights license fact). OPEN QUESTION recorded in the
+  entry, not resolved: multiple third-party indexes report this id was
+  RETIRED around June 2026; Google's own deprecation pages did not render
+  for our tooling (404/blank), so the retirement is UNVERIFIED against a
+  primary source. The default cloud model is unchanged. Replacing it with a
+  current Flash id is Ninad's explicit product decision, not a silent one.
+
+Router behavior is untouched: same tasks, same privacy rules, same
+consent gates. 7 registry tests (was 5); full suite 867/867 + selftest.
+
 ## GATE 1 - Android intelligence (3-4 wks, device time)
 
 Prepared (23 Nov 2026, repo-only): the offline benchmark scaffold lives in
