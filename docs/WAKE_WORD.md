@@ -8,6 +8,21 @@ verified from primary sources before use. Nothing non-commercial or
 proprietary ships, nothing is silently substituted, and nothing is
 downloaded without an approved, documented provenance.
 
+## Platform support and mic permission
+
+Wake listening is desktop-app only (macOS, Windows, Linux). The engine carries
+a platform gate (injected `platform`, defaulting to fail-closed): on any other
+platform, including the Capacitor Android shell, `wake_platform_unsupported`
+blocks start and the About card says so instead of offering a dead Start
+button. On Android the browser/web bridge has no wake IPC at all; the About
+card shows the same plain-language note.
+
+The microphone is requested only when the user clicks Start. An OS refusal
+maps to a stable reason before it reaches the engine: `wake_mic_denied`
+(permission refused) or `wake_mic_missing` (no microphone), both shown in
+plain words in the About card. A failure lands listening off, and starting
+again is a fresh explicit user action.
+
 ## Boundaries (all fail closed)
 
 - **Separate gate, off by default.** Wake listening has its own setting,

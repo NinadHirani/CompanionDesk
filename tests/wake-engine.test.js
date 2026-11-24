@@ -14,6 +14,7 @@ function engine(overrides = {}) {
     modelPathFor: (id) => (id === 'hey-nova' ? '/models/wake/hey-nova.onnx' : null),
     listModelIds: () => ['hey-nova'],
     engineReady: () => true,
+    platform: 'darwin',
     now: () => 0,
     ...overrides,
   });
@@ -59,6 +60,7 @@ test('a model exists for a DIFFERENT name: phrase_mismatch, not a silent reuse',
     modelPathFor: () => null,
     listModelIds: () => ['hey-nova'],
     engineReady: () => true,
+    platform: 'darwin',
     now: () => 0,
   }).status();
   assert.strictEqual(st.modelReason, 'phrase_mismatch');
@@ -115,4 +117,40 @@ test('stop is revocation from any phase', () => {
 test('a disabled setting blocks start with wake_disabled before anything else', () => {
   const e = engine({ getSettings: () => ({ assistant_name: 'Nova', wake_enabled: false }) });
   assert.strictEqual(e.start({ userInitiated: true }).reason, 'wake_disabled');
+});
+
+test('platform gate: an unsupported platform refuses start and says why', () => {
+  const e = engine({ platform: 'android' });
+  const st = e.status();
+  assert.strictEqual(st.platformSupported, false);
+  assert.strictEqual(st.platform, 'android');
+  assert.strictEqual(st.modelReady, false);
+  assert.strictEqual(st.modelReason, 'wake_platform_unsupported');
+  const r = e.start({ userInitiated: true });
+  assert.strictEqual(r.ok, false);
+  assert.strictEqual(r.reason, 'wake_platform_unsupported');
+  assert.strictEqual(e.status().running, 'off');
+});
+
+test('platform gate: an unknown platform fails closed, darwin/win32/linux pass', () => {
+  // the engine's injected-default is fail-closed: no platform means no start
+  assert.strictEqual(engine({ platform: undefined }).status().modelReason, 'wake_platform_unsupported');
+  for (const p of ['darwin', 'win32', 'linux']) {
+    const e = engine({ platform: p });
+    assert.strictEqual(e.status().platformSupported, true, p);
+    assert.strictEqual(e.start({ userInitiated: true }).ok, true, p);
+    e.stop();
+  }
+});
+
+test('a mic-denied listener error lands off with the stable token', () => {
+  const e = engine();
+  assert.strictEqual(e.start({ userInitiated: true }).ok, true);
+  e.fail('wake_mic_denied');
+  const st = e.status();
+  assert.strictEqual(st.running, 'off');
+  assert.strictEqual(st.failure, 'wake_mic_denied');
+  // revocation semantics hold after the failure: a new start is a fresh
+  // explicit user action
+  assert.strictEqual(e.start({}).reason, 'user_action_required');
 });

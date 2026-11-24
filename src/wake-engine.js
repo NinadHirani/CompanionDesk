@@ -37,8 +37,14 @@ function createWakeEngine(deps = {}) {
     // the current companion name" (phrase_mismatch): renaming the
     // companion invalidates the phrase, and the honest reason is shown.
     listModelIds = () => [],
+    // process.platform, injected so the gate stays testable headless. The
+    // listener runtime is Electron-only; a Capacitor (Android) shell has no
+    // BrowserWindow to run it in and must never offer the start button.
+    platform = 'unknown',
     now = () => 0,
   } = deps;
+  const SUPPORTED_PLATFORMS = ['darwin', 'win32', 'linux'];
+  const platformSupported = () => SUPPORTED_PLATFORMS.includes(platform);
 
   let session = ww.createWakeSession({ now });
 
@@ -47,6 +53,7 @@ function createWakeEngine(deps = {}) {
   }
 
   function modelState() {
+    if (!platformSupported()) return { ready: false, reason: 'wake_platform_unsupported' };
     const engine = engineReady();
     if (engine !== true) return { ready: false, reason: engine };
     const p = phrase();
@@ -76,6 +83,8 @@ function createWakeEngine(deps = {}) {
       nameError: p.ok ? null : p.reason,
       modelReady: m.ready,
       modelReason: m.ready ? null : m.reason,
+      platform,
+      platformSupported: platformSupported(),
       running: st.phase,
       listening: st.listening,
       micOpen: st.micOpen,

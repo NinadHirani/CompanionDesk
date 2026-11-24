@@ -280,6 +280,14 @@
   async function refreshWakeStatus() {
     const el = F.wakeStatus;
     if (!el) return;
+    // The web/Android shell has no wake IPC: say so plainly instead of a
+    // dead "unavailable", and hide the session buttons entirely.
+    if (api.bridgeMode === 'web') {
+      el.textContent = 'Wake listening runs in the CompanionDesk desktop app only; this web or Android build cannot host it.';
+      for (const b of [F.wakeStart, F.wakePause, F.wakeResume, F.wakeStop]) if (b) b.hidden = true;
+      if (F.wakeThreshold) F.wakeThreshold.disabled = true;
+      return;
+    }
     let res = null;
     try { res = await api.wake_status(); } catch { res = null; }
     if (!res || !res.ok) { el.textContent = 'Wake status unavailable.'; return; }
@@ -288,7 +296,10 @@
     parts.push(res.phrase ? `phrase "${res.phrase}"` : 'no companion name is set');
     if (res.modelReady) parts.push('model ready');
     else parts.push(window.friendlyError(res.modelReason || 'wake_model_missing'));
-    if (res.running && res.running !== 'off') parts.push(`currently ${res.running}`);
+    // The mic state is the part a listener must be able to see at a glance.
+    if (res.running === 'listening') parts.push(res.micOpen ? 'LISTENING NOW, microphone open' : 'listening, microphone closed');
+    else if (res.running === 'paused') parts.push('paused, microphone closed');
+    else if (res.running && res.running !== 'off') parts.push(`currently ${res.running}`);
     el.textContent = parts.join('; ') + '.';
     if (F.wakeStart) F.wakeStart.disabled = !(res.enabled && res.modelReady && res.running === 'off');
     if (F.wakePause) F.wakePause.disabled = res.running !== 'listening';

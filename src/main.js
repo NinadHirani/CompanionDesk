@@ -207,6 +207,18 @@ async function init() {
       }
       return true;
     },
+    // Model files that exist on disk, head models only (embedding.onnx is
+    // the shared feature extractor, not a phrase model). Without this the
+    // engine cannot tell "nothing trained yet" from "trained, but for the
+    // OLD companion name", so a rename would hide the real reason.
+    listModelIds: () => {
+      try {
+        return fs.readdirSync(path.join(modelsDir(), 'wake'))
+          .filter((f) => f.endsWith('.onnx') && f !== 'embedding.onnx')
+          .map((f) => f.replace(/\.onnx$/, ''));
+      } catch { return []; }
+    },
+    platform: process.platform,
     now: () => Date.now(),
   });
   // Agent runtime, now persistence-backed (Gate 2 slice P2). The stack is
