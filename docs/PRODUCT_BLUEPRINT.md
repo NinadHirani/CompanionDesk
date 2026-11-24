@@ -655,7 +655,9 @@ still cannot send anything, and no acknowledgement, markRead, timer, scheduling,
 network delivery, OS notification, approval, grant or file output is added; if the view
 module is absent the panel keeps its previous count-only behavior. The display slice
 changes nothing about the 3j.1 acknowledgement decision, which stays with the user:
-nothing is marked read merely because it was rendered. 12 tests cover the cap and
+nothing is marked read merely because it was rendered. Committed at `4e85cb1`
+with CI 45333686755, CI macOS + Linux 45333686784 and a dispatched Android APK
+run 45333900985 all green. 12 tests cover the cap and
 ordering, truncation at the source caps (a title beyond the source cap is skipped, not
 truncated), malformed-record skipping, frozen-input non-mutation, verbatim plain-text
 handling of hostile markup, empty and non-array inputs, real desk records raw and
