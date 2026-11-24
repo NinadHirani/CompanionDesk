@@ -892,6 +892,124 @@ the redundant second dispatch 45339329770 also success), Android APK
 45339484185 (success). This docs commit records the run ids; its own CI
 run is verified before it is reported as done.
 
+## 3j.6. Display delivery wiring (24 Nov 2026): unread desk records reach the display store, acknowledgement untouched
+
+Implemented and verified. The narrow MAIN-ONLY delivery operation
+(src/agent-display-delivery.js) copies eligible notification records from
+the persisted desk into the main-owned display store
+(src/agent-notifications-display.js), which the renderer panel already
+renders read-only (3j.2/3j.3). The pure delivery bridge of 3j.1
+(src/agent-delivery.js) is left COMPLETELY UNTOUCHED: its markRead-on-
+delivery semantics is incompatible with the 3j.4 option C decision, and
+nothing in this gate calls it.
+
+What "sink success" means here: a record ACCEPTED INTO THE DISPLAY STORE.
+It is a record displayed, never a record seen, read or acknowledged. No
+acknowledgement happens at delivery, ever; the display store stays free of
+acknowledgement state, and the desk's read flag stays canonical.
+
+Eligibility and determinism:
+  - A desk record is eligible exactly when its canonical read flag is
+    false. A read record is never delivered and never re-delivered.
+  - Delivery order is the desk's own order (oldest first), deterministic.
+  - Duplicate handling: an id already displayed is counted as a duplicate
+    and changes nothing (the store's append also short-circuits
+    duplicates without evicting), so replay and post-restart re-delivery
+    are idempotent. Within one hostile source pass the first occurrence
+    of an id wins and later ones are counted.
+
+Triggers (main-only; there is no renderer trigger and no timer):
+  1. Restart reconciliation: one pass immediately after the agent runtime
+     starts, repopulating the ephemeral display store from the desk's
+     unread records. The display store is rebuilt from scratch each start,
+     so nothing can be lost that the desk still holds.
+  2. After every SUCCESSFUL acknowledgement: the acked record becomes safe
+     to displace, and the next pass delivers the next unread record.
+     Idempotent acks also trigger a pass (harmless, deterministic).
+  3. A future main-side creation site must call the pass in the same step
+     (documented requirement in main.js); no call site exists yet.
+
+Bounded batch and backpressure: at most maxBatch appends per pass
+(default 10, lowerable only). A pass that hits the cap stops with
+stopped 'batch_limit' and reports the remaining count and the next
+eligible id; the next pass continues. The cap bounds REAL deliveries;
+replayed duplicates never consume it.
+
+Capacity, overflow and eviction safety: the display store's own FIFO
+eviction may only ever remove a record that the desk still holds AND
+whose read flag is true. Before every append into a full store the pass
+inspects the store's oldest record and, unless that record is acked in
+the desk, refuses to append: it stops with stopped 'overflow' and reports
+the remaining eligible count and the next eligible id. An unread record
+is therefore never silently displaced from display, and no source record
+is ever lost (everything stays in the desk).
+
+Orphan garbage collection: a displayed record whose id the valid desk
+view no longer holds can never be acknowledged again. Each pass drops
+such records explicitly (the display store gains a narrow main-only
+drop(id)) and REPORTS the count and a bounded id list. Orphans can arise
+only if a future caller removes desk records: the desk itself refuses to
+grow past its cap rather than evicting, so the desk never silently
+discards records. The only way a displayed record leaves the store is a
+safe eviction or a reported orphan drop.
+
+Malformed sources and store faults (fail closed): a non-array source is
+the refusal source_invalid; a source record that is not a plain object
+with exactly the allowlisted fields plus a strictly boolean read flag, or
+whose values break the desk's caps and id format, is refused and counted
+(never silently skipped, never guessed around), and can never become
+eligible. A closed store refuses the whole pass (store_closed). An append
+that throws or returns an unrecognized verdict stops the pass with
+store_error, leaving the desk untouched. No pass retries on its own (no
+timers); the next main-side trigger simply runs a fresh pass.
+
+Progress guarantee (no starvation): every eligible unread record becomes
+displayed after a bounded number of later passes, because each successful
+acknowledgement triggers a pass and acknowledging the oldest displayed
+unread record frees exactly one safe-evict slot. A record is blocked only
+by records older than it, and those are always displayed (hence ackable)
+before it. Orphans are the one reported exception, and the desk already
+discarded them before delivery ever saw the gap.
+
+Acknowledgement semantics are UNCHANGED: the only writer the renderer can
+reach is still the id-only notifications:ack request backed by the
+explicit per-record button gesture (3j.5); main revalidates; the durable
+audit entry precedes the canonical read-flag flip; replays are idempotent;
+audit and persistence failures preserve the unread state. The pass after
+a successful ack does not acknowledge anything and cannot weaken any of
+this: it only appends to the display store and drops desk-orphaned
+records, both reported.
+
+The renderer can neither inject nor bypass: no new IPC channel (preload's
+allowlist keeps its exact shape, six reads plus notifications:ack), no
+renderer reference to the delivery operation or the store, and the
+delivery operation's code contains no markRead, no acknowledgement, no
+audit access, no timers and no electron imports (asserted by a
+comment-stripping static test).
+
+Tests: tests/gate2-display-delivery.test.js (18 adversarial tests):
+desk immutability across repeated passes; eligibility and ordering;
+restart reconciliation with replay idempotence; explicit overflow with no
+unread displacement; bounded convergence where every record eventually
+displays and every eviction is of an acked record; duplicate/replay
+idempotence; sink faults (throwing and lying appends) failing closed;
+malformed and duplicate sources; orphan GC explicit and capacity-freeing;
+closed-store lifecycle; batch cap default/lower/never-raisable; bounded
+refused-id reporting; full-stack integration with the real acknowledgement
+(audit durability preserved, no delivery audit entries); ack failure
+leaving the record unread and eligible; and the static renderer-injection
+and main-wiring guards. Suite: 719/719, SELFTEST PASS.
+
+Code commit: 1c22859. Docs commit: (this commit). CI runs, all green on
+1c22859: CI 45341066573, CI (macOS + Linux) 45341066443, Android APK
+45341168043 (dispatched by workflow id 426707674; APK not verified on a
+real device, consistent with prior gates). Suite 719/719, SELFTEST PASS,
+run before push. Live behavior in a packaged Electron app is NOT verified
+on-device; nothing creates notification records in the running app yet,
+so the visible change on main is the startup reconciliation pass (which
+finds no unread records until a creation site exists) and the post-ack
+pass.
+
 ## 4. Planned, NOT implemented
 
 A secure credential-vault adapter

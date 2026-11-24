@@ -307,10 +307,14 @@ and sanitized reasons).
 Remaining Gate 2 work: the acknowledgement gate is DONE (option C,
 blueprint 3j.5: id-only notifications:ack from an explicit per-record
 gesture, durable-before-state, replay idempotent; the display store
-stays ack-free). Still remaining, each an explicitly-reviewed gate:
-delivery wiring into the display store (per the ack decision the store
-is ready and unwired), scheduling, and file output (the pure delivery
-bridge is implemented; blueprint 3j).
+stays ack-free) and display delivery wiring is DONE (blueprint 3j.6: a
+main-only operation copies unread desk records into the display store at
+startup reconciliation and after each successful acknowledgement, bounded
+batches, explicit overflow with eviction safety so no unread record is
+ever silently displaced, reported orphan GC, replay idempotence; the
+bridge of 3j.1 stays untouched and no delivery path acknowledges).
+Still remaining, each an explicitly-reviewed gate: scheduling, and file
+output.
 Acceptance: policy
 engine refuses ungranted calls (tested); payments, purchases, destructive
 deletion, and legal or binding submissions are denied unless fresh,
