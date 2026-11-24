@@ -19,16 +19,21 @@ how you work. Everything stays on your machine.
 
 ## Download / Install
 
-**Android, direct download (no sign-in needed):** [Download app-debug.apk](https://github.com/NinadHirani/CompanionDesk/releases/download/v0.1.0-android-preview.1/app-debug.apk)
-from release [v0.1.0-android-preview.1](https://github.com/NinadHirani/CompanionDesk/releases/tag/v0.1.0-android-preview.1).
+**Android, direct download (no sign-in needed):** [Download app-debug.apk](https://github.com/NinadHirani/CompanionDesk/releases/download/v0.1.0-android-preview.2/app-debug.apk)
+from release [v0.1.0-android-preview.2](https://github.com/NinadHirani/CompanionDesk/releases/tag/v0.1.0-android-preview.2).
 It is a **debug-signed preview for testing only** (not Play-Store-ready; sha256
-`d99d267a56416b0d021ee39040be4fcb4003a3b7b8263352301ee3866f8e0830`), and
+`bc312b53e3f7170a895c27710ce91716e53f88e6c11698e62960105122acb988`), and
 install/run on real hardware is not yet verified — read the release notes for
 install and update caveats. Desktop Ollama does not run on Android: AI answers
 there need the opt-in Gemini fallback you configure yourself, or a companion
 desktop. Everything else (deadlines, syllabus import, calendar) is local.
-**This preview lags main:** it was published on 22 Nov 2026 and does not
-include the latest main-branch work. The newest build of main exists only as
+**What this preview contains:** it was built from main on 24 Nov 2026 (commit
+`83dbcda`, workflow run 45344402037) and includes the run-driver Stage A
+foundation; Stages B and C are not implemented. The previous preview
+([v0.1.0-android-preview.1](https://github.com/NinadHirani/CompanionDesk/releases/tag/v0.1.0-android-preview.1),
+sha256 `d99d267a56416b0d021ee39040be4fcb4003a3b7b8263352301ee3866f8e0830`)
+remains available. Because each CI run signs with a fresh debug key,
+**uninstall any previously installed preview before installing this one**. The newest build of main exists only as
 a workflow artifact (below), which needs a GitHub sign-in and changes URL
 with every run. A newer public release is published only after an explicit
 review.
@@ -110,8 +115,8 @@ network access.
 
 ## GitHub Releases (once publishing is enabled)
 
-One **Android preview release** (debug APK for testing) has been published;
-desktop installers have not. Release publishing stays otherwise switched off
+Two **Android preview releases** (debug APKs for testing) have been
+published (preview 1 and preview 2); desktop installers have not. Release publishing stays otherwise switched off
 until it is approved (see [docs/DISTRIBUTION.md](docs/DISTRIBUTION.md) for
 exactly how that works). Once it is on, installers live on the
 [GitHub Releases page](https://github.com/NinadHirani/CompanionDesk/releases);
