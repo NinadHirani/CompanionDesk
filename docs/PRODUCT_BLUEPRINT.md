@@ -731,6 +731,56 @@ renderer/ changes). The web and mobile builds do not construct the agent
 surface, so the fail-closed required reader cannot break them; the web
 build still gains nothing (the panel section is desktop-renderer-only).
 
+## 3j.4. Acknowledgement decision memo (24 Nov 2026): options only, no decision, no implementation
+
+This memo exists so the 3j.1 acknowledgement decision is made from a full
+picture. It DECIDES NOTHING and implements NOTHING: no ack channel, no
+markRead call, no policy change, and no delivery wiring into the display
+store exist because of this memo. Every option below would be its own
+explicitly-reviewed gate if chosen.
+
+The problem acknowledgement solves: today a delivered notification record
+sits in the persisted desk with read=false forever, because nothing can
+mark it read and the renderer's read channel proves nothing (rendering is
+not acknowledging; 3j.2). Consequences: the desk grows unboundedly for
+never-acked records bounded only by its queue cap; "unread" counts in any
+future UI would always equal the full queue; and the user has no
+machine-readable signal of which records they actually saw.
+
+Options (mutually exclusive):
+
+- A. No acknowledgement at all (status quo). The desk stays a bounded
+  queue of delivered records; nothing is ever marked read. Cheapest, no
+  new IPC, no new trust surface. Cost: no seen/unseen distinction, ever.
+- B. Explicit renderer-to-main ack channel, policy-gated. A new
+  renderer-to-main channel (for example notifications:ack) carrying only
+  a record id, validated against the desk's id format, rate-limited and
+  denied by the policy engine unless granted. The main process marks the
+  desk record read; the renderer never writes state directly. Cost: a
+  new privileged channel and a grant decision (which widens the renderer
+  capability surface the user has held tight), plus the honest-ack
+  question: the renderer asserts the user SAW a record, which it cannot
+  truly know.
+- C. Ack bound to explicit user action only. Like B, but the ack is
+  emitted only from a deliberate user gesture in the panel (a click on
+  the record), never from rendering, focus, timers or visibility. This
+  is the strictest honesty variant of B and needs UI work in the panel.
+- D. Ack owned by the user outside the app (manual). The desk gains a
+  main-side command (CLI, tray menu or similar) that marks records read;
+  the renderer stays read-only forever. No renderer trust question at
+  all; cost is manual effort and no automatic signal.
+
+For every option that marks anything read, the open questions the user
+owns are: who may ack (any renderer state vs explicit gesture only),
+whether acked records stay in the desk or fall out of it (history vs
+bounded queue), and whether the display store (3j.3) ever carries an ack
+state (recommended: never; it stays a pure read-only display surface).
+
+Recommendation shape, not a decision: if any ack exists at all, C is the
+honest variant; if the desk's purpose stays "a bounded log of what was
+delivered", A is coherent and nothing needs building. The display store
+as built (3j.3) is compatible with every option and requires no change.
+
 ## 4. Planned, NOT implemented
 
 A secure credential-vault adapter
