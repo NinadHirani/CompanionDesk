@@ -310,3 +310,35 @@ test('provider-status normalizes upstream fault objects before display', () => {
   });
   assert.equal(bogus.ollama.fault, null); // unknown codes fail closed, no fault emitted
 });
+
+
+test('classifyFailure never turns a crafted status into detail (hardening, 24 Nov 2026)', () => {
+  const crafted = { toString() { return 'SECRET-TOKEN http://10.0.0.1'; } };
+  assert.deepEqual(F.classifyFailure({ status: crafted }), { code: 'http_error', detail: null });
+  assert.equal(JSON.stringify(F.classifyFailure({ status: crafted })).includes('SECRET'), false);
+  for (const bad of [NaN, Infinity, -Infinity, 0, 42, 99, 600, 999, 'abc', '5033', '50', '', '  503', '5O3', true, {}, []]) {
+    const got = F.classifyFailure({ status: bad });
+    assert.deepEqual(got, { code: 'http_error', detail: null }, `status ${String(bad)} must drop detail`);
+  }
+  // Real statuses still classify with their exact 3-digit detail.
+  for (const good of [100, 404, 429, 500, 599, '503', '404']) {
+    const got = F.classifyFailure({ status: good });
+    assert.equal(got.code, 'http_error');
+    assert.match(got.detail, /^\d{3}$/);
+  }
+});
+
+test('classifyFailure carries only real errno names (strict allowlist, 24 Nov 2026)', () => {
+  assert.deepEqual(F.classifyFailure({ err: { code: 'E_NOT_A_REAL_ERRNO' } }), { code: 'unreachable', detail: null });
+  assert.deepEqual(F.classifyFailure({ err: { code: 'ECONNREFUSEDX' } }), { code: 'unreachable', detail: null });
+  assert.deepEqual(F.classifyFailure({ err: { code: 'EHOSTUNREACH' } }), { code: 'unreachable', detail: 'EHOSTUNREACH' });
+  assert.deepEqual(F.classifyFailure({ err: { code: 'ETIMEDOUT' } }), { code: 'unreachable', detail: 'ETIMEDOUT' });
+  // Second layer: fault() refuses an unknown E-shaped token even when a
+  // future caller hands it in directly, bypassing classifyFailure.
+  assert.deepEqual(F.fault({ code: 'unreachable', detail: 'E_FABRICATED' }), { code: 'unreachable', detail: null });
+  assert.deepEqual(F.fault({ code: 'unreachable', detail: 'ECONNRESET' }), { code: 'unreachable', detail: 'ECONNRESET' });
+  // The full pipeline is safe even when the caller skips fault(): the raw
+  // classifyFailure output never carries fabricated text.
+  const raw = F.classifyFailure({ err: { code: 'E_URL http://x SECRET' } });
+  assert.equal(raw.detail, null);
+});
