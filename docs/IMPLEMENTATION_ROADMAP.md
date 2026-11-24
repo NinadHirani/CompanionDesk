@@ -1,17 +1,20 @@
 # CompanionDesk Implementation Roadmap
 
 Status: M0 and M1 are COMPLETE on main (verified 24 Nov 2026; current
-baseline `988ce68`, 480 passing tests, Fo-reported from a full `npm test`
-run at that head (480/480, selftest included). All three main-branch CI
-workflows are green on that head: CI (run 45312967934), CI macOS + Linux
-(run 45312967957), Android APK (run 45312978262). Gate 2 slice 1 (agent
-safety foundation) and its security hardening are pure, isolated modules
-only: NO product wiring, NO tools registered beyond test fixtures, NO UI
-or IPC, no DB migration, and the audit log is in-memory only. Earlier
-prep/harness work (slice-6 sanitizer hardening, Gate 1 repo-only benchmark
-scripts + selftest and comparison assembler, M4 memory-v2 harness) remains
-harness only, NOT product memory-v2 wiring. No actual OnePlus device
-measurements exist). Supersedes `docs/COMPANIONDESK_ROADMAP.md` and
+baseline `e2eac24`, 497 passing tests, Fo-reported from a full `npm test`
+run at that head (497/497, selftest included). All three main-branch CI
+workflows are green on that head: CI (run 45315064899), CI macOS + Linux
+(run 45315064806), Android APK (run 45315072733, explicitly dispatched).
+Gate 2 slice 1 (agent safety foundation) and its hardening are pure,
+isolated modules with NO product wiring, NO tools registered beyond test
+fixtures and NO UI or IPC. Gate 2 slice 2 (persistence) is additive-only
+storage, same boundary: six CREATE TABLE IF NOT EXISTS tables, a narrow
+storage adapter, fail-closed startup verification, pending approvals
+invalidated on restart, no auto-resume, archive-then-prune retention.
+Earlier prep/harness work (slice-6 sanitizer hardening, Gate 1 repo-only
+benchmark scripts + selftest and comparison assembler, M4 memory-v2
+harness) remains harness only, NOT product memory-v2 wiring. No actual
+OnePlus device measurements exist). Supersedes `docs/COMPANIONDESK_ROADMAP.md` and
 `docs/FEATURE_GAP.md` once approved; those files stay until then. Phases
 are dependency-ordered with explicit gates. Phases M2-M8 below are planned
 unless stated as implemented; M0 and M1 are the only implemented phases.
@@ -229,15 +232,31 @@ contracts, submissions, deletion) and destructive-deletion segments
 (delete/destroy/erase/wipe/purge/permanent*) are enforced conservatively:
 the registry refuses to register such a tool unless it is 'sensitive' or
 flagged critical:true, and the policy engine separately refuses to
-authorize any misclassified one that somehow exists. AUDIT LIMITATION: the
-audit log is in-memory and its chain has no persisted anchor, so a fully
-renumbered and rehashed tail is not detectable by local chaining alone;
-the persisted anchor hash in the wiring slice closes this. Remaining Gate
-2 work: persistence for grants, approvals, audit and the agent_runs table
-(with the persisted anchor hash), the orchestrator (plan, act, observe,
-verify, recover), the first harmless tools (notifications, reminders, ICS
-events; NO shell or filesystem tools in this phase), the prompt-injection
-corpus before any grant widening, and UI/IPC wiring. Acceptance: policy
+authorize any misclassified one that somehow exists. SLICE 2 (persistence) is IMPLEMENTED on main (24 Nov 2026, `e2eac24`),
+still with NO product wiring: six additive CREATE TABLE IF NOT EXISTS
+tables in the db.js schema (agent_grants, agent_approvals, agent_audit,
+agent_audit_anchor, agent_emergency_stop, agent_runs), a deliberately
+narrow storage adapter (parameterized run/all plus BEGIN/COMMIT/ROLLBACK),
+hydrate/export surfaces on the pure modules, audit entries and the anchor
+written in one transaction with full rollback on failure, startup
+verification of the persisted chain from the stored base with the anchor
+required to match the verified tail (tampered rows, rehashed or unanchored
+tails and invalid rows all fail closed with evidence preserved and no
+automatic repair), pending approvals invalidated on restart with the flip
+persisted and audited (used approvals stay replay-denied), grants restored
+with exact expiry and revocation, the emergency stop restored active if it
+was active at shutdown, no agent-run resume API at all, and bounded
+retention by archive-then-prune only (the archive must verify and cover
+the entries dropped; the prune is audited and advances the chain base so
+the anchored tail stays locally verifiable). Documented limits: file-level
+durability is the same debounced flush every table uses, and recovery from
+a detected integrity failure is an explicit decision left to the wiring
+slice. The 3b audit limitation is now closed for locally stored history by
+the persisted anchor. Remaining Gate 2 work: the orchestrator (plan, act,
+observe, verify, recover), the first harmless tools (notifications,
+reminders, ICS events; NO shell or filesystem tools in this phase), the
+prompt-injection corpus before any grant widening, and UI/IPC wiring.
+Acceptance: policy
 engine refuses ungranted calls (tested); payments, purchases, destructive
 deletion, and legal or binding submissions are denied unless fresh,
 explicit user approval immediately precedes execution (tested);

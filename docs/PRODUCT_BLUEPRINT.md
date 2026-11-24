@@ -1,19 +1,21 @@
 # CompanionDesk Product Blueprint
 
 Status: **proposed** in direction; M0 and M1 are COMPLETE on main, verified
-24 Nov 2026. The current verified baseline is main `988ce68` with 480
+24 Nov 2026. The current verified baseline is main `e2eac24` with 497
 passing tests, Fo-reported from a full `npm test` run at that head
-(480/480, selftest included). All three main-branch CI workflows are green
-on that head: CI (run 45312967934), CI macOS + Linux (run 45312967957) and
-Android APK (run 45312978262). Gate 2 slice 1 (agent safety foundation)
-and its security hardening are pure, isolated modules only: NO product
-wiring, NO tools registered beyond test fixtures, NO UI or IPC, no DB
-migration, and the audit log is in-memory only. Earlier prep/harness work
-(slice-6 sanitizer hardening, Gate 1 repo-only benchmark scripts + selftest
-and comparison assembler, M4 memory-v2 harness) remains harness only, NOT
-product memory-v2 wiring. No actual OnePlus device measurements exist; the
-OnePlus 12R and MacBook Air M1 are validation targets only. Doc-only
-commits after the baseline do not change these numbers. This document states the agreed product vision and the
+(497/497, selftest included). All three main-branch CI workflows are green
+on that head: CI (run 45315064899), CI macOS + Linux (run 45315064806) and
+Android APK (run 45315072733, explicitly dispatched). Gate 2 slice 1
+(agent safety foundation) and its hardening remain pure, isolated modules
+with NO product wiring, NO tools registered beyond test fixtures and NO UI
+or IPC; since slice 2 the audit log is persisted (see 3c), still with no
+wiring. Gate 2 slice 2 (persistence) is additive-only storage with the
+same no-wiring boundary. Earlier prep/harness work (slice-6 sanitizer
+hardening, Gate 1 repo-only benchmark scripts + selftest and comparison
+assembler, M4 memory-v2 harness) remains harness only, NOT product
+memory-v2 wiring. No actual OnePlus device measurements exist; the OnePlus
+12R and MacBook Air M1 are validation targets only. Doc-only commits after
+the baseline do not change these numbers. This document states the agreed product vision and the
 verified current state. No decision here is accepted until Ninad approves
 it. Every feature is marked **implemented** (verified against the
 current baseline named in the Status header) or **planned** (not built; do not assume otherwise).
@@ -191,9 +193,9 @@ claims to literally experience emotions.
 - Update policy that never auto-installs unsigned builds; update modes
   disabled/auto/manual-download (`src/update-policy.js`, `src/updater.js`).
 - Health check and onboarding interview (`src/health.js`, `src/onboarding.js`).
-- 480 passing unit/integration tests (258 baseline; model selection +18, conversation history +17, optional key storage +13, M1 provider registry/task router/cloud gate +25, M1 per-ask routing integration +18, M1 review fixes +18, M1 hardware profiles +12, M1 provider status +11, M1 provider contract tests +18, M1 provider fault diagnostics +18, fault-detail sanitization review fix +3, offline memory-v2 retrieval harness +12, memory-v2 harness slice 4 fold fix and bridges +5, memory-v2 store contract tests +9, Gate 2 agent safety foundation +35, Gate 2 security hardening +8); CI, CI macOS + Linux and Android APK all green on the
-  current baseline `988ce68` (runs 45312967934, 45312967957 and
-  45312978262);
+- 497 passing unit/integration tests (258 baseline; model selection +18, conversation history +17, optional key storage +13, M1 provider registry/task router/cloud gate +25, M1 per-ask routing integration +18, M1 review fixes +18, M1 hardware profiles +12, M1 provider status +11, M1 provider contract tests +18, M1 provider fault diagnostics +18, fault-detail sanitization review fix +3, offline memory-v2 retrieval harness +12, memory-v2 harness slice 4 fold fix and bridges +5, memory-v2 store contract tests +9, Gate 2 agent safety foundation +35, Gate 2 security hardening +8, Gate 2 persistence +17); CI, CI macOS + Linux and Android APK all green on the
+  current baseline `e2eac24` (runs 45315064899, 45315064806 and
+  45315072733);
   public Android debug-APK preview release.
 
 ## 3b. Gate 2 slice 1 (implemented as pure modules, 24 Nov 2026)
@@ -219,6 +221,42 @@ a fully renumbered and rehashed tail is not detectable by local chaining
 alone; a persisted anchor hash in the wiring slice closes it. No tool is
 registered anywhere in the app beyond test fixtures until Gate 2
 acceptance.
+
+## 3c. Gate 2 slice 2 (implemented as persistence, 24 Nov 2026)
+
+Additive-only persistence for the agent-foundation state, still with NO
+product wiring: no UI, no IPC, no orchestrator, no tool adapters, and no
+real tool registered anywhere in the app. Six new tables in the db.js
+schema, every one CREATE TABLE IF NOT EXISTS, so an existing database
+gains them on its next open and no existing table or row is touched: agent
+grants, approvals, audit entries, the audit anchor, emergency-stop state,
+and agent_runs. The storage adapter is deliberately narrow (parameterized
+run/all plus BEGIN/COMMIT/ROLLBACK), so the pure modules stay storage-free
+and gain only hydrate/export surfaces. Semantics, all fail-closed: audit
+entries and the anchor are written in one transaction and a failed write
+rolls back completely; on startup the persisted chain is re-verified from
+the stored base and the anchor must match the verified tail, so a
+tampered row, a rehashed or unanchored tail, or an invalid row sets an
+integrity-failure status under which every write refuses and nothing is
+deleted, reset or repaired automatically (recovery is an explicit, audited
+decision left to the wiring slice); pending approvals never survive a
+restart as usable, they are invalidated, the flip is persisted and the
+invalidation is audited, and used approvals stay replay-denied across
+restarts; grants restore with their exact expiry and revocation; the
+emergency stop restores active if it was active at shutdown; no agent run
+resumes automatically (a running row stays as it is and the persistence
+surface has no resume API). Bounded retention without silent deletion:
+pruning the audit trail requires an archive that verifies and covers the
+entries being dropped, the prune itself is audited, and the chain base
+advances so the anchored tail stays locally verifiable. Documented limits:
+file-level durability is the same debounced flush every table uses (the
+transaction is atomic within the in-memory database); the persisted anchor
+closes the renumbered-tail limitation from 3b for locally stored history,
+and recovery from a detected integrity failure remains an explicit
+decision for the wiring slice. Tests: 17 new cases covering the additive
+migration from an old-schema database, restart round-trips, rollback,
+tamper detection with evidence preserved, duplicate ids, backup/restore,
+and archive-then-prune.
 
 ## 4. Planned, NOT implemented
 
