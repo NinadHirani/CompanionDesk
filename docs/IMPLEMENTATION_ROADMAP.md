@@ -639,8 +639,25 @@ a physical-device question and no such claim is made; where
 
 Remaining in M6: wake word only after the licensing decision, behind a
 separate auto-listening toggle, off by default, visible mic state,
-immediate stop; Piper deferred pending verification of its successor
-project; Android foreground service compliant with platform rules.
+immediate stop; Android foreground service compliant with platform
+rules.
+
+Piper successor VERIFIED (24 Nov 2026, primary sources read live via
+the GitHub API): `rhasspy/piper` is archived (MIT, last pushed
+2025-08-26) and `rhasspy/piper-phonemize` is archived too; the
+successor is `OHF-Voice/piper1-gpl` under the Open Home Foundation,
+active (last pushed 2026-11-23, latest release v1.8.0 published
+2026-09-04), self-described as a fast, local neural text-to-speech
+engine embedding espeak-ng, installable as `piper-tts`, with a
+command-line interface, a Python API, a C/C++ API, voice licensing
+docs, and an explicit "looking for maintainers" notice from the
+foundation. Two facts recorded for a future decision, and nothing
+decided today: the engine is GPL-3.0 (copyleft, so bundling it in the
+MIT codebase raises distribution questions Ninad would have to weigh),
+and any engine or voice-model adoption remains behind his explicit
+approval rule for downloads and assets. No engine adopted, no asset
+downloaded, no dependency added; the OS-native speech path above stays
+the only speech output in the product.
 
 ## M7 - Screen understanding v2 (2-3 wks)
 
