@@ -30,7 +30,9 @@ Numbering note, stated honestly: this roadmap defines M0, M1, GATE 1,
 GATE 2, M4-M8. There are no M2/M3 sections (the memory-v2 design doc
 carries the "M2" name; its phase here is M4) and no M9 definition exists
 in this file. Neither is invented here: if a coordinated-release phase
-is wanted as M9, that needs Ninad's explicit definition first.
+is wanted as M9, that needs Ninad's explicit definition first. A
+docs-only proposal brief now exists (`docs/M9_RELEASE_BRIEF.md`); it is
+not a definition and implements nothing.
 
 Traceability addendum (24 Nov 2026): Ninad's confirmed Areas 1-10
 requirements are integrated as ADDITIONS via
@@ -592,11 +594,28 @@ wake word, no always-listening, and no claim of validated recognition:
 those wait for Ninad's decisions (docs/M6_VOICE_DECISIONS.md) and physical
 device time.
 
-Multilingual whisper model option wired to the existing `language` setting;
-OS-native text-to-speech first (Piper deferred pending verification of its
-successor project); wake word only after the licensing decision, behind a
-separate auto-listening toggle, off by default, visible mic state, immediate
-stop; Android foreground service compliant with platform rules.
+**Slice 2 (landed 24 Nov 2026): transcription language wired to the
+`language` setting.** `src/whisper.js` now carries the language table
+verified live from whisper.cpp's own source (src/whisper.cpp, the
+`g_lang` map, 97 languages, read 24 Nov 2026). `resolveLanguage` maps
+the existing free-text `language` setting to a known whisper code by
+exact, case-insensitive match on the code or the language name, and
+never passes anything else to the CLI; the `WHISPER_LANG` env override
+stays first but is now validated against the same table; unknown values
+fail closed to `en`, today's behavior. `src/voice.js` forces `en`
+whenever the resolved model file is English-only (any `.en.` name), so
+setting Hindi while an .en model is installed can never send a
+mismatched `-l` and break transcription. 'auto' (whisper.cpp language
+detection) is deliberately not enabled. No model download, no new
+asset, local-only. Tests: table integrity against the primary source,
+mapping/precedence/fail-closed cases, and transcribe-level tests that
+chain through the real whisper.transcribe to pin the exact `-l` value.
+
+Remaining in M6: OS-native text-to-speech first (Piper deferred pending
+verification of its successor project); wake word only after the
+licensing decision, behind a separate auto-listening toggle, off by
+default, visible mic state, immediate stop; Android foreground service
+compliant with platform rules.
 
 ## M7 - Screen understanding v2 (2-3 wks)
 

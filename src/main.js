@@ -648,7 +648,10 @@ function registerIpc() {
   });
   ipcMain.handle('voice:transcribe', async (_e, payload) => {
     if (!db.getSetting('voice_enabled', false)) return { ok: false, error: 'voice_disabled' };
-    return voice.transcribe(payload, { modelsDir: modelsDir(), preferredModel: db.getSetting('voice_model', 'small.en'), language: process.env.WHISPER_LANG || 'en' });
+    // M6 slice 2: the transcription language now follows the existing
+    // `language` setting (mapped through the verified whisper.cpp table);
+    // WHISPER_LANG stays the explicit, validated override.
+    return voice.transcribe(payload, { modelsDir: modelsDir(), preferredModel: db.getSetting('voice_model', 'small.en'), language: voice.resolveLanguage({ setting: db.getSetting('language', 'English'), env: process.env.WHISPER_LANG }) });
   });
   ipcMain.handle('voice:cancel', async () => voice.cancelActiveRun());
 

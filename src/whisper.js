@@ -90,4 +90,138 @@ async function transcribe({ pcm, bin, model, language = 'en', timeoutMs = 30000,
   }
 }
 
-module.exports = { findWhisper, cleanTranscript, transcribe };
+// The language table whisper.cpp itself recognizes, verified live from its
+// own source (src/whisper.cpp, the g_lang map, ggml-org/whisper.cpp master,
+// 24 Nov 2026): each two-letter code is exactly what whisper-cli accepts on
+// -l, paired with the language name whisper.cpp maps it to. Nothing outside
+// this table is ever passed to the CLI as a language.
+const LANGUAGES = Object.freeze({
+  'en': 'english',
+  'zh': 'chinese',
+  'de': 'german',
+  'es': 'spanish',
+  'ru': 'russian',
+  'ko': 'korean',
+  'fr': 'french',
+  'ja': 'japanese',
+  'pt': 'portuguese',
+  'tr': 'turkish',
+  'pl': 'polish',
+  'ca': 'catalan',
+  'nl': 'dutch',
+  'ar': 'arabic',
+  'sv': 'swedish',
+  'it': 'italian',
+  'id': 'indonesian',
+  'hi': 'hindi',
+  'fi': 'finnish',
+  'vi': 'vietnamese',
+  'he': 'hebrew',
+  'uk': 'ukrainian',
+  'el': 'greek',
+  'ms': 'malay',
+  'cs': 'czech',
+  'ro': 'romanian',
+  'da': 'danish',
+  'hu': 'hungarian',
+  'ta': 'tamil',
+  'no': 'norwegian',
+  'th': 'thai',
+  'ur': 'urdu',
+  'hr': 'croatian',
+  'bg': 'bulgarian',
+  'lt': 'lithuanian',
+  'la': 'latin',
+  'mi': 'maori',
+  'ml': 'malayalam',
+  'cy': 'welsh',
+  'sk': 'slovak',
+  'te': 'telugu',
+  'fa': 'persian',
+  'lv': 'latvian',
+  'bn': 'bengali',
+  'sr': 'serbian',
+  'az': 'azerbaijani',
+  'sl': 'slovenian',
+  'kn': 'kannada',
+  'et': 'estonian',
+  'mk': 'macedonian',
+  'br': 'breton',
+  'eu': 'basque',
+  'is': 'icelandic',
+  'hy': 'armenian',
+  'ne': 'nepali',
+  'mn': 'mongolian',
+  'bs': 'bosnian',
+  'kk': 'kazakh',
+  'sq': 'albanian',
+  'sw': 'swahili',
+  'gl': 'galician',
+  'mr': 'marathi',
+  'pa': 'punjabi',
+  'si': 'sinhala',
+  'km': 'khmer',
+  'sn': 'shona',
+  'yo': 'yoruba',
+  'so': 'somali',
+  'af': 'afrikaans',
+  'oc': 'occitan',
+  'ka': 'georgian',
+  'be': 'belarusian',
+  'tg': 'tajik',
+  'sd': 'sindhi',
+  'gu': 'gujarati',
+  'am': 'amharic',
+  'yi': 'yiddish',
+  'lo': 'lao',
+  'uz': 'uzbek',
+  'fo': 'faroese',
+  'ps': 'pashto',
+  'tk': 'turkmen',
+  'nn': 'nynorsk',
+  'mt': 'maltese',
+  'sa': 'sanskrit',
+  'lb': 'luxembourgish',
+  'my': 'myanmar',
+  'bo': 'tibetan',
+  'tl': 'tagalog',
+  'mg': 'malagasy',
+  'as': 'assamese',
+  'tt': 'tatar',
+  'ln': 'lingala',
+  'ha': 'hausa',
+  'ba': 'bashkir',
+  'jw': 'javanese',
+  'su': 'sundanese',
+});
+
+// Exact, case-insensitive lookup of a code ("hi") or a language name
+// ("Hindi") against the verified table. Anything else returns null: a
+// string we cannot verify is never handed to the binary.
+function lookupLanguage(v) {
+  if (typeof v !== 'string') return null;
+  const s = v.trim().toLowerCase();
+  if (!s) return null;
+  if (Object.prototype.hasOwnProperty.call(LANGUAGES, s)) return s;
+  for (const code of Object.keys(LANGUAGES)) {
+    if (LANGUAGES[code] === s) return code;
+  }
+  return null;
+}
+
+// The transcription language: the user's WHISPER_LANG env stays the explicit
+// override (M6 decision), but only a value the verified table knows is
+// passed on; the existing free-text `language` setting is mapped the same
+// way; an unknown value fails closed to 'en', the behavior before this
+// slice. 'auto' is deliberately not enabled: language detection is a
+// behavior change, not a mapping.
+function resolveLanguage({ setting = null, env = null } = {}) {
+  return lookupLanguage(env) || lookupLanguage(setting) || 'en';
+}
+
+// A code the table knows (the only thing transcribe will pass to -l).
+function isKnownLanguage(v) {
+  return typeof v === 'string' && Object.prototype.hasOwnProperty.call(LANGUAGES, v);
+}
+
+module.exports = { findWhisper, cleanTranscript, transcribe, LANGUAGES, resolveLanguage, lookupLanguage, isKnownLanguage };

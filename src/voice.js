@@ -45,13 +45,22 @@ async function transcribe(payload, { modelsDir, preferredModel, find = whisper.f
   const w = find({ modelsDir, preferred: preferredModel });
   if (!w.available) return { ok: false, error: 'voice_unavailable', reason: w.reason };
 
+  // Language gate: an English-only model file (any `.en.` name) can only
+  // transcribe English, so it always gets 'en' regardless of settings; a
+  // multilingual model gets the requested language ONLY when it is a code
+  // whisper.cpp actually knows (M6 slice 2: the language setting is wired
+  // through resolveLanguage upstream). Nothing unverified reaches the CLI.
+  const modelName = String(w.model).split(/[\\/]/).pop().toLowerCase();
+  const lang = modelName.includes('.en.') ? 'en'
+    : (whisper.lookupLanguage(language) || 'en');
+
   const samples = new Int16Array(buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.length));
   if (!hasSpeech(samples, SAMPLE_RATE)) return { ok: false, error: 'no_speech' };
   const trimmed = trimSilence(samples, SAMPLE_RATE);
 
   let cancelled = false;
   try {
-    const text = await run({ pcm: Buffer.from(trimmed.buffer, trimmed.byteOffset, trimmed.byteLength), bin: w.bin, model: w.model, language, onSpawn: (child) => {
+    const text = await run({ pcm: Buffer.from(trimmed.buffer, trimmed.byteOffset, trimmed.byteLength), bin: w.bin, model: w.model, language: lang, onSpawn: (child) => {
       active = { cancel: () => { cancelled = true; child.kill(); } };
     } });
     return text ? { ok: true, text } : { ok: false, error: 'no_speech' };
@@ -62,4 +71,4 @@ async function transcribe(payload, { modelsDir, preferredModel, find = whisper.f
   }
 }
 
-module.exports = { status, transcribe, cancelActiveRun, SAMPLE_RATE, MAX_BYTES };
+module.exports = { status, transcribe, cancelActiveRun, SAMPLE_RATE, MAX_BYTES, resolveLanguage: whisper.resolveLanguage, LANGUAGES: whisper.LANGUAGES };
