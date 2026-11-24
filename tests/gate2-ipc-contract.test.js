@@ -79,3 +79,110 @@ test('refusals render one consistent fail-closed shape', () => {
   assert.deepEqual(r, { ok: false, error: 'refused', reason: 'unknown_channel' });
   assert.equal(refusalResponse('x'.repeat(999)).reason.length <= 64, true, 'reason bounded');
 });
+
+// ---- Gate 2 slice 6 review hardening: adversarial payload shapes ----
+const { validateRequest: vr, validatePreloadAllowlist: vpa, refusalResponse: rr, RENDERER_CHANNELS: CH } = require('../src/ipc-contract.js');
+
+test('hardening: class instances, Dates, arrays, functions and primitives are refused as payloads', () => {
+  class Hostile {}
+  for (const p of [new Date(), new Hostile(), [], () => {}, true, 'x', 5]) {
+    const r = vr('audit:read', p);
+    assert.equal(r.ok, false);
+    assert.equal(r.reason, 'bad_payload');
+  }
+});
+
+test('hardening: accessor properties are refused and the getter is never invoked', () => {
+  let calls = 0;
+  const p = {};
+  Object.defineProperty(p, 'limit', { enumerable: true, get() { calls += 1; return 9; } });
+  const r = vr('audit:read', p);
+  assert.equal(r.ok, false);
+  assert.equal(r.reason, 'accessor_property:limit');
+  assert.equal(calls, 0);
+});
+
+test('hardening: a throwing getter is refused without propagating the throw', () => {
+  const p = {};
+  Object.defineProperty(p, 'limit', { enumerable: true, get() { throw new Error('boom'); } });
+  const r = vr('audit:read', p);
+  assert.equal(r.ok, false);
+  assert.equal(r.reason, 'accessor_property:limit');
+});
+
+test('hardening: setter-only properties are refused', () => {
+  const p = {};
+  Object.defineProperty(p, 'fromSeq', { enumerable: true, set() {} });
+  const r = vr('audit:read', p);
+  assert.equal(r.ok, false);
+  assert.equal(r.reason, 'accessor_property:fromSeq');
+});
+
+test('hardening: non-enumerable own properties are refused', () => {
+  const p = {};
+  Object.defineProperty(p, 'limit', { value: 5, enumerable: false, writable: true, configurable: true });
+  const r = vr('audit:read', p);
+  assert.equal(r.ok, false);
+  assert.equal(r.reason, 'non_enumerable:limit');
+});
+
+test('hardening: symbol-keyed properties are refused', () => {
+  const p = { limit: 5 };
+  p[Symbol('shadow')] = 1;
+  const r = vr('audit:read', p);
+  assert.equal(r.ok, false);
+  assert.equal(r.reason, 'symbol_key');
+});
+
+test('hardening: prototype-polluting own keys are refused before any copy', () => {
+  const fromJson = JSON.parse('{"__proto__": {"injected": true}, "limit": 3}');
+  let r = vr('audit:read', fromJson);
+  assert.equal(r.ok, false);
+  assert.equal(r.reason, 'polluting_key:__proto__');
+  r = vr('audit:read', { ['constructor']: 1 });
+  assert.equal(r.reason, 'polluting_key:constructor');
+  r = vr('audit:read', { ['prototype']: 1 });
+  assert.equal(r.reason, 'polluting_key:prototype');
+  // The polluted source never becomes a validated payload.
+  assert.equal(fromJson.limit, 3); // sanity: source untouched
+});
+
+test('hardening: inherited-key objects are refused as non-plain payloads', () => {
+  const r = vr('audit:read', Object.create({ limit: 5 }));
+  assert.equal(r.ok, false);
+  assert.equal(r.reason, 'bad_payload');
+});
+
+test('hardening: object and function values are refused, valid primitives still pass', () => {
+  for (const v of [{}, [], new Date(), () => {}, null]) {
+    assert.equal(vr('audit:read', { limit: v }).reason, 'bad_value:limit');
+  }
+  const good = vr('audit:read', { limit: 10, fromSeq: 2 });
+  assert.equal(good.ok, true);
+  assert.deepEqual(good.payload, { limit: 10, fromSeq: 2 });
+  const p = { limit: 5 };
+  const r = vr('audit:read', p);
+  assert.notEqual(r.payload, p); // a real copy, not the input object
+});
+
+test('hardening: duplicate preload allowlist entries are refused', () => {
+  const r = vpa(CH.concat(['status:get']));
+  assert.equal(r.ok, false);
+  assert.deepEqual(r.duplicates, ['status:get']);
+  assert.deepEqual(vpa(CH.slice().reverse()), { ok: true });
+});
+
+test('hardening: refusalResponse stringifies nothing but a string reason', () => {
+  const hostile = { toString() { throw new Error('leak'); } };
+  assert.equal(rr(hostile).reason, 'refused');
+  assert.equal(rr(Symbol('s')).reason, 'refused');
+  assert.equal(rr(42).reason, 'refused');
+  assert.equal(rr(null).reason, 'refused');
+  assert.equal(rr(['a']).reason, 'refused');
+  assert.equal(rr('unknown_channel').reason, 'unknown_channel');
+  assert.equal(rr('x'.repeat(80)).reason.length, 64);
+  for (const r of [rr('a'), rr({})]) {
+    assert.equal(r.ok, false);
+    assert.equal(r.error, 'refused');
+  }
+});
