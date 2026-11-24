@@ -192,7 +192,12 @@ CREATE TABLE IF NOT EXISTS agent_schema (
     return {
       save(bytes) {
         fs.mkdirSync(path.dirname(file), { recursive: true });
-        fs.writeFileSync(file, Buffer.from(bytes));
+        // Atomic swap: write a sibling temp file, then rename it over the
+        // target. A crash or power loss mid-write leaves the PREVIOUS file
+        // intact; the live store is only ever replaced whole.
+        const tmp = file + '.tmp';
+        fs.writeFileSync(tmp, Buffer.from(bytes));
+        fs.renameSync(tmp, file);
       },
     };
   }
@@ -244,6 +249,16 @@ CREATE TABLE IF NOT EXISTS agent_schema (
       const bytes = this.db.export();
       const result = this.saver.save(bytes);
       if (result && typeof result.catch === 'function') result.catch(() => { /* async saver failure is non-fatal */ });
+    }
+
+    // Release the underlying WASM database and cancel any pending delayed
+    // write. Best effort by design: after close() the instance must not be
+    // used, and callers only close a store they are about to stop using
+    // (app quit, or the agent runtime's fail-closed shutdown).
+    close() {
+      if (this._persistTimer) { clearTimeout(this._persistTimer); this._persistTimer = null; }
+      try { if (this.db && typeof this.db.close === 'function') this.db.close(); } catch (err) { /* already closed */ }
+      this.db = null;
     }
 
     run(sql, params = []) {

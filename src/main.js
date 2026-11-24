@@ -53,6 +53,8 @@ const { createOrchestrator } = require('./agent-orchestrator');
 const { createNotificationDesk } = require('./agent-notifications');
 const { createReminderBook } = require('./agent-reminders');
 const { createAgentSurface } = require('./agent-surface');
+const { createAgentRuntime } = require('./agent-runtime');
+const { createAgentPersistence } = require('./agent-persistence');
 
 const SMOKE = process.argv.includes('--smoke');
 
@@ -79,6 +81,7 @@ let agentOrchestrator = null;
 let agentNotifications = null;
 let agentReminders = null;
 let agentSurface = null;
+let agentRuntime = null;
 
 function vaultDir() {
   return path.join(app.getPath('userData'), 'vault');
@@ -142,21 +145,64 @@ async function init() {
   // Cloud fallback is double-gated: the saved key AND the explicit
   // cloud_enabled setting (default false). A key alone arms nothing.
   ai = createAi({ geminiKey: () => secureStore.readKey(), cloudEnabled: P.getSettings(db).cloud_enabled === true });
-  // In-memory agent runtime. Every component is pure and local; the audit
-  // log starts at its genesis and lives only in this process in this slice.
-  agentRegistry = createRegistry();
-  agentApprovals = createApprovalDesk({});
-  agentStop = createEmergencyStop();
-  agentAudit = createAuditLog({});
-  const agentEngine = createPolicyEngine({ registry: agentRegistry, approvals: agentApprovals, emergencyStop: agentStop });
-  agentOrchestrator = createOrchestrator({ engine: agentEngine, approvals: agentApprovals, emergencyStop: agentStop, audit: agentAudit });
-  agentNotifications = createNotificationDesk({});
-  agentReminders = createReminderBook({});
+  // Agent runtime, now persistence-backed (Gate 2 slice P2). The stack is
+  // built by a factory so every recovery starts from FRESH desks and never
+  // reuses a possibly poisoned stack. The state store is a dedicated
+  // LocalDb file next to the course database. Secrets never enter this
+  // store: the Gemini key stays in the OS credential vault (secureStore),
+  // which remains the only credential storage this app uses. No agent run
+  // is ever resumed automatically across a restart.
+  agentRuntime = createAgentRuntime({
+    openDb: () => LocalDb.open({ file: path.join(app.getPath('userData'), 'agent-state.db') }),
+    buildAgent: ({ db: agentDb }) => {
+      agentRegistry = createRegistry();
+      agentApprovals = createApprovalDesk({});
+      agentStop = createEmergencyStop();
+      agentAudit = createAuditLog({});
+      const agentEngine = createPolicyEngine({ registry: agentRegistry, approvals: agentApprovals, emergencyStop: agentStop });
+      agentOrchestrator = createOrchestrator({ engine: agentEngine, approvals: agentApprovals, emergencyStop: agentStop, audit: agentAudit });
+      agentNotifications = createNotificationDesk({});
+      agentReminders = createReminderBook({});
+      const agentPersistence = createAgentPersistence({
+        db: agentDb,
+        clock: () => Date.now(),
+        registry: agentRegistry,
+        audit: agentAudit,
+        approvals: agentApprovals,
+        engine: agentEngine,
+        emergencyStop: agentStop,
+        notifications: agentNotifications,
+        reminders: agentReminders,
+      });
+      return { db: agentDb, persistence: agentPersistence, audit: agentAudit, approvals: agentApprovals, engine: agentEngine, emergencyStop: agentStop, notifications: agentNotifications, reminders: agentReminders, orchestrator: agentOrchestrator };
+    },
+  });
+  const agentStarted = await agentRuntime.start();
+  if (!agentStarted.ok) {
+    // Fail-closed and non-destructive: the agent surface reports the
+    // blocked state and refuses every write path; the rest of the app runs
+    // normally. No automatic reset, no fallback to an empty store.
+    console.warn('[agent] persistence blocked:', (agentStarted.problems || []).join('; '));
+  }
   agentSurface = createAgentSurface({
     status: () => {
+      if (!agentRuntime.isActive()) {
+        return {
+          agentActive: false,
+          persistenceBlocked: true,
+          persistenceProblems: agentRuntime.problems() || [],
+          stopped: false,
+          activeRun: null,
+          notificationsPending: 0,
+          remindersScheduled: 0,
+          auditEntries: 0,
+        };
+      }
       const active = agentOrchestrator.activeRun();
       return {
         agentActive: true,
+        persistenceBlocked: false,
+        persistenceProblems: [],
         stopped: agentStop.isActive() === true,
         activeRun: active ? active.runId : null,
         notificationsPending: agentNotifications.pending().length,
@@ -165,6 +211,7 @@ async function init() {
       };
     },
     listRuns: (runId) => {
+      if (!agentRuntime.isActive()) return [];
       if (runId) {
         const st = agentOrchestrator.getRun(runId);
         return st ? [st] : [];
@@ -173,6 +220,9 @@ async function init() {
       return active ? [active] : [];
     },
     readAudit: (f) => {
+      if (!agentRuntime.isActive()) {
+        return { base: { seq: 0, hash: null }, entries: [], lastHash: null, verified: true, persistenceBlocked: true };
+      }
       const fromSeq = Number.isInteger(f.fromSeq) ? f.fromSeq : 1;
       const limit = Number.isInteger(f.limit) ? f.limit : 500;
       const snap = agentAudit.snapshot();
@@ -195,8 +245,8 @@ async function init() {
       const list = [status].filter(Boolean);
       return name ? list.filter((x) => x && x.name === name) : list;
     },
-    listNotifications: (limit) => agentNotifications.list().slice(0, Number.isInteger(limit) ? limit : 500),
-    listReminders: (limit) => agentReminders.list().slice(0, Number.isInteger(limit) ? limit : 500),
+    listNotifications: (limit) => (agentRuntime.isActive() ? agentNotifications.list().slice(0, Number.isInteger(limit) ? limit : 500) : []),
+    listReminders: (limit) => (agentRuntime.isActive() ? agentReminders.list().slice(0, Number.isInteger(limit) ? limit : 500) : []),
   });
 }
 
@@ -582,6 +632,10 @@ app.on('activate', () => {
 });
 
 app.on('before-quit', () => {
+  // The agent state store converges and closes first: an acknowledged
+  // transition is already durable (each append flushes), so this final save
+  // only converges desk state. A blocked runtime saves nothing.
+  if (agentRuntime) agentRuntime.beforeQuit();
   if (db) db.flush();
 });
 

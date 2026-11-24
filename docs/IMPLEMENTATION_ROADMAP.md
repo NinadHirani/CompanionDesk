@@ -241,8 +241,8 @@ contracts, submissions, deletion) and destructive-deletion segments
 (delete/destroy/erase/wipe/purge/permanent*) are enforced conservatively:
 the registry refuses to register such a tool unless it is 'sensitive' or
 flagged critical:true, and the policy engine separately refuses to
-authorize any misclassified one that somehow exists. SLICE 2 (persistence) is IMPLEMENTED on main (24 Nov 2026, `e2eac24`),
-still with NO product wiring: six additive CREATE TABLE IF NOT EXISTS
+authorize any misclassified one that somehow exists. SLICE 2 (persistence) is IMPLEMENTED on main (24 Nov 2026, `e2eac24`)
+and now WIRED (slice P2, 24 Nov 2026): six additive CREATE TABLE IF NOT EXISTS
 tables in the db.js schema (agent_grants, agent_approvals, agent_audit,
 agent_audit_anchor, agent_emergency_stop, agent_runs), a deliberately
 narrow storage adapter (parameterized run/all plus BEGIN/COMMIT/ROLLBACK),
@@ -288,10 +288,12 @@ creates real records and audits every transition, a tool-level refusal
 stores nothing and follows skip recovery). The read-only renderer-to-
 main surface is now wired end to end (agent-surface.js on the hardened
 ipc-contract.js, section 3h of the blueprint; writes unreachable from
-the renderer). Remaining Gate 2 work: persistence wiring (hydrating and
-writing the audit log, approvals, grants and stop state through the db
-adapter) and delivery/scheduling/file output, each an explicitly-
-reviewed gate.
+the renderer). Persistence wiring is IMPLEMENTED on main (24 Nov 2026, slice P2):
+the agent runtime module owns open/load/save/close of a dedicated
+agent-state.db, every write path passes a persistence-blocked gate, the
+renderer's surface reports blocked state neutrally, and before-quit
+converges and closes. Remaining Gate 2 work: delivery/scheduling/file
+output, each an explicitly-reviewed gate.
 Acceptance: policy
 engine refuses ungranted calls (tested); payments, purchases, destructive
 deletion, and legal or binding submissions are denied unless fresh,

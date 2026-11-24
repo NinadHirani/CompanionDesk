@@ -205,9 +205,13 @@ claims to literally experience emotions.
 - Update policy that never auto-installs unsigned builds; update modes
   disabled/auto/manual-download (`src/update-policy.js`, `src/updater.js`).
 - Health check and onboarding interview (`src/health.js`, `src/onboarding.js`).
-- 622 passing unit/integration tests (258 baseline; model selection +18, conversation history +17, optional key storage +13, M1 provider registry/task router/cloud gate +25, M1 per-ask routing integration +18, M1 review fixes +18, M1 hardware profiles +12, M1 provider status +11, M1 provider contract tests +18, M1 provider fault diagnostics +18, fault-detail sanitization review fix +3, offline memory-v2 retrieval harness +12, memory-v2 harness slice 4 fold fix and bridges +5, memory-v2 store contract tests +9, Gate 2 agent safety foundation +35, Gate 2 security hardening +8, Gate 2 persistence +17, M1 diagnostics hardening +2, Gate 2 orchestrator +13, orchestrator audit hardening +13, first harmless tools +18, ICS
+- 636 passing unit/integration tests (258 baseline; model selection +18, conversation history +17, optional key storage +13, M1 provider registry/task router/cloud gate +25, M1 per-ask routing integration +18, M1 review fixes +18, M1 hardware profiles +12, M1 provider status +11, M1 provider contract tests +18, M1 provider fault diagnostics +18, fault-detail sanitization review fix +3, offline memory-v2 retrieval harness +12, memory-v2 harness slice 4 fold fix and bridges +5, memory-v2 store contract tests +9, Gate 2 agent safety foundation +35, Gate 2 security hardening +8, Gate 2 persistence +17, M1 diagnostics hardening +2, Gate 2 orchestrator +13, orchestrator audit hardening +13, first harmless tools +18, ICS
   hardening +5, injection corpus +27, IPC contract +5, IPC contract review hardening +11, agent surface
-  wiring +21); CI, CI macOS + Linux and Android APK all green on the
+  wiring +21, persistence hardening +6 (strict records, acknowledged
+  appends flush to disk immediately, unacknowledged appends roll back),
+  orchestrator-on-durable durability +2, persistence desks follow-ups +3,
+  agent runtime lifecycle +5, +14 total since the 622 count above); CI,
+  CI macOS + Linux and Android APK all green on the
   current baseline `9addfdb` (runs 45323544121, 45323543975, 45323765018);
   public Android debug-APK preview release.
 
@@ -258,7 +262,19 @@ invalidation is audited, and used approvals stay replay-denied across
 restarts; grants restore with their exact expiry and revocation; the
 emergency stop restores active if it was active at shutdown; no agent run
 resumes automatically (a running row stays as it is and the persistence
-surface has no resume API). Bounded retention without silent deletion:
+surface has no resume API). Durability semantics (slice P2 hardening): an
+acknowledged audit append is flushed to disk immediately, so log-before-
+commit holds at the file boundary; a persist failure rolls the unacknow-
+ledged in-memory append back (the log holds acknowledged entries only,
+never a record of a transition that did not commit) and poisons the
+orchestrator until a fresh verified load replaces the instance. The
+runtime (agent-runtime.js) owns open/load/save/close: any failure on
+that path puts the app in a blocked mode where nothing is written or
+deleted (the store stays byte-for-byte intact), every write path is
+refused, and only a real verified load can revive it. The agent-state
+file is replaced whole via temp-file-plus-rename, so a crash mid-save
+cannot corrupt the live store. Secrets never enter this store; the
+Gemini key remains in the OS credential vault. Bounded retention without silent deletion:
 pruning the audit trail requires an archive that verifies and covers the
 entries being dropped, the prune itself is audited, and the chain base
 advances so the anchored tail stays locally verifiable. Documented limits:

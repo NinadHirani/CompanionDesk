@@ -428,6 +428,7 @@
                 const lastEntry = snap.entries.length ? snap.entries[snap.entries.length - 1] : null;
                 putAnchor(snap.base.seq, snap.base.hash, lastEntry ? lastEntry.seq : snap.base.seq, lastEntry ? lastEntry.hash : snap.base.hash);
               });
+              db.flush();
               lastPersistedSeq = appended.seq;
             }
           } catch (err) {
@@ -482,11 +483,16 @@
           }
         });
         lastPersistedSeq = lastSeq;
+        // A successful save is durable NOW: file bytes written, not left to
+        // a delayed persist timer a crash could cancel.
+        db.flush();
         return { ok: true, entries: fresh.length, base: { ...snap.base }, lastSeq, lastHash };
       } catch (err) {
         // The transaction rolled back: the database is exactly as it was
-        // before this save. The in-memory log keeps the entries; the next
-        // successful save converges.
+        // before this save. Audit entries are unaffected (each was already
+        // durably appended and flushed at its acknowledged append); only the
+        // desk state convergence is pending, and the next successful save
+        // converges it.
         return { ok: false, reason: 'persist_failure', error: String((err && err.message) || err) };
       }
     }
@@ -504,6 +510,10 @@
           const lastEntry = snap.entries.length ? snap.entries[snap.entries.length - 1] : null;
           putAnchor(snap.base.seq, snap.base.hash, lastEntry ? lastEntry.seq : snap.base.seq, lastEntry ? lastEntry.hash : snap.base.hash);
         });
+        // Acknowledgment means durable: the file bytes are written NOW, not
+        // on a delayed timer. Only then may the caller treat the transition
+        // as committed (log-before-commit, durability at the boundary).
+        db.flush();
         lastPersistedSeq = res.seq;
         return { ok: true, seq: res.seq, hash: res.hash };
       } catch (err) {

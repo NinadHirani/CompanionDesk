@@ -220,6 +220,7 @@ test('audit entries and the anchor are written atomically; a failed write rolls 
       return rawRun(sql, params);
     },
     all: w.db.all.bind(w.db),
+    flush: w.db.flush.bind(w.db),
   };
   const p2 = createAgentPersistence({ db: flaky, clock: () => w.state.now, registry: w.registry, audit: w.audit, approvals: w.approvals, engine: w.engine, emergencyStop: w.stop });
   p2.load();
