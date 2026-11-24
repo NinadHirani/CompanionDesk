@@ -885,8 +885,12 @@ platform-specific). Desktop/main-process wiring only: the web and
 mobile builds do not include the panel or the surface, and the
 required display reader stays desktop-renderer-only by design.
 
-Commit: <code commit sha, filled by the docs commit>. CI: <run ids,
-filled by the docs commit>.
+Commit: 5ec17d4dac2e9b90f3f54e3cc1eb6c4142460406 (direct to main, the
+established flow). CI verified on GitHub Actions for exactly that SHA:
+CI 45339174220 (success), CI (macOS + Linux) 45339174314 (success, and
+the redundant second dispatch 45339329770 also success), Android APK
+45339484185 (success). This docs commit records the run ids; its own CI
+run is verified before it is reported as done.
 
 ## 4. Planned, NOT implemented
 
