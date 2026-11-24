@@ -103,6 +103,63 @@ CREATE TABLE IF NOT EXISTS chat_messages (
   created_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_chat_messages_conv ON chat_messages(conversation_id, id);
+
+-- Gate 2 agent foundation state. Additive only: every statement is
+-- CREATE TABLE IF NOT EXISTS, so an existing database gains these tables on
+-- the next open and no existing table or row is touched.
+CREATE TABLE IF NOT EXISTS agent_grants (
+  tool TEXT PRIMARY KEY,
+  capability TEXT NOT NULL,
+  granted_at INTEGER NOT NULL,
+  expires_at INTEGER,
+  revoked INTEGER NOT NULL DEFAULT 0
+);
+CREATE TABLE IF NOT EXISTS agent_approvals (
+  id TEXT PRIMARY KEY,
+  tool TEXT NOT NULL,
+  args_digest TEXT NOT NULL,
+  requested_at INTEGER NOT NULL,
+  expires_at INTEGER NOT NULL,
+  state TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS agent_audit (
+  seq INTEGER PRIMARY KEY,
+  at TEXT NOT NULL,
+  actor TEXT NOT NULL,
+  action TEXT NOT NULL,
+  tool TEXT,
+  decision TEXT,
+  reason TEXT,
+  grant_id TEXT,
+  approval_id TEXT,
+  detail_json TEXT,
+  hash TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS agent_audit_anchor (
+  id INTEGER PRIMARY KEY CHECK (id = 1),
+  base_seq INTEGER NOT NULL,
+  base_hash TEXT NOT NULL,
+  last_seq INTEGER NOT NULL,
+  last_hash TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS agent_emergency_stop (
+  id INTEGER PRIMARY KEY CHECK (id = 1),
+  active INTEGER NOT NULL DEFAULT 0,
+  reason TEXT,
+  activated_at TEXT,
+  activated_by TEXT,
+  reset_count INTEGER NOT NULL DEFAULT 0
+);
+CREATE TABLE IF NOT EXISTS agent_runs (
+  id INTEGER PRIMARY KEY,
+  run_id TEXT UNIQUE NOT NULL,
+  kind TEXT NOT NULL,
+  status TEXT NOT NULL,
+  started_at TEXT NOT NULL,
+  ended_at TEXT,
+  summary TEXT
+);
 `;
 
   // Filesystem saver: the desktop default. Writes only on flush, never on

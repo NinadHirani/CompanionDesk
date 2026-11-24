@@ -59,8 +59,31 @@
     }
     const ttl = ttlMs === undefined ? DEFAULT_TTL_MS : ttlMs;
     const byId = new Map();
+    const STATE_REASONS = { used: 'approval_used', cancelled: 'approval_cancelled', invalidated: 'approval_invalidated' };
 
+      // Persisted-state surface: export for save, hydrate for load. Pending
+      // approvals never survive a restart as usable; the loader invalidates
+      // them and they can only be safely reissued as fresh requests.
     const desk = {
+      exportAll() {
+        return [...byId.values()].map((r) => ({ id: r.id, tool: r.tool, argsDigest: r.argsDigest, requestedAt: r.requestedAt, expiresAt: r.expiresAt, state: r.state }));
+      },
+      hydrate(records, { invalidatePending = true } = {}) {
+        const list = Array.isArray(records) ? records : [];
+        let restored = 0;
+        let invalidated = 0;
+        for (const r of list) {
+          if (!r || typeof r.id !== 'string' || !/^[a-f0-9]{64}$/.test(r.id) || typeof r.tool !== 'string' || typeof r.argsDigest !== 'string' || !/^[a-f0-9]{64}$/.test(r.argsDigest) || !Number.isFinite(r.requestedAt) || !Number.isFinite(r.expiresAt)) continue;
+          if (byId.has(r.id)) continue;
+          let state = r.state;
+          if (state === 'pending' && invalidatePending) state = 'invalidated';
+          if (!STATE_REASONS[state] && state !== 'pending') continue;
+          byId.set(r.id, { id: r.id, tool: r.tool, argsDigest: r.argsDigest, requestedAt: r.requestedAt, expiresAt: r.expiresAt, state });
+          if (state === 'invalidated') invalidated += 1;
+          else restored += 1;
+        }
+        return { ok: true, restored, invalidated };
+      },
       // The user's explicit yes for one exact run. Returns the record the
       // policy engine later verifies against the exact same args.
       request({ tool, args } = {}) {
@@ -96,7 +119,7 @@
       verify(id, { tool, args } = {}) {
         const record = (typeof id === 'string') ? byId.get(id) : null;
         if (!record) return { ok: false, reason: 'approval_unknown' };
-        if (record.state !== 'pending') return { ok: false, reason: record.state === 'used' ? 'approval_used' : 'approval_cancelled' };
+        if (record.state !== 'pending') return { ok: false, reason: STATE_REASONS[record.state] || 'approval_unknown_state' };
         if (now() >= record.expiresAt) return { ok: false, reason: 'approval_expired' };
         if (record.tool !== tool) return { ok: false, reason: 'approval_tool_mismatch' };
         if (argsDigest(tool, args) !== record.argsDigest) return { ok: false, reason: 'approval_args_mismatch' };

@@ -96,8 +96,64 @@
     const entries = [];
     let seq = 0;
     let prevHash = GENESIS;
+    // Chain base: where local verification starts. Pruning with a verified
+    // archive advances it so the anchored tail stays verifiable after old
+    // entries leave the local store.
+    let base = { seq: 0, hash: GENESIS };
 
     const log = {
+      snapshot() {
+        return { base: { ...base }, entries: entries.map((e) => ({ ...e })), lastHash: prevHash };
+      },
+      // Adopt a persisted, already-verified state. Fails closed: any invalid
+      // entry or broken chain leaves the log untouched.
+      hydrate({ base: newBase, entries: records } = {}) {
+        if (!newBase || !Number.isInteger(newBase.seq) || newBase.seq < 0 ||
+            typeof newBase.hash !== 'string' || !/^[a-f0-9]{64}$/.test(newBase.hash)) {
+          return { ok: false, reason: 'invalid_base' };
+        }
+        const list = Array.isArray(records) ? records : [];
+        for (const e of list) {
+          // sanitize the body only: seq and hash are structural fields the
+          // sanitizer does not know, and toCanonicalEntry ignores them too.
+          const body = {};
+          for (const f of ['at', 'actor', 'action', 'tool', 'decision', 'reason', 'grantId', 'approvalId', 'detail']) {
+            if (e[f] !== undefined) body[f] = e[f];
+          }
+          const errs = sanitize(body);
+          if (errs.length) return { ok: false, reason: 'invalid_entry', errors: errs };
+        }
+        const check = log.verify(list, newBase);
+        if (!check.ok) return { ok: false, reason: check.reason || 'chain_broken', brokenAt: check.brokenAt };
+        base = { seq: newBase.seq, hash: newBase.hash };
+        entries.length = 0;
+        for (const e of list) entries.push(Object.freeze({ ...e }));
+        seq = list.length ? list[list.length - 1].seq : base.seq;
+        prevHash = list.length ? list[list.length - 1].hash : base.hash;
+        return { ok: true, count: entries.length, base: { ...base } };
+      },
+      // Drop verified-and-archived entries at the head of the local store and
+      // move the verification base forward. baseHash must be the real chain
+      // hash of the entry at beforeSeq (or of the base itself).
+      pruneBase(beforeSeq, baseHash) {
+        if (!Number.isInteger(beforeSeq) || beforeSeq < base.seq || beforeSeq > seq) {
+          return { ok: false, reason: 'prune_bounds' };
+        }
+        if (typeof baseHash !== 'string' || !/^[a-f0-9]{64}$/.test(baseHash)) {
+          return { ok: false, reason: 'invalid_base' };
+        }
+        if (beforeSeq === base.seq) {
+          if (baseHash !== base.hash) return { ok: false, reason: 'prune_anchor_mismatch' };
+        } else {
+          const anchorEntry = entries[beforeSeq - base.seq - 1];
+          if (!anchorEntry || anchorEntry.seq !== beforeSeq || anchorEntry.hash !== baseHash) {
+            return { ok: false, reason: 'prune_anchor_mismatch' };
+          }
+        }
+        entries.splice(0, beforeSeq - base.seq);
+        base = { seq: beforeSeq, hash: baseHash };
+        return { ok: true, base: { ...base } };
+      },
       append(entry) {
         const errors = sanitize(entry);
         if (errors.length) return { ok: false, errors };
@@ -140,10 +196,11 @@
       // Recomputes the chain. With no argument it checks the live log; with
       // an exported record array it checks that copy, which is what makes
       // tampering with a persisted export detectable.
-      verify(records) {
+      verify(records, fromBase) {
         const list = records || entries;
-        let p = GENESIS;
-        let expectSeq = 1;
+        const origin = fromBase || base;
+        let p = origin.hash;
+        let expectSeq = origin.seq + 1;
         for (const e of list) {
           if (typeof e.seq !== 'number' || !Number.isInteger(e.seq) || typeof e.hash !== 'string') {
             return { ok: false, brokenAt: e.seq || 0, reason: 'malformed_entry' };

@@ -104,6 +104,24 @@
       revoke,
       authorize,
       listGrants: () => [...grants.values()].map((g) => ({ ...g })),
+      // Persisted-state surface: restore grants exactly as saved, including
+      // expiry and revocation. Every row is re-validated against the registry
+      // before it is trusted; anything that fails validation is refused
+      // (reported in skipped) rather than silently repaired.
+      hydrateGrants(records) {
+        const list = Array.isArray(records) ? records : [];
+        let restored = 0;
+        let skipped = 0;
+        for (const g of list) {
+          if (!g || typeof g.tool !== 'string') { skipped += 1; continue; }
+          const def = registry.get(g.tool);
+          if (!def || g.capability !== def.capability) { skipped += 1; continue; }
+          if (!Number.isFinite(g.grantedAt) || !(g.expiresAt === null || Number.isFinite(g.expiresAt)) || typeof g.revoked !== 'boolean') { skipped += 1; continue; }
+          grants.set(g.tool, { tool: g.tool, capability: g.capability, grantedAt: g.grantedAt, expiresAt: g.expiresAt, revoked: g.revoked });
+          restored += 1;
+        }
+        return { ok: true, restored, skipped };
+      },
     };
   }
 

@@ -41,6 +41,29 @@
       },
       isActive() { return active; },
       snapshot() { return { active, reason, activatedAt, activatedBy, resetCount }; },
+      // Restore the persisted stop state. An active stop at shutdown comes
+      // back active; reset requires a real reset call, never a restart.
+      hydrate(snap) {
+        if (!snap || typeof snap !== 'object') return { ok: false, reason: 'invalid_snapshot' };
+        if (typeof snap.active !== 'boolean' || !Number.isInteger(snap.resetCount) || snap.resetCount < 0) {
+          return { ok: false, reason: 'invalid_snapshot' };
+        }
+        if (snap.active) {
+          if (typeof snap.reason !== 'string' || !snap.reason || snap.reason.length > 200) {
+            return { ok: false, reason: 'invalid_snapshot' };
+          }
+          active = true;
+          reason = snap.reason;
+          activatedAt = typeof snap.activatedAt === 'string' ? snap.activatedAt : null;
+          activatedBy = typeof snap.activatedBy === 'string' ? snap.activatedBy : null;
+        } else {
+          if (snap.reason !== undefined && snap.reason !== null) return { ok: false, reason: 'invalid_snapshot' };
+          active = false;
+          reason = null;
+        }
+        resetCount = snap.resetCount;
+        return { ok: true };
+      },
     };
   }
 
