@@ -569,6 +569,10 @@ Android MediaProjection POC honoring its per-session consent requirements.
 
 ## M8 progress
 
+### M8 slice 2: Device Access Centre policy core (landed 24 Nov 2026)
+
+Per Ninad's requirement that CompanionDesk offer broad device/app access rather than only narrow integrations: `src/device-access.js` is the app-side policy layer, pure (no OS calls, no network, no real permission requests). A fixed capability catalog maps each capability to the OS permission it needs per platform (microphone, screen capture, accessibility/UI automation desktop-only, scoped file pickers, contacts, notifications, location, calendar, purchase). Nothing is granted by default; grants are per app id and capability with exact scopes, no wildcards; write/send/delete/purchase classes additionally require a Gate-2-style approval digest for the exact action; revocation is immediate and per app; a request for an OS permission exists only behind an explicit user action on a capability about to be used, never at startup and never in bulk; sensitive capabilities carry a visible-while-active indicator requirement; `UNRESTRICTED_DEVICE_ACCESS` is a constant false. The OS remains the real boundary; this layer never bypasses sandbox, TCC, or Android runtime permissions, and truly unrestricted access to every app and private app database is stated as impossible in the architecture doc. 10 tests in `tests/device-access.test.js`.
+
 - Slice 1 (decision-independent groundwork): `src/integrations.js`, the
   pure integrations registry. Manifest validation (strict shape, no
   unknown fields, wildcard/unknown/forbidden/empty scopes refused), a
