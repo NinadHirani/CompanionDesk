@@ -32,6 +32,13 @@ carries the "M2" name; its phase here is M4) and no M9 definition exists
 in this file. Neither is invented here: if a coordinated-release phase
 is wanted as M9, that needs Ninad's explicit definition first.
 
+Traceability addendum (24 Nov 2026): Ninad's confirmed Areas 1-10
+requirements are integrated as ADDITIONS via
+`docs/ARCHITECTURE_DECISIONS_INTEGRATION.md`, which maps each area onto
+the milestones below with exists/proposed/open status and open gates.
+This roadmap remains governing and unchanged in order; that file is a
+traceability addendum, not a replacement, and carries no code.
+
 Detail (still accurate): Gate 2 slice 1 (agent safety
 foundation) and its hardening are pure, isolated modules with NO product
 wiring, NO tools registered beyond test fixtures and NO UI or IPC. Slice 2
