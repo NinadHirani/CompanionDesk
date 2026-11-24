@@ -9,6 +9,19 @@ main `40ca09b` and the existing tests. The production registry stays
 EMPTY (src/main.js comments it and tests pin it); nothing in this
 proposal changes that.
 
+IMPLEMENTATION STATUS (24 Nov 2026): after Ninad approved D-S1, PART 1
+(the scheduling gate) was implemented exactly as designed below, with
+THREE mechanical adaptations forced by the existing validators and NO
+semantic change: (1) the argument is named `due_at`, not `dueAt` - the
+tool registry accepts only lowercase snake_case field names; (2) the
+audit detail is { schedule_id, scope, due_at } - the audit schema
+requires lowercase detail keys; (3) in a wired stack the injected
+audit writer is the persistence layer's durable audit wrapper (the
+same writer the orchestrator uses) so the hash chain stays
+coordinated across reload. PART 2 (file output) remains DESIGN ONLY;
+D-F1, D-F2 and D-F3 are unapproved. Nothing is registered or enabled;
+the production registry stays empty.
+
 Both proposals share one honest dependency stated up front: even if both
 gates are later approved, implemented and enabled, NO STEP CAN EXECUTE
 until Stage-A decision D1 (the run entry point that turns a user gesture

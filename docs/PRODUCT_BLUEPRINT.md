@@ -1191,6 +1191,61 @@ proposal. The production registry stays EMPTY; nothing is registered,
 granted, or executed; no renderer controls; Stage C untouched. Honest
 dependency: no run can start until D1 (run entry point) is decided.
 
+## 3j.11. Scheduling gate: `schedule_create` (24 Nov 2026): IMPLEMENTED, NOT enabled
+
+Per Ninad's D-S1 approval on 24 Nov 2026 (docs/GATE2_SCHEDULING_FILE_OUTPUT_PROPOSAL.md,
+Part 1). The tool exists in code and tests; nothing is registered,
+granted or enabled, and the production registry stays EMPTY.
+
+- Tool: `schedule_create`, capability `sensitive` (a fresh one-time
+  approval for EVERY call; a standing grant can never authorize it),
+  `critical: false`. Pure adapter `src/agent-tool-scheduling.js` over
+  the EXISTING M5 schedule book by DEPENDENCY INJECTION: the module
+  never requires the scheduler, so the wiring lock only ever gains
+  rules. Creation ONLY: no pause, resume, cancel, update or tick; the
+  product tick stays the only firing path and delivery stays opt-in
+  (`proactive_enabled` default false), so a created schedule can never
+  wake or notify anything until the user opts in.
+- Argument scope: `title` (1..120), `scope` pinned by schema enum to
+  `reminder` only (agent-created deadlines refused:
+  `scope_deadline_refused`), `due_at` a safe integer at most
+  now+365 days (`due_at_too_far`), optional `notes` (<=500).
+  Exact-duplicate refusal (`duplicate_schedule`) across the whole book
+  in ANY state, cancelled records included: the agent cannot resurrect
+  a commitment the user cancelled. Field names follow the registry's
+  lowercase snake_case rule, hence `due_at` (the proposal's `dueAt` is
+  the same argument; no semantic change).
+- Audit: on success one entry { actor agent, action `schedule.create`,
+  tool `schedule_create`, decision allowed, detail { schedule_id,
+  scope, due_at } } (detail keys lowercase per the audit schema). In a
+  wired stack the injected audit writer is the persistence layer's
+  durable audit wrapper - the same writer the orchestrator uses - so
+  the hash chain stays coordinated across reload. An append failure
+  fails the step (`audit_append_failed`) while the created schedule
+  stays visible and cancellable on the product surface.
+- Orchestrator contract unchanged: a plan step declares
+  `needsApproval: true` to pause for the user's yes (the same pattern
+  as the run-driver test's payments.charge fixture). The engine's deny
+  ladder checks the grant before the approval, so the tool needs a
+  standing grant AND a fresh per-call approval; the grant alone never
+  authorizes, and an undeclared sensitive step is denied and the run
+  aborts (fail closed).
+- Tests: tests/gate2-scheduling-gate.test.js (16 tests): the
+  definition, schema rejections, the full deny ladder (grant +
+  one-time approval + digest binding + consume-once), a full
+  three-step run with the approval pause, duplicate refusal including
+  cancelled records, the book cap, the emergency stop,
+  product-surface visibility and cancellation, an audit-append
+  failure, inert arguments, the run driver with kind 'user'
+  (approval pause) versus kind 'scheduled' refused (D-S2 deferred),
+  the persistence roundtrip, and the wiring-lock additions. Full
+  suite 966/966 plus selftest PASS.
+- Stays disabled: production registration (registering is the
+  separate owner-approved enable step), the run-driver 'scheduled'
+  kind, agent-created deadlines, agent cancel/pause/update, delivery.
+  Honest dependency unchanged: no run can start until Stage-A D1 (the
+  run entry point) is decided.
+
 ## 4. Planned, NOT implemented
 
 A secure credential-vault adapter
