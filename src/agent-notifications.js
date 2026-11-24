@@ -17,6 +17,9 @@
   if (typeof module === 'object' && module.exports) module.exports = factory();
   else root.CompanionAgentNotifications = factory();
 })(typeof self !== 'undefined' ? self : this, function () {
+  const strictRecords = (typeof require === 'function')
+    ? require('./strict-record').plainRecords
+    : root.CompanionStrictRecord.plainRecords;
   const MAX_TITLE = 120;
   const MAX_BODY = 500;
   const PRIORITIES = ['low', 'normal', 'high'];
@@ -68,36 +71,45 @@
         return queue.map((r) => ({ ...r }));
       },
 
-      // Restore persisted records. Strict and all-or-nothing: every record
-      // must match the exact shape create() produces (same caps), ids must
-      // be unique, and an overflow is refused whole, never truncated.
-      // Unknown fields are dropped: the desk's records carry no such fields,
-      // so anything extra is not this desk's data and must not come back in.
-      hydrate(records) {
-        const list = Array.isArray(records) ? records : [];
+      // Read-only pass over prospective records: identical rules to
+      // hydrate(), mutating nothing. The persistence layer validates every
+      // store first and only then applies, so a later refusal leaves
+      // earlier stores untouched. Hostile input (non-arrays, sparse
+      // arrays, accessor/symbol/non-enumerable properties, exotic
+      // prototypes) is refused without reading a single value: descriptors
+      // are inspected before values.
+      validate(records) {
+        const v = strictRecords(records);
+        if (!v.ok) return { ok: false, reason: v.reason };
+        const list = v.records;
         if (list.length > MAX_QUEUE) return { ok: false, reason: 'queue_overflow' };
-        const restored = [];
+        const clean = [];
         for (const r of list) {
-          if (!r || typeof r !== 'object') return { ok: false, reason: 'invalid_record' };
           if (typeof r.id !== 'string' || !/^ntf-\d{6}$/.test(r.id)) return { ok: false, reason: 'invalid_record' };
           if (!validText(r.title, MAX_TITLE) || !validText(r.body, MAX_BODY)) return { ok: false, reason: 'invalid_record' };
           if (!PRIORITIES.includes(r.priority)) return { ok: false, reason: 'invalid_record' };
           if (!Number.isFinite(r.createdAt)) return { ok: false, reason: 'invalid_record' };
           if (typeof r.read !== 'boolean') return { ok: false, reason: 'invalid_record' };
-          restored.push({ id: r.id, title: r.title, body: r.body, priority: r.priority, createdAt: r.createdAt, read: r.read });
+          clean.push({ id: r.id, title: r.title, body: r.body, priority: r.priority, createdAt: r.createdAt, read: r.read });
         }
         const ids = new Set();
         let maxSeq = 0;
-        for (const r of restored) {
+        for (const r of clean) {
           if (ids.has(r.id)) return { ok: false, reason: 'duplicate_id' };
           ids.add(r.id);
-          const s = parseInt(r.id.slice(4), 10);
-          if (s > maxSeq) maxSeq = s;
+          const seqNo = parseInt(r.id.slice(4), 10);
+          if (seqNo > maxSeq) maxSeq = seqNo;
         }
+        return { ok: true, count: clean.length, records: clean, maxSeq };
+      },
+
+      hydrate(records) {
+        const v = this.validate(records);
+        if (!v.ok) return v;
         queue.length = 0;
-        for (const r of restored) queue.push(r);
-        seq = maxSeq;
-        return { ok: true, restored: restored.length };
+        for (const r of v.records) queue.push(r);
+        seq = v.maxSeq;
+        return { ok: true, restored: v.count };
       },
 
       markRead(id) {

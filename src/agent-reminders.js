@@ -16,6 +16,9 @@
   if (typeof module === 'object' && module.exports) module.exports = factory();
   else root.CompanionAgentReminders = factory();
 })(typeof self !== 'undefined' ? self : this, function () {
+  const strictRecords = (typeof require === 'function')
+    ? require('./strict-record').plainRecords
+    : root.CompanionStrictRecord.plainRecords;
   const MAX_TITLE = 120;
   const MAX_NOTES = 500;
   const MAX_BOOK = 100;
@@ -60,17 +63,21 @@
         return [...book.values()].sort((a, b) => a.dueAt - b.dueAt).map((r) => ({ ...r }));
       },
 
-      // Restore persisted records. Strict and all-or-nothing: exact shape
-      // (same caps as create), unique ids, cap overflow refused whole, never
-      // truncated. Unknown fields are dropped; acknowledged survives when
-      // present. A past dueAt is accepted: hydrate restores history, it does
-      // not re-run create()'s future-only rule.
-      hydrate(records) {
-        const list = Array.isArray(records) ? records : [];
+      // Read-only pass over prospective records: identical rules to
+      // hydrate(), mutating nothing. The persistence layer validates every
+      // store first and only then applies, so a later refusal leaves
+      // earlier stores untouched. Hostile input (non-arrays, sparse
+      // arrays, accessor/symbol/non-enumerable properties, exotic
+      // prototypes) is refused without reading a single value: descriptors
+      // are inspected before values. A past dueAt is accepted: this
+      // restores history, it does not re-run create()'s future-only rule.
+      validate(records) {
+        const v = strictRecords(records);
+        if (!v.ok) return { ok: false, reason: v.reason };
+        const list = v.records;
         if (list.length > MAX_BOOK) return { ok: false, reason: 'book_overflow' };
-        const restored = [];
+        const clean = [];
         for (const r of list) {
-          if (!r || typeof r !== 'object') return { ok: false, reason: 'invalid_record' };
           if (typeof r.id !== 'string' || !/^rem-\d{6}$/.test(r.id)) return { ok: false, reason: 'invalid_record' };
           if (typeof r.title !== 'string' || r.title.length === 0 || r.title.length > MAX_TITLE) return { ok: false, reason: 'invalid_record' };
           if (!Number.isInteger(r.dueAt)) return { ok: false, reason: 'invalid_record' };
@@ -80,20 +87,26 @@
           if (r.acknowledged !== undefined && typeof r.acknowledged !== 'boolean') return { ok: false, reason: 'invalid_record' };
           const rec = { id: r.id, title: r.title, dueAt: r.dueAt, notes: r.notes, createdAt: r.createdAt, cancelled: r.cancelled };
           if (typeof r.acknowledged === 'boolean') rec.acknowledged = r.acknowledged;
-          restored.push(rec);
+          clean.push(rec);
         }
         const ids = new Set();
         let maxSeq = 0;
-        for (const r of restored) {
+        for (const r of clean) {
           if (ids.has(r.id)) return { ok: false, reason: 'duplicate_id' };
           ids.add(r.id);
-          const s = parseInt(r.id.slice(4), 10);
-          if (s > maxSeq) maxSeq = s;
+          const seqNo = parseInt(r.id.slice(4), 10);
+          if (seqNo > maxSeq) maxSeq = seqNo;
         }
+        return { ok: true, count: clean.length, records: clean, maxSeq };
+      },
+
+      hydrate(records) {
+        const v = this.validate(records);
+        if (!v.ok) return v;
         book.clear();
-        for (const r of restored) book.set(r.id, r);
-        seq = maxSeq;
-        return { ok: true, restored: restored.length };
+        for (const r of v.records) book.set(r.id, r);
+        seq = v.maxSeq;
+        return { ok: true, restored: v.count };
       },
 
       // Reminders whose time has come (dueAt <= at) and that are not

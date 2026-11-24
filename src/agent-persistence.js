@@ -31,6 +31,11 @@
   if (typeof module === 'object' && module.exports) module.exports = factory();
   else root.CompanionAgentPersistence = factory();
 })(typeof self !== 'undefined' ? self : this, function () {
+  const strictRecord = (typeof require === 'function')
+    ? require('./strict-record')
+    : root.CompanionStrictRecord;
+  const strictFlag = strictRecord.strictFlag;
+  const strictTimestamp = strictRecord.strictTimestamp;
   const auditModule = (typeof require === 'function') ? require('./audit')
     : root.CompanionAudit;
   const GENESIS = auditModule.GENESIS;
@@ -57,11 +62,13 @@
       throw new TypeError('agent persistence needs a db adapter with run() and all()');
     }
     if (notifications !== undefined && notifications !== null
-      && (typeof notifications.exportAll !== 'function' || typeof notifications.hydrate !== 'function')) {
+      && (typeof notifications.exportAll !== 'function' || typeof notifications.hydrate !== 'function'
+      || typeof notifications.validate !== 'function')) {
       throw new TypeError('agent persistence needs a notifications desk with exportAll() and hydrate()');
     }
     if (reminders !== undefined && reminders !== null
-      && (typeof reminders.exportAll !== 'function' || typeof reminders.hydrate !== 'function')) {
+      && (typeof reminders.exportAll !== 'function' || typeof reminders.hydrate !== 'function'
+      || typeof reminders.validate !== 'function')) {
       throw new TypeError('agent persistence needs a reminder book with exportAll() and hydrate()');
     }
     const nowIso = clock ? () => new Date(clock()).toISOString() : () => new Date().toISOString();
@@ -124,33 +131,44 @@
     function load() {
       status = { ok: true, problems: [] };
       const problems = [];
+      let invalidatedApprovals = 0;
+      let last = { seq: 0, hash: GENESIS };
 
-      // 0. Schema version, checked before anything else is read. A database
-      //    written by a NEWER build is never downgraded, read or repaired
-      //    here: the app must be updated instead. An unversioned database is
-      //    stamped additively (CREATE TABLE IF NOT EXISTS already ran) and
-      //    no existing row is touched.
-      const schemaRows = db.all("SELECT value FROM agent_schema WHERE key = 'version'");
-      if (schemaRows.length) {
-        const v = Number(schemaRows[0].value);
-        if (!Number.isInteger(v)) {
+      // Phase 0. Schema table, READ ONLY here: structure is validated,
+      // nothing is written yet. Stamping, anchor initialization and the
+      // pending-approval invalidation happen only after every integrity
+      // check below passes, so a corrupt database is never modified on
+      // startup and an unversioned corrupt database is never stamped.
+      const schemaRows = db.all('SELECT key, value FROM agent_schema ORDER BY key');
+      let storedVersion = null; // null: the stamp is absent (older database)
+      for (const row of schemaRows) {
+        if (row.key !== 'version') {
+          fail('unknown_schema_key');
+          problems.push('unknown_schema_key:' + String(row.key));
+          continue;
+        }
+        if (storedVersion !== null) {
+          fail('duplicate_schema_key');
+          problems.push('duplicate_schema_key');
+          continue;
+        }
+        if (typeof row.value !== 'string' || !/^[0-9]+$/.test(row.value)) {
           fail('invalid_schema_version');
           problems.push('invalid_schema_version');
-        } else if (v > SCHEMA_VERSION) {
-          fail('schema_from_newer_build');
-          problems.push('schema_from_newer_build');
-          return { ok: false, problems, invalidatedApprovals: 0 };
+          continue;
         }
-      } else {
-        try {
-          tx(() => db.run("INSERT OR REPLACE INTO agent_schema (key, value) VALUES ('version', ?)", [String(SCHEMA_VERSION)]));
-        } catch (err) {
-          fail('persist_failure');
-          problems.push('persist_failure:schema_init');
-        }
+        storedVersion = Number(row.value);
+      }
+      if (storedVersion !== null && storedVersion > SCHEMA_VERSION) {
+        // A database written by a NEWER build is never downgraded, read or
+        // repaired here: the app must be updated instead. Return before any
+        // further read and before any write.
+        fail('schema_from_newer_build');
+        problems.push('schema_from_newer_build');
+        return { ok: false, problems, invalidatedApprovals: 0 };
       }
 
-      // 1. Audit chain and anchor, verified from the stored base.
+      // Phase 1. Audit chain and anchor, verified from the stored base.
       const anchorRow = readAnchor();
       const auditRows = db.all('SELECT ' + AUDIT_COLUMNS + ' FROM agent_audit ORDER BY seq');
       let base = { seq: 0, hash: GENESIS };
@@ -183,7 +201,6 @@
         entries.push(e);
       }
 
-      let last = { seq: base.seq, hash: base.hash };
       if (status.ok) {
         let p = base.hash;
         let expectSeq = base.seq + 1;
@@ -215,27 +232,23 @@
         problems.push('anchor_mismatch');
       }
 
-      if (!anchorRow && !auditRows.length && status.ok) {
-        try {
-          tx(() => putAnchor(0, GENESIS, 0, GENESIS));
-        } catch (err) {
-          fail('persist_failure');
-          problems.push('persist_failure:anchor_init');
-        }
-      }
-
-      // 2. Grants, revalidated against the registry.
+      // Phase 2. Grants, revalidated against the registry, with bounded
+      // integer timestamps: a stored float, string or out-of-range number
+      // refuses instead of passing through a finite check.
       const grantRecords = [];
       for (const g of db.all('SELECT tool, capability, granted_at, expires_at, revoked FROM agent_grants ORDER BY tool')) {
+        const grantedAt = strictTimestamp(g.granted_at);
+        const expiresAt = g.expires_at === null || g.expires_at === undefined ? null : strictTimestamp(g.expires_at);
         const rec = {
           tool: g.tool,
           capability: g.capability,
-          grantedAt: g.granted_at,
-          expiresAt: g.expires_at === null || g.expires_at === undefined ? null : g.expires_at,
-          revoked: !!g.revoked,
+          grantedAt,
+          expiresAt,
+          revoked: g.revoked === 1 ? true : g.revoked === 0 ? false : null,
         };
-        const badShape = !Number.isFinite(rec.grantedAt)
-          || !(rec.expiresAt === null || Number.isFinite(rec.expiresAt))
+        const badShape = rec.grantedAt === null
+          || !(rec.expiresAt === null || Number.isSafeInteger(rec.expiresAt))
+          || rec.revoked === null
           || (registry && (() => { const def = registry.get(rec.tool); return !def || def.capability !== rec.capability; })());
         if (badShape) {
           fail('invalid_grant_row');
@@ -245,47 +258,108 @@
         grantRecords.push(rec);
       }
 
-      // 3. Approvals. Invalid rows fail closed; pending ones never survive
-      //    a restart as usable.
+      // Phase 3. Approvals: strict shape, bounded timestamps. Pending ones
+      // never survive a restart as usable (invalidated in phase 6).
       const approvalRecords = [];
       for (const r of db.all('SELECT id, tool, args_digest, requested_at, expires_at, state FROM agent_approvals ORDER BY requested_at, id')) {
+        const requestedAt = strictTimestamp(r.requested_at);
+        const expiresAt = strictTimestamp(r.expires_at);
         const badShape = typeof r.id !== 'string' || !ID64_RE.test(r.id)
           || typeof r.tool !== 'string'
           || typeof r.args_digest !== 'string' || !ID64_RE.test(r.args_digest)
-          || !Number.isFinite(r.requested_at) || !Number.isFinite(r.expires_at)
+          || requestedAt === null || expiresAt === null
           || !APPROVAL_STATES.includes(r.state);
         if (badShape) {
           fail('invalid_approval_row');
           problems.push('invalid_approval_row:' + (r.id || '?'));
           continue;
         }
-        approvalRecords.push({ id: r.id, tool: r.tool, argsDigest: r.args_digest, requestedAt: r.requested_at, expiresAt: r.expires_at, state: r.state });
+        approvalRecords.push({ id: r.id, tool: r.tool, argsDigest: r.args_digest, requestedAt, expiresAt, state: r.state });
       }
 
-      // 4. Emergency stop.
+      // Phase 4a. Emergency stop: shape validated HERE so phase 5 hydrates
+      // deterministically. Stored flags must be exactly 0 or 1.
       const stopRows = db.all('SELECT active, reason, activated_at, activated_by, reset_count FROM agent_emergency_stop WHERE id = 1');
-      const stopSnap = stopRows.length ? {
-        active: !!stopRows[0].active,
-        reason: stopRows[0].reason === null || stopRows[0].reason === undefined ? undefined : stopRows[0].reason,
-        activatedAt: stopRows[0].activated_at === null ? undefined : stopRows[0].activated_at,
-        activatedBy: stopRows[0].activated_by === null ? undefined : stopRows[0].activated_by,
-        resetCount: stopRows[0].reset_count,
-      } : null;
+      let stopSnap = null;
+      if (stopRows.length) {
+        const r = stopRows[0];
+        const active = strictFlag(r.active);
+        const resetCount = r.reset_count;
+        let stopBad = active === null || !Number.isSafeInteger(resetCount) || resetCount < 0;
+        if (!stopBad && active) {
+          stopBad = typeof r.reason !== 'string' || !r.reason || r.reason.length > 200;
+        }
+        if (stopBad) {
+          fail('invalid_stop_row');
+          problems.push('invalid_stop_row');
+        } else {
+          stopSnap = {
+            active,
+            reason: r.reason === null || r.reason === undefined ? undefined : r.reason,
+            activatedAt: r.activated_at === null || r.activated_at === undefined ? undefined : r.activated_at,
+            activatedBy: r.activated_by === null || r.activated_by === undefined ? undefined : r.activated_by,
+            resetCount,
+          };
+        }
+      }
 
-      // 4b. Notifications and reminders: rows are projected into record shape
-      //     and strictly validated by the desks' own hydrate() when we reach
-      //     step 5. A bad row fails closed; nothing is truncated or dropped.
-      const notificationRows = db.all('SELECT id, title, body, priority, created_at, read FROM agent_notifications ORDER BY id').map((r) => ({
-        id: r.id, title: r.title, body: r.body, priority: r.priority, createdAt: r.created_at, read: !!r.read,
-      }));
-      const reminderRows = db.all('SELECT id, title, due_at, notes, created_at, cancelled, acknowledged FROM agent_reminders ORDER BY id').map((r) => ({
-        id: r.id, title: r.title, dueAt: r.due_at,
-        notes: r.notes === null || r.notes === undefined ? null : r.notes,
-        createdAt: r.created_at, cancelled: !!r.cancelled, acknowledged: !!r.acknowledged,
-      }));
+      // Phase 4b. Notifications and reminders: rows are projected into
+      // record shape with STRICT flags (exactly 0 or 1) and bounded
+      // integer timestamps. A stored 2, a string flag or an out-of-range
+      // timestamp is an invalid row, never a truthy default.
+      const notificationRecords = [];
+      for (const r of db.all('SELECT id, title, body, priority, created_at, read FROM agent_notifications ORDER BY id')) {
+        const read = strictFlag(r.read);
+        const createdAt = strictTimestamp(r.created_at);
+        const bad = read === null || createdAt === null
+          || typeof r.id !== 'string' || typeof r.title !== 'string'
+          || typeof r.body !== 'string' || typeof r.priority !== 'string';
+        if (bad) {
+          fail('invalid_notification_row');
+          problems.push('invalid_notification_row:' + (r.id || '?'));
+          continue;
+        }
+        notificationRecords.push({ id: r.id, title: r.title, body: r.body, priority: r.priority, createdAt, read });
+      }
+      const reminderRecords = [];
+      for (const r of db.all('SELECT id, title, due_at, notes, created_at, cancelled, acknowledged FROM agent_reminders ORDER BY id')) {
+        const cancelled = strictFlag(r.cancelled);
+        const acknowledged = r.acknowledged === null || r.acknowledged === undefined ? false : strictFlag(r.acknowledged);
+        const dueAt = strictTimestamp(r.due_at);
+        const createdAt = strictTimestamp(r.created_at);
+        const notes = r.notes === null || r.notes === undefined ? null : r.notes;
+        const bad = cancelled === null || acknowledged === null || dueAt === null || createdAt === null
+          || typeof r.id !== 'string' || typeof r.title !== 'string'
+          || (notes !== null && typeof notes !== 'string');
+        if (bad) {
+          fail('invalid_reminder_row');
+          problems.push('invalid_reminder_row:' + (r.id || '?'));
+          continue;
+        }
+        const rec = { id: r.id, title: r.title, dueAt, notes, createdAt, cancelled };
+        if (acknowledged) rec.acknowledged = true;
+        reminderRecords.push(rec);
+      }
 
-      // 5. Hydrate the pure modules only when everything verified.
-      let invalidatedApprovals = 0;
+      // Phase 5a. Validate every store read-only. The audit chain was
+      // re-verified in phase 1, grants were checked against the registry in
+      // phase 2, approvals and the stop snapshot above; here the two desks
+      // run their own validate(). Only when EVERY store validates does any
+      // module take state, so a later refusal leaves earlier stores
+      // untouched (hydration is transactional in memory).
+      if (status.ok && notifications) {
+        const v = notifications.validate(notificationRecords);
+        if (!v.ok) { fail('notification_hydrate_refused'); problems.push('notification_hydrate_refused:' + v.reason); }
+      }
+      if (status.ok && reminders) {
+        const v = reminders.validate(reminderRecords);
+        if (!v.ok) { fail('reminder_hydrate_refused'); problems.push('reminder_hydrate_refused:' + v.reason); }
+      }
+
+      // Phase 5b. Apply: hydrate the pure modules only when everything
+      // verified. Each hydrate re-runs its own validation (deterministic:
+      // identical input validated above), and a refusal here is treated as
+      // an integrity failure rather than a partial load.
       if (status.ok) {
         if (audit) {
           const h = audit.hydrate({ base, entries });
@@ -305,37 +379,58 @@
           if (!h.ok) { fail('invalid_stop_row'); problems.push('invalid_stop_row'); }
         }
         if (notifications) {
-          const h = notifications.hydrate(notificationRows);
+          const h = notifications.hydrate(notificationRecords);
           if (!h.ok) { fail('notification_hydrate_refused'); problems.push('notification_hydrate_refused:' + h.reason); }
         }
         if (reminders) {
-          const h = reminders.hydrate(reminderRows);
+          const h = reminders.hydrate(reminderRecords);
           if (!h.ok) { fail('reminder_hydrate_refused'); problems.push('reminder_hydrate_refused:' + h.reason); }
         }
       }
-      lastPersistedSeq = status.ok ? last.seq : 0;
 
-      // 6. Persist the pending-approval invalidation and audit it once.
-      if (status.ok && approvals && invalidatedApprovals > 0 && audit) {
-        const pending = approvalRecords.filter((r) => r.state === 'pending').map((r) => r.id);
-        try {
-          tx(() => {
-            for (const id of pending) db.run("UPDATE agent_approvals SET state = 'invalidated' WHERE id = ? AND state = 'pending'", [id]);
-          });
-          // appendAudit appends to the live log AND persists the entry and
-          // anchor atomically; a persist failure leaves the entry in memory
-          // for the next save() to converge.
-          const written = appendAudit({ actor: 'system', action: 'approvals.invalidated_on_restart', detail: { count: pending.length } });
-          if (!written.ok && written.reason !== 'persist_failure') {
+      // Phase 6. Writes, ONLY when every check passed: stamp the schema
+      // version on an unversioned store, initialize the anchor on a fresh
+      // store, persist the pending-approval invalidation and audit it. A
+      // database that failed any check above is left byte-for-byte alone.
+      if (status.ok) {
+        if (storedVersion === null) {
+          try {
+            tx(() => db.run("INSERT OR REPLACE INTO agent_schema (key, value) VALUES ('version', ?)", [String(SCHEMA_VERSION)]));
+          } catch (err) {
             fail('persist_failure');
-            problems.push('persist_failure:invalidation_audit');
+            problems.push('persist_failure:schema_init');
           }
-        } catch (err) {
-          fail('persist_failure');
-          problems.push('persist_failure:invalidation');
+        }
+        if (status.ok && !anchorRow && !auditRows.length) {
+          try {
+            tx(() => putAnchor(0, GENESIS, 0, GENESIS));
+          } catch (err) {
+            fail('persist_failure');
+            problems.push('persist_failure:anchor_init');
+          }
+        }
+        if (status.ok && approvals && invalidatedApprovals > 0 && audit) {
+          const pending = approvalRecords.filter((r) => r.state === 'pending').map((r) => r.id);
+          try {
+            tx(() => {
+              for (const id of pending) db.run("UPDATE agent_approvals SET state = 'invalidated' WHERE id = ? AND state = 'pending'", [id]);
+            });
+            // appendAudit appends to the live log AND persists the entry and
+            // anchor atomically; a persist failure leaves the entry in memory
+            // for the next save() to converge.
+            const written = appendAudit({ actor: 'system', action: 'approvals.invalidated_on_restart', detail: { count: pending.length } });
+            if (!written.ok && written.reason !== 'persist_failure') {
+              fail('persist_failure');
+              problems.push('persist_failure:invalidation_audit');
+            }
+          } catch (err) {
+            fail('persist_failure');
+            problems.push('persist_failure:invalidation');
+          }
         }
       }
 
+      lastPersistedSeq = status.ok ? last.seq : 0;
       return { ok: status.ok, problems, invalidatedApprovals };
     }
 
