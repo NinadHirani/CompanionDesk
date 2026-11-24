@@ -666,6 +666,22 @@ runtime integration (hidden page + onnxruntime-web + indicator + query
 flow), the actual model training run, and physical-device validation
 (synthetic-metric claims never substitute for measured on-device rates).
 
+Wake-word TRAINING verification memo, docs-only (24 Nov 2026,
+docs/WAKE_TRAINING_VERIFICATION_MEMO.md): primary-source verification of
+the third-party training centre (openwakeword.com/train) and the
+self-training path's chain. Material finding: the centre's Terms Section
+5 licenses generated models for personal and NON-COMMERCIAL use only by
+default, with commercial use available only via its paid commercial
+license, so the centre path is closed for CompanionDesk unless Ninad
+explicitly approves that paid license; no free compliant centre path was
+found. The self-training path's chain re-verifies as permissive (repo
+code Apache-2.0, Google speech_embedding Apache-2.0, our own converted
+extractor; per-voice Piper gate) with named residuals (centre terms tail
+and privacy policy unread, checkpoint weights licensing unstated, VCTK
+license unverified, technical performance unvalidated on device). Wake
+word stays disabled and gated: no training run, no download, no
+activation, no phrase choice.
+
 Piper successor VERIFIED (24 Nov 2026, primary sources read live via
 the GitHub API): `rhasspy/piper` is archived (MIT, last pushed
 2025-08-26) and `rhasspy/piper-phonemize` is archived too; the
