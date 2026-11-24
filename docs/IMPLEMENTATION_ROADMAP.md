@@ -1,10 +1,38 @@
 # CompanionDesk Implementation Roadmap
 
-Status: M0 and M1 are COMPLETE on main (verified 24 Nov 2026; current
-baseline `d499347`, 622 passing tests, Fo-reported from a full `npm test`
-run at that head (622/622, selftest included). CI, CI macOS + Linux and
-Android APK green on that head (runs 45323544121, 45323543975,
-45323765018). Gate 2 slice 1 (agent safety
+## Governing programme order (evidence-based, 24 Nov 2026)
+
+This file is the PRIMARY product programme and it governs the sequence.
+Main head at this writing: `897b5d0`.
+
+| Phase | Status | Evidence |
+|---|---|---|
+| M0 product foundation | COMPLETE | 23 Nov 2026 slices on main (model selection `model-selection.js`, conversation history `chat-history.js`, Gemini key in secure storage `secure-store.js`); docs baseline main `6e7a975`; suite green throughout |
+| M1 intelligence core | COMPLETE | completion head `bccfa75` is an ancestor of main (verified `git merge-base --is-ancestor` 24 Nov 2026); six slices landed 23 Nov 2026 incl. provider health (`provider-status.js`, slice 4) and per-ask routing with live Ollama probes (slice 2); review fix `d36dc01` also an ancestor |
+| GATE 1 Android intelligence | PREPARED, NOT RUN | repo-only scaffold `experiments/android-inference-benchmark/` (metrics, fairness rules, acceptance criteria, owner runbook, desktop matrix below); no device measurement exists; blocked on physical OnePlus 12R time |
+| GATE 2 agent foundation | IN PROGRESS (security workstream, SUPPORTS the product phases) | slices 1-4, persistence wiring, 3j.3-3j.6 notification gates, run-driver Stage A (3j.9) implemented; remaining gates (scheduling, file output) and run-driver Stage B/C await separate explicit review; the Stage B proposal (3j.10) is docs-only. Per Ninad's 24 Nov direction the run-driver work is PAUSED at the proposal; it is not the product roadmap |
+| M4 memory v2 | design + harness complete, NOT implemented in product | `docs/M2_MEMORY_V2_DESIGN.md`, `experiments/memory-v2-harness/`; FOUR open decisions gate implementation |
+| M5 proactive / M6 voice / M7 screen understanding v2 / M8 integrations + workspace UI | NOT IMPLEMENTED | definitions below are plans only |
+
+Verified current state: full `npm test` at `897b5d0` on 24 Nov 2026:
+735/735 pass, selftest PASS; CI and CI macOS+Linux green on that head
+(runs 45353283588, 45353283702). The last src-affecting commit is Stage A
+`83dbcda` (CI green; Android APK run 45344402037).
+
+History note: the branch `companiondesk/m0-product-foundation` (head
+`a080573`) was the M0 docs review vehicle. Nothing on it is lost: its
+ARCHITECTURE_DECISIONS.md, RISK_REGISTER.md and CLAUDE_HANDOFF.md are
+byte-identical with main, and its COMPANIONDESK_ROADMAP.md and
+FEATURE_GAP.md were superseded the same day by the 23 Nov stale-docs
+refresh on main. The branch stays as a historical artifact, NOT merged.
+
+Numbering note, stated honestly: this roadmap defines M0, M1, GATE 1,
+GATE 2, M4-M8. There are no M2/M3 sections (the memory-v2 design doc
+carries the "M2" name; its phase here is M4) and no M9 definition exists
+in this file. Neither is invented here: if a coordinated-release phase
+is wanted as M9, that needs Ninad's explicit definition first.
+
+Detail (still accurate): Gate 2 slice 1 (agent safety
 foundation) and its hardening are pure, isolated modules with NO product
 wiring, NO tools registered beyond test fixtures and NO UI or IPC. Slice 2
 (persistence) is additive-only storage, same boundary. Slice 3
@@ -209,6 +237,41 @@ a token-authenticated, LAN-only proxy in front of Ollama (which stays bound to
 localhost; it has no built-in auth by default, to be re-verified). Exit: the
 measurements decide Android's local-vs-remote default. Nothing is claimed
 feasible until these numbers exist.
+
+### Gate 1 validation matrix (Android + desktop, concrete tests to run)
+
+Android half: the scaffold above IS the Android matrix (metrics table,
+fairness rules, acceptance criteria, owner runbook). Nothing to add.
+
+Desktop half (MacBook Air M1, the product's primary platform), defined
+here so the same evidence discipline applies. Everything runs against
+the PRODUCT path (Ollama behind the app), on the real machine; nothing
+is a Gate 1 result until it is recorded next to the scaffold's results:
+
+  1. Baseline row: OS/build, Ollama version, installed-model list, and
+     the hardware profile the app itself computes (`hardware.js`).
+  2. Model load time, cold (first run) and warm (subsequent), for the
+     selected chat model and the selected vision model.
+  3. Time-to-first-token and generation tokens/s over a fixed prompt
+     set (the same prompts committed beside the Android results schema
+     so both platforms compare), measured with
+     `ollama run <model> --verbose` timings plus app-side timestamps.
+  4. Prompt-eval tokens/s on a long-context prompt (worst realistic
+     ask: a syllabus-size context).
+  5. Peak RSS during generation (`ps -o rss` sampling) against the
+     profile threshold (`hardware.js`) that selected the model: the
+     profile must never have chosen a model that cannot fit.
+  6. Cancellation on the real path: cancel mid-stream, confirm tokens
+     already shown stay, the local call stops, and no cloud escalation
+     happens (contract-tested; the device run confirms reality).
+  7. Timeout behavior at the documented bounds (120 s local).
+  8. Thermals and battery drain noted for the run block (macOS power
+     reporting optional; qualitative is acceptable, marked as such).
+
+Evidence rules, same as Android: at least 3 repeats per configuration,
+medians reported, raw outputs kept, and the desktop half of the Gate 1
+decision written only after these rows exist. A desktop row that was
+not measured stays null; never fill it with an estimate.
 
 ## GATE 2 - Agent foundation (3-4 wks)
 
