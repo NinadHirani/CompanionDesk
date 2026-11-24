@@ -273,15 +273,32 @@ anywhere (quality comes only from measured Gate 1 runs).
   text out, 140+ languages, 896x896 images to 256 tokens).
 - `gemini-2.0-flash`: 1,048,576-token input context; capabilities
   `['chat','tool_use','multilingual']` (function calling); license stays
-  null (API model, no weights license fact). OPEN QUESTION recorded in the
-  entry, not resolved: multiple third-party indexes report this id was
-  RETIRED around June 2026; Google's own deprecation pages did not render
-  for our tooling (404/blank), so the retirement is UNVERIFIED against a
-  primary source. The default cloud model is unchanged. Replacing it with a
-  current Flash id is Ninad's explicit product decision, not a silent one.
+  null (API model, no weights license fact). VERIFIED RETIRED (24 Nov
+  2026 follow-up slice): Google's Gemini Enterprise Agent Platform
+  release notes carry a June 01, 2026 breaking entry ("Gemini 2.0 Flash
+  and 2.0 Flash-Lite are discontinued ... no longer available", model
+  serving and Provisioned Throughput both), and the official Gemini
+  developer forum states `gemini-2.0-flash` was retired June 1, 2026 on
+  the Developer API path. Path distinction recorded: CompanionDesk's
+  fallback uses the Gemini DEVELOPER API (generativelanguage.googleapis.com,
+  key in the x-goog-api-key header, never Vertex/Agent Platform), so the
+  retirement applies to this entry's service path. The registry marks the
+  id `retired` (`retiredOn: 2026-06-01`, both sources in `verified`);
+  the routed gateway refuses it as `cloud_model_retired` BEFORE any cloud
+  health probe or call (fail closed), the user's configuration and key
+  are preserved, and no replacement model is registered or substituted
+  silently. Registering a current cloud fallback (a newer Flash id may
+  require billing) is Ninad's explicit product decision, not a silent one.
 
-Router behavior is untouched: same tasks, same privacy rules, same
-consent gates. 7 registry tests (was 5); full suite 867/867 + selftest.
+Router routing policy is untouched: same tasks, same privacy rules, same
+consent gates. The retirement refusal lives in the routed gateway
+(src/ai.js routeTask), the only cloud-call site, including the
+reconsider-after-local-failure path. Tests: registry `isSelectable`
+(retired ids never selectable), a real-registry regression (armed +
+consented fallback refuses `cloud_model_retired` with ZERO cloud probes
+or calls), the local route untouched, and pre-retirement transport
+contracts kept via a test-only registry fixture. Full suite 870/870 +
+selftest.
 
 ## GATE 1 - Android intelligence (3-4 wks, device time)
 

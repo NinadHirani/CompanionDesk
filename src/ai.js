@@ -47,11 +47,17 @@
     probeTimeoutMs = 1500,
     chatTimeoutMs = 120000,
     cloudTimeoutMs = 30000,
+    // Test seam ONLY: a caller may inject a registry-shaped fixture so
+    // transport contract tests can exercise the cloud path. Production
+    // callers pass nothing and get the real registry, whose retirement
+    // facts are enforced below and cannot be bypassed from product code.
+    registryOverride = null,
   } = {}) {
     // Model ids are registry facts, not literals in this file: the defaults
     // come from the provider registry (src/provider-registry.js), with the
     // environment overriding and the caller overriding both (M1 acceptance).
-    const RegDefaults = (registry() && registry().DEFAULTS) || {};
+    const reg = () => registryOverride || registry();
+    const RegDefaults = (reg() && reg().DEFAULTS) || {};
     localModel = localModel || ENV.LOCAL_MODEL || RegDefaults.localChat || '';
     cloudModel = cloudModel || ENV.CLOUD_MODEL || RegDefaults.cloudChat || '';
 
@@ -393,10 +399,10 @@
       const modelMissing = Boolean(probe.healthy && model && Rr && Rr.isPresent && !Rr.isPresent(model, installed));
       // The cloud model's capability is a registry fact, verified at
       // registry time; per-model, never a family assumption.
-      const Reg = registry();
+      const Reg = reg();
       const cloudEntry = Reg && Reg.getModel ? Reg.getModel('gemini', cloudModel) : null;
       if (cloudEntry && Array.isArray(cloudEntry.capabilities)) capabilities[cloudModel] = cloudEntry.capabilities.slice();
-      const decision = R.routeTask({
+      let decision = R.routeTask({
         task,
         capabilities,
         privacyMode,
@@ -410,6 +416,19 @@
         localVisionModel: visionModel || null,
         cloudModel,
       });
+      // A RETIRED model id can never serve as the working provider: the
+      // registry marks it retired, the route is refused BEFORE any cloud
+      // health probe or call (fail closed), the user's configuration and
+      // key are preserved, and nothing is silently substituted. Verified
+      // 24 Nov 2026: gemini-2.0-flash retired June 1, 2026 (Google Cloud
+      // release notes; official Gemini developer forum).
+      if (Reg && Reg.isSelectable && Reg.isSelectable('gemini', cloudModel) === false) {
+        if (decision.ok && decision.provider === 'gemini') {
+          decision = { ok: false, provider: null, model: null, reason: 'cloud_model_retired', cloudUsed: false };
+        } else if (!decision.ok && decision.reason === 'gemini_health_unknown') {
+          decision = { ok: false, provider: null, model: null, reason: 'cloud_model_retired', cloudUsed: false };
+        }
+      }
       return { probe, decision, faults: { probe: probe.fault || null, capabilities: capFaults, modelMissing } };
     }
 
@@ -424,6 +443,16 @@
       if (decision.ok && decision.provider === 'gemini') {
         const cp = { ...{ system, prompt }, ...(cloudArgs || {}) };
         return chatGemini({ system: cp.system, prompt: cp.prompt, model: decision.model, signal });
+      }
+      // A retired cloud model refuses here too, with the local error
+      // attached: fail closed with the diagnostic, never a bare local
+      // error that would hide why the fallback could not serve.
+      if (!decision.ok && decision.reason === 'cloud_model_retired') {
+        const refused = refusalError('cloud_model_retired');
+        refused.localError = String((localError && localError.message) || localError);
+        const Fc = faults();
+        refused.localFault = Fc ? Fc.fault(Fc.classifyFailure({ err: localError, callerAborted: Boolean(signal && signal.aborted) })) : null;
+        throw refused;
       }
       if (!decision.ok && decision.reason === 'gemini_health_unknown' && cloudConsent) {
         // The user consented to this cloud try; health is the only unknown.

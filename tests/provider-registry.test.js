@@ -65,7 +65,22 @@ test('verified metadata: the three current ids carry their checked facts and ope
   assert.equal(gemini.license, null); // API model: no weights license fact to record
   assert.equal(gemini.contextTokens, 1048576);
   assert.ok(gemini.capabilities.includes('tool_use'));
-  assert.ok(gemini.verified.notes.some((n) => n.includes('OPEN QUESTION'))); // the reported retirement is recorded, not resolved
+  // VERIFIED (24 Nov 2026): retired June 1, 2026 on the Developer API
+  // path (official developer forum) and the Agent Platform surface
+  // (Google Cloud release notes, June 01 2026 breaking entry).
+  assert.equal(gemini.status, 'retired');
+  assert.equal(gemini.retiredOn, '2026-06-01');
+  assert.ok(gemini.verified.notes.some((n) => n.includes('VERIFIED RETIRED')));
+  assert.ok(gemini.verified.notes.some((n) => n.includes('DEVELOPER API')));
+  assert.ok(gemini.verified.sources.some((s) => s.includes('docs.cloud.google.com')));
+  assert.ok(gemini.verified.sources.some((s) => s.includes('discuss.ai.google.dev')));
+});
+
+test('isSelectable: retired ids can never be selected as a working provider', () => {
+  assert.equal(Registry.isSelectable('gemini', 'gemini-2.0-flash'), false);
+  assert.equal(Registry.isSelectable('ollama', 'llama3.2:latest'), true);
+  assert.equal(Registry.isSelectable('ollama', 'gemma3:4b'), true);
+  assert.equal(Registry.isSelectable('gemini', 'gemini-9.9-future'), true); // unknown: not registry-managed
 });
 
 test('capabilities and defaults match current app behavior', () => {

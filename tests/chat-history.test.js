@@ -223,6 +223,7 @@ test('the routed cloud path strips history and the local model name', async () =
   const ai = createAi({
     geminiKey: 'k',
     cloudEnabled: true,
+    registryOverride: require('./fixtures/registry-fixtures').makeTestRegistry(),
     fetchImpl: mockFetch([
       ['/api/tags', () => ({ ok: true, json: async () => ({ models: [{ name: 'llama3.2:latest' }] }) })],
       ['/api/chat', (opts) => { localBody = JSON.parse(opts.body); return { ok: false, status: 500 }; }],

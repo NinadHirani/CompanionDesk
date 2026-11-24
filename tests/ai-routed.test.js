@@ -36,11 +36,16 @@ const CLOUD_OK = ['generativelanguage.googleapis.com', (opts) => {
   return { ok: true, json: async () => ({ candidates: [{ content: { parts: [{ text: 'cloud answer' }] } }] }) };
 }];
 
+const { makeTestRegistry } = require('./fixtures/registry-fixtures');
+
 function baseAi(fetch, extra = {}) {
   return createAi({
     fetchImpl: fetch,
     geminiKey: () => 'k-test',
     cloudEnabled: true,
+    // the retired-id fixture: pre-retirement transport contract coverage.
+    // The regression test below uses the REAL registry.
+    registryOverride: makeTestRegistry(),
     ...extra,
   });
 }
@@ -322,4 +327,31 @@ test('routeTask exposes the router decision for the screen path, local-only enfo
   assert.equal(decision.provider, 'ollama');
   assert.equal(decision.model, 'gemma3:4b');
   assert.equal(fetch.calls.filter((c) => c.url.includes('googleapis')).length, 0);
+});
+
+test('REGRESSION: a retired cloud model id can never be the working provider (real registry)', async () => {
+  const fetch = mockFetch([
+    OLLAMA_UP,
+    ['/api/chat', () => ({ ok: false, status: 500, text: async () => '' })],
+    // NO gemini health-probe route on purpose: a retired model must be
+    // refused before any cloud probe, let alone any cloud call.
+  ]);
+  const ai = createAi({ fetchImpl: fetch, geminiKey: () => 'k-test', cloudEnabled: true });
+  await assert.rejects(
+    () => ai.completeRouted({ system: 's', prompt: 'p', cloudConsent: true }),
+    (err) => err.reason === 'cloud_model_retired'
+  );
+  assert.equal(fetch.calls.filter((c) => c.url.includes('generativelanguage')).length, 0,
+    'a retired model must not trigger even a cloud health probe');
+});
+
+test('retirement never touches the local route and preserves the user configuration', async () => {
+  const fetch = mockFetch([
+    OLLAMA_UP,
+    ['/api/chat', () => ({ ok: true, text: async () => JSON.stringify({ message: { content: 'local answer' } }) })],
+  ]);
+  const ai = createAi({ fetchImpl: fetch, geminiKey: () => 'k-test', cloudEnabled: true });
+  const answer = await ai.completeRouted({ system: 's', prompt: 'p' });
+  assert.equal(answer, 'local answer');
+  assert.equal(fetch.calls.filter((c) => c.url.includes('generativelanguage')).length, 0);
 });

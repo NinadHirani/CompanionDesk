@@ -113,14 +113,19 @@
         cost: null, // free-tier quotas may apply; verify current terms before enabling
         privacy: 'prompt, cloudArgs and any attached images are sent to Google',
         role: 'optional cloud chat fallback',
+        status: 'retired', // selectable as a working provider: never. The gateway refuses before any cloud probe or call.
+        retiredOn: '2026-06-01',
         verified: Object.freeze({
           at: '2026-11-24',
           sources: [
+            'https://docs.cloud.google.com/gemini-enterprise-agent-platform/release-notes (June 01, 2026 entry: "Gemini 2.0 Flash and 2.0 Flash-Lite are discontinued" - model serving and Provisioned Throughput both)',
+            'https://discuss.ai.google.dev/t/request-for-access-review-403-permission-denied-on-gemini-tts-preview-mode/180122/2 (official Gemini developer forum, Google staff: "gemini-2.0-flash was retired on June 1, 2026")',
             'https://ai.google.dev/gemini-api/docs/models (renders blank in our tooling; context and tool-use facts rest on multiple consistent secondary reports)',
           ],
           notes: [
-            'OPEN QUESTION for Ninad: multiple third-party indexes report this id was RETIRED around June 2026; Google\'s own deprecation pages did not render for us (404/blank), so the retirement is UNVERIFIED against a primary source. The default cloud model is unchanged; replacing it with a current Flash id is a product decision held for explicit approval, not made silently.',
-            'function calling (tool_use) is documented for this id by those same sources; treated as verified-by-consensus, not primary-source-confirmed',
+            'VERIFIED RETIRED June 1, 2026, read live from both sources on 24 Nov 2026. Path distinction recorded: CompanionDesk\'s fallback uses the Gemini DEVELOPER API (generativelanguage.googleapis.com/v1beta, key in the x-goog-api-key header, never Vertex); the release note is on the Gemini Enterprise Agent Platform surface, and the official developer forum states the retirement for the Developer API path - both name the same date.',
+            'The default cloud model setting is unchanged and the user\'s key is preserved; no replacement model is registered or substituted silently. Registering a current cloud fallback (a newer Flash id may require billing) is Ninad\'s explicit decision.',
+            'function calling (tool_use) is documented for this id by secondary sources; treated as verified-by-consensus, not primary-source-confirmed',
           ],
         }),
       }),
@@ -156,10 +161,17 @@
   }
   function isKnownTask(task) { return TASKS.includes(task); }
   function isKnownCapability(cap) { return CAPABILITIES.includes(cap); }
+  // A retired model id can never be selected as a working provider.
+  // Unknown ids are not managed here (the router's capability check
+  // already refuses them), so they pass through.
+  function isSelectable(providerId, modelId) {
+    const m = getModel(providerId, modelId);
+    return !m || m.status !== 'retired';
+  }
 
   return {
     PROVIDERS, MODELS, DEFAULTS, TASKS, LOCAL_ONLY_TASKS, CLOUD_ELIGIBLE_TASKS, CAPABILITIES,
-    isLocalOnlyTask, isCloudEligibleTask, isKnownTask, isKnownCapability,
+    isLocalOnlyTask, isCloudEligibleTask, isKnownTask, isKnownCapability, isSelectable,
     listProviders, getProvider, listModels, getModel,
   };
 });

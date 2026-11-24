@@ -200,6 +200,7 @@ test('consented cloud fallback still works after the local probe fails', async (
     },
     cloudEnabled: true,
     geminiKey: 'k',
+    registryOverride: require('./fixtures/registry-fixtures').makeTestRegistry(),
   });
   const out = await a.completeRouted({ system: 's', prompt: 'p', cloudConsent: true });
   assert.equal(out, 'cloud');

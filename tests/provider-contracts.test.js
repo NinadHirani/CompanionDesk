@@ -21,6 +21,7 @@ function aiWith(handler, over = {}) {
   const ai = createAi({
     fetchImpl, geminiKey: KEY, cloudEnabled: true,
     probeTimeoutMs: 20, chatTimeoutMs: 20, cloudTimeoutMs: 20,
+    registryOverride: require('./fixtures/registry-fixtures').makeTestRegistry(),
     ...over,
   });
   return { ai, calls };
