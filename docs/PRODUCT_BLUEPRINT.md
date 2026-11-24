@@ -1169,6 +1169,28 @@ refusal, restart replay, desk-scan dedupe, notification-failure immunity,
 D4 reconciliation success/refusal, D6 projection, loop guard, static
 guards). Full suite 735/735, selftest pass.
 
+## 3j.10. Stage B proposal (24 Nov 2026): DESIGN ONLY, nothing implemented
+
+Per Ninad's instruction to prepare the next milestone without enabling
+anything: docs/STAGE_B_PROPOSAL.md proposes the FIRST read_only tool,
+`calendar_upcoming` (a wrapper around the existing pure, tested
+calendar.upcoming(db, payload, todayIso); local-only, reads the user's own
+imported .ics store; no network, no shell, no filesystem paths). Proposed
+data scope: payload {days?: 1..60}; trimmed projection {title(<=200),
+date, time, allDay} with uid and location dropped permanently; row cap 100
+plus a 32,768-byte cap, truncated marker. Threat model T1-T5 (data
+exposure, prompt injection via untrusted .ics content, ledger bloat, grant
+widening, check-then-execute race) with mitigations locked by test.
+Policy: read_only, critical:false, explicit per-tool user grant only, no
+approvals, emergency stop overrides. Audit: grant.granted/grant.revoked
+plus hydrate-skip system entry, audit-before-transition. Tests, CI, and a
+single-commit rollback plan are specified. Open decisions D-B1 (approve
+the tool) and D-B2 (grant-issuance path: defer registration / settings
+file / renderer channel; recommendation: defer) are recorded in the
+proposal. The production registry stays EMPTY; nothing is registered,
+granted, or executed; no renderer controls; Stage C untouched. Honest
+dependency: no run can start until D1 (run entry point) is decided.
+
 ## 4. Planned, NOT implemented
 
 A secure credential-vault adapter

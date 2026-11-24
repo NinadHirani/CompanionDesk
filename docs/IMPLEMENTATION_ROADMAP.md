@@ -326,8 +326,12 @@ driver foundation with an empty production registry, ledger mirroring,
 restart reconciliation (D4), completed/aborted terminal notifications
 (D5), arg-free renderer projections (D6), and a 'user'-only kind
 allowlist (D7). Nothing can execute: no tools are registered and no
-source calls the driver yet. Stage B (real tools, approval mechanics)
-and Stage C (renderer run controls) await separate explicit review;
+source calls the driver yet. Stage B has a concrete DESIGN-ONLY proposal
+(docs/STAGE_B_PROPOSAL.md, 24 Nov 2026: candidate calendar_upcoming, data
+scope, threat model, executor, audit, tests, rollback, decisions D-B1/D-B2;
+registry still empty, nothing implemented). Stage B (real tools, approval
+mechanics) and Stage C (renderer run controls) await separate explicit
+review and remain unimplemented;
 no execution capability is enabled.
 Acceptance: policy
 engine refuses ungranted calls (tested); payments, purchases, destructive

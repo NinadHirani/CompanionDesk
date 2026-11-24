@@ -346,6 +346,10 @@ stays reserved and unused by this design.
   Stage B: the FIRST real read_only tool registered, plus explicit
     per-tool user grants. Real read-only runs become possible; terminal
     notifications go live for real. Checkpoint: review before Stage C.
+    The concrete Stage B proposal (candidate calendar_upcoming, data
+    scope, threat model, executor, audit, tests, rollback, open decisions
+    D-B1/D-B2) is docs/STAGE_B_PROPOSAL.md (24 Nov 2026): DESIGN ONLY,
+    nothing implemented, registry still empty.
   Stage C: the first reversible_write tool with per-call approvals.
     BLOCKED on decision D2 (how the user's approval yes reaches main);
     Stage C does not start until D2 is decided.
