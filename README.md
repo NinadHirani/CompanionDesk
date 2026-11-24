@@ -27,6 +27,11 @@ install/run on real hardware is not yet verified — read the release notes for
 install and update caveats. Desktop Ollama does not run on Android: AI answers
 there need the opt-in Gemini fallback you configure yourself, or a companion
 desktop. Everything else (deadlines, syllabus import, calendar) is local.
+**This preview lags main:** it was published on 22 Nov 2026 and does not
+include the latest main-branch work. The newest build of main exists only as
+a workflow artifact (below), which needs a GitHub sign-in and changes URL
+with every run. A newer public release is published only after an explicit
+review.
 
 **Desktop one-click local AI setup:** the app walks you through Ollama in one click
 (see [docs/OLLAMA_SETUP.md](docs/OLLAMA_SETUP.md)). It opens the official installer
@@ -50,7 +55,16 @@ than the pinned preview):
 3. Artifact retention varies by workflow: the desktop builds are kept for
    **7 days** (that workflow sets it explicitly), while the Android APK artifact
    uses GitHub's default **90-day** retention (the current one expires
-   20 Feb 2027). Either way, grab one from a recent run.
+   about 22 Feb 2027). Either way, grab one from a recent run.
+
+**Installing the Android APK (sideload):** download the APK (a workflow
+artifact arrives as a ZIP: unzip it first), open it on the phone, tap it, and
+allow installs from unknown sources if Android asks. **Debug vs release:**
+every APK in this repo so far is a **debug build**, meant for testing, not
+store distribution; there is no release-signed APK yet, and no release
+signing key exists. Because each CI run signs with a fresh debug key,
+installing a newer build over an installed one requires uninstalling the old
+one first (Android refuses to update across different debug signatures).
 
 **Artifacts and their filenames:**
 
@@ -66,9 +80,10 @@ per run.
 
 **Recent verified runs (examples; each link expires with its artifacts):**
 
-- Android APK: [run 45011456647](https://github.com/NinadHirani/CompanionDesk/actions/runs/45011456647),
-  artifact `companiondesk-android-debug-apk` (4.4 MB, sha256
-  `d99d267a56416b0d021ee39040be4fcb4003a3b7b8263352301ee3866f8e0830`).
+- Android APK: [run 45344402037](https://github.com/NinadHirani/CompanionDesk/actions/runs/45344402037),
+  artifact `companiondesk-android-debug-apk` (4.7 MB, sha256
+  `bc312b53e3f7170a895c27710ce91716e53f88e6c11698e62960105122acb988`),
+  built from main on 24 Nov 2026 (artifact expires about 22 Feb 2027).
   Debug-signed only: every run signs with a fresh debug key, so installing a
   newer APK over an installed one requires uninstalling first. Install/run on
   a real device is not yet verified.
@@ -80,15 +95,28 @@ per run.
 **Limitations:** the macOS/Windows/Linux builds are **unsigned** (see the
 Gatekeeper and SmartScreen notes under "GitHub Releases (once publishing is enabled)" below); the
 Android APK is **debug-signed** and untested on a device. Nothing is signed
-with a Developer ID / release key yet, and no GitHub Release exists.
+with a Developer ID / release key yet, and the only GitHub Release is the
+Android preview above.
+
+**Agent capabilities are staged.** The app's agent features roll out in
+reviewed stages. Stage A (complete, 24 Nov 2026) builds the run driver's
+foundation with an **empty tool registry**: the app can account for agent
+runs in its ledger, but no tool can execute, nothing can start a run, and
+nothing happens automatically. Stage B (real tools plus an explicit approval
+mechanism) and Stage C (in-app run controls) are designed but **not
+implemented**, and none of it will be enabled without a separate explicit
+review. The agent layer has no model-driven execution, no scheduling, and no
+network access.
 
 ## GitHub Releases (once publishing is enabled)
 
-**Nothing has been published here yet.** Release publishing stays switched
-off until it is approved (see [docs/DISTRIBUTION.md](docs/DISTRIBUTION.md)
-for exactly how that works). Once it is on, installers live on the
+One **Android preview release** (debug APK for testing) has been published;
+desktop installers have not. Release publishing stays otherwise switched off
+until it is approved (see [docs/DISTRIBUTION.md](docs/DISTRIBUTION.md) for
+exactly how that works). Once it is on, installers live on the
 [GitHub Releases page](https://github.com/NinadHirani/CompanionDesk/releases);
-until then, the builds described above are the only installable artifacts:
+until then, the builds described above are the only desktop installable
+artifacts:
 
 - **macOS, Apple Silicon (M1 and later):** `CompanionDesk-<version>-arm64.dmg`
 - **macOS, Intel:** `CompanionDesk-<version>-x64.dmg`
