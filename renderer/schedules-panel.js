@@ -138,6 +138,7 @@
         if (s && !s.proactive_enabled) listEl.appendChild(line('Delivery is off in settings (About > Proactive reminders): schedules are listed but nothing notifies until you turn it on.'));
         else if (s && !s.proactive_scope_reminder && records.some((r) => r.scope === 'reminder')) listEl.appendChild(line('Reminder scope delivery is off in settings.'));
         else if (s && !s.proactive_scope_deadline && records.some((r) => r.scope === 'deadline')) listEl.appendChild(line('Deadline scope delivery is off in settings.'));
+        else if (s && typeof s.proactive_quiet_start === 'string' && typeof s.proactive_quiet_end === 'string') listEl.appendChild(line('Quiet hours ' + s.proactive_quiet_start + ' to ' + s.proactive_quiet_end + ': a schedule due inside that window notifies when it ends, it is never dropped (change in About > Proactive reminders).'));
       } catch (e) { /* the state line is best-effort only */ }
       const view = (typeof window !== 'undefined' && window.CompanionSchedulesView) || null;
       if (view && typeof view.shape === 'function') {
