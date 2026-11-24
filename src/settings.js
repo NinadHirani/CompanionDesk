@@ -20,6 +20,16 @@ const DEFAULTS = Object.freeze({
   ai_model_local: '', // Ollama chat model; '' = the built-in default
   ai_model_vision: '', // Ollama vision model for screen questions; '' = default
   hardware_profile: 'auto', // 'auto' detects this computer; a chosen profile steers only DEFAULT models
+  // M5 proactive behavior (slice 1). Everything is opt-in and quiet by
+  // default: delivery is OFF until the user turns it on, per scope, and
+  // quiet hours (default 22:00-08:00 local) DEFER a due schedule to the
+  // window's end instead of dropping it. No network is involved anywhere.
+  proactive_enabled: false, // master opt-in for OS notifications
+  proactive_scope_reminder: false, // per-scope control: reminders
+  proactive_scope_deadline: false, // per-scope control: confirmed deadlines
+  proactive_quiet_enabled: true, // quiet hours on by default (fail-safe)
+  proactive_quiet_start: '22:00',
+  proactive_quiet_end: '08:00',
 });
 
 const ENUMS = Object.freeze({
@@ -28,7 +38,10 @@ const ENUMS = Object.freeze({
   brevity: ['short', 'normal', 'detailed'],
   hardware_profile: ['auto', 'lightweight', 'balanced', 'powerful'],
 });
-const BOOLEANS = ['learn_from_activity', 'suggest_memories', 'cloud_personal', 'cloud_enabled', 'onboarding_done'];
+const BOOLEANS = ['learn_from_activity', 'suggest_memories', 'cloud_personal', 'cloud_enabled', 'onboarding_done', 'proactive_enabled', 'proactive_scope_reminder', 'proactive_scope_deadline', 'proactive_quiet_enabled'];
+// 'HH:MM' 24h local clock times bounding the quiet window.
+const QUIET_TIME_KEYS = ['proactive_quiet_start', 'proactive_quiet_end'];
+const QUIET_TIME_RE = /^([01][0-9]|2[0-3]):[0-5][0-9]$/;
 const TEXT_MAX = Object.freeze({ user_name: 40, assistant_name: 40, language: 30 });
 
 // Ollama model ids, e.g. "llama3.2:latest" or "hf.co/org/model:Q4_K_M":
@@ -64,6 +77,9 @@ function normalizeSettings(raw = {}) {
   for (const key of MODEL_KEYS) {
     if (typeof raw[key] === 'string' && isValidModelId(raw[key])) out[key] = raw[key];
   }
+  for (const key of QUIET_TIME_KEYS) {
+    if (typeof raw[key] === 'string' && QUIET_TIME_RE.test(raw[key])) out[key] = raw[key];
+  }
   for (const [key, max] of Object.entries(TEXT_MAX)) {
     if (raw[key] === undefined) continue;
     const v = cleanLine(raw[key], max);
@@ -95,6 +111,9 @@ function validatePatch(patch) {
         if (v === '' || isValidModelId(v)) clean[key] = v;
         else errors.push(`invalid_value:${key}`);
       }
+    } else if (QUIET_TIME_KEYS.includes(key)) {
+      if (typeof value === 'string' && QUIET_TIME_RE.test(value)) clean[key] = value;
+      else errors.push(`invalid_value:${key}`);
     } else {
       const v = cleanLine(value, TEXT_MAX[key]);
       if (typeof value !== 'string') errors.push(`invalid_value:${key}`);

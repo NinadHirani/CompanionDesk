@@ -38,6 +38,7 @@ const { createRegistry } = require('./tool-registry');
 const { createPolicyEngine } = require('./policy-engine');
 const { createNotificationDesk } = require('./agent-notifications');
 const { createReminderBook } = require('./agent-reminders');
+const { createScheduleBook } = require('./agent-scheduler');
 const { createAgentPersistence } = require('./agent-persistence');
 const { createOrchestrator } = require('./agent-orchestrator');
 
@@ -225,13 +226,14 @@ function createAgentStack({ db, clock, registry: registryOverride } = {}) {
   const engine = createPolicyEngine({ registry, approvals, emergencyStop, clock: now });
   const notifications = createNotificationDesk({ clock: now });
   const reminders = createReminderBook({ clock: now });
+  const schedules = createScheduleBook({ clock: now });
   const persistence = createAgentPersistence({
-    db, clock: now, registry, audit, approvals, engine, emergencyStop, notifications, reminders,
+    db, clock: now, registry, audit, approvals, engine, emergencyStop, notifications, reminders, schedules,
   });
   // THE injection point: the orchestrator never sees the raw audit log.
   const durableAudit = persistence.durableAudit();
   const orchestrator = createOrchestrator({ engine, approvals, emergencyStop, audit: durableAudit });
-  return { db, persistence, audit, durableAudit, approvals, engine, emergencyStop, registry, notifications, reminders, orchestrator };
+  return { db, persistence, audit, durableAudit, approvals, engine, emergencyStop, registry, notifications, reminders, schedules, orchestrator };
 }
 
 module.exports = { createAgentRuntime, createAgentStack };

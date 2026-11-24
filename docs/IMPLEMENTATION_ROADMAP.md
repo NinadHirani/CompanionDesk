@@ -441,6 +441,25 @@ Main-process scheduler persisted in the DB; OS notifications for confirmed
 deadlines and user-approved reminders; quiet hours; per-scope user controls.
 No network. Proactive actions run only on schedules the user set.
 
+**Slice 1 (landed 24 Nov 2026): the scheduler core, wired, inert until the
+user opts in.** `src/agent-scheduler.js` is a pure, bounded schedule book
+(one-shot schedules; scopes `reminder` and `deadline`), persisted through
+the agent persistence layer's durable audit guarantees (tables
+`agent_schedules`, `agent_schedule_scopes`). Roadmap rules are structural:
+the book is created only by the user-facing product surface
+(`schedules:create|list|pause|resume|cancel` product channels, deliberately
+NOT in the Gate 2 agent contract's renderer set, which stays read-only);
+the agent registry never sees it (wiring-lock test pins the require graph).
+Quiet hours defer, never drop (default 22:00-08:00, user-changeable);
+delivery is opt-in and off by default, globally AND per scope
+(`proactive_enabled`, `proactive_scope_reminder`, `proactive_scope_deadline`
+in settings). A due schedule fires exactly once; the main-process loop
+(60 s, unref'd) attempts one OS notification per fired schedule when the
+settings allow and audits every outcome (shown / failed / skipped_settings);
+a failed delivery is never retried by re-ticking, so a broken notifier can
+never spam. Renderer schedule creation UI is the next M5 slice; until a
+user creates a schedule and enables delivery, nothing fires.
+
 ## M6 - Voice v2 (2-3 wks)
 
 Multilingual whisper model option wired to the existing `language` setting;

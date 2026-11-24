@@ -60,7 +60,7 @@
   const MAX_DETAIL_JSON = 4096;
   const AUDIT_COLUMNS = 'seq, at, actor, action, tool, decision, reason, grant_id, approval_id, detail_json, hash';
 
-  function createAgentPersistence({ db, clock, registry, audit, approvals, engine, emergencyStop, notifications, reminders } = {}) {
+  function createAgentPersistence({ db, clock, registry, audit, approvals, engine, emergencyStop, notifications, reminders, schedules } = {}) {
     if (!db || typeof db.run !== 'function' || typeof db.all !== 'function') {
       throw new TypeError('agent persistence needs a db adapter with run() and all()');
     }
@@ -73,6 +73,11 @@
       && (typeof reminders.exportAll !== 'function' || typeof reminders.hydrate !== 'function'
       || typeof reminders.validate !== 'function')) {
       throw new TypeError('agent persistence needs a reminder book with exportAll() and hydrate()');
+    }
+    if (schedules !== undefined && schedules !== null
+      && (typeof schedules.exportAll !== 'function' || typeof schedules.hydrate !== 'function'
+      || typeof schedules.validate !== 'function')) {
+      throw new TypeError('agent persistence needs a schedule book with exportAll() and hydrate()');
     }
     const nowIso = clock ? () => new Date(clock()).toISOString() : () => new Date().toISOString();
     let status = { ok: true, problems: [] };
@@ -344,6 +349,51 @@
         reminderRecords.push(rec);
       }
 
+      // Phase 4c. Schedules (M5 slice 1): rows are projected into record
+      // shape with STRICT flags and bounded integer timestamps, matching
+      // the reminders phase above. A stored flag that is not exactly 0 or
+      // 1, or an out-of-range timestamp, is an invalid row, never a truthy
+      // default.
+      const scheduleRecords = [];
+      if (schedules) {
+        for (const r of db.all('SELECT id, title, scope, due_at, notes, created_at, paused, cancelled, deferred_to, fired_at FROM agent_schedules ORDER BY id')) {
+          const paused = strictFlag(r.paused);
+          const cancelled = strictFlag(r.cancelled);
+          const dueAt = strictTimestamp(r.due_at);
+          const createdAt = strictTimestamp(r.created_at);
+          const deferredTo = r.deferred_to === null || r.deferred_to === undefined ? null : strictTimestamp(r.deferred_to);
+          const firedAt = r.fired_at === null || r.fired_at === undefined ? null : strictTimestamp(r.fired_at);
+          const notes = r.notes === null || r.notes === undefined ? null : r.notes;
+          const bad = paused === null || cancelled === null || dueAt === null || createdAt === null
+            || deferredTo === null && r.deferred_to != null || firedAt === null && r.fired_at != null
+            || typeof r.id !== 'string' || typeof r.title !== 'string' || typeof r.scope !== 'string'
+            || (notes !== null && typeof notes !== 'string');
+          if (bad) {
+            fail('invalid_schedule_row');
+            problems.push('invalid_schedule_row:' + (r.id || '?'));
+            continue;
+          }
+          scheduleRecords.push({
+            id: r.id, title: r.title, scope: r.scope, dueAt, notes, createdAt,
+            paused, cancelled, deferredTo, firedAt,
+          });
+        }
+      }
+
+      // Phase 4d. Schedule scope state (M5): one row per paused scope.
+      const scheduleScopeRows = [];
+      if (schedules && typeof schedules.hydrateScopeState === 'function') {
+        for (const r of db.all('SELECT scope, paused FROM agent_schedule_scopes ORDER BY scope')) {
+          const paused = strictFlag(r.paused);
+          if (paused === null || typeof r.scope !== 'string' || r.scope.length === 0) {
+            fail('invalid_schedule_scope_row');
+            problems.push('invalid_schedule_scope_row:' + String(r.scope || '?'));
+            continue;
+          }
+          if (paused) scheduleScopeRows.push({ scope: r.scope, paused: true });
+        }
+      }
+
       // Phase 5a. Validate every store read-only. The audit chain was
       // re-verified in phase 1, grants were checked against the registry in
       // phase 2, approvals and the stop snapshot above; here the two desks
@@ -357,6 +407,10 @@
       if (status.ok && reminders) {
         const v = reminders.validate(reminderRecords);
         if (!v.ok) { fail('reminder_hydrate_refused'); problems.push('reminder_hydrate_refused:' + v.reason); }
+      }
+      if (status.ok && schedules) {
+        const v = schedules.validate(scheduleRecords);
+        if (!v.ok) { fail('schedule_hydrate_refused'); problems.push('schedule_hydrate_refused:' + v.reason); }
       }
 
       // Phase 5b. Apply: hydrate the pure modules only when everything
@@ -388,6 +442,14 @@
         if (reminders) {
           const h = reminders.hydrate(reminderRecords);
           if (!h.ok) { fail('reminder_hydrate_refused'); problems.push('reminder_hydrate_refused:' + h.reason); }
+        }
+        if (schedules) {
+          const h = schedules.hydrate(scheduleRecords);
+          if (!h.ok) { fail('schedule_hydrate_refused'); problems.push('schedule_hydrate_refused:' + h.reason); }
+        }
+        if (schedules && typeof schedules.hydrateScopeState === 'function') {
+          const h = schedules.hydrateScopeState(scheduleScopeRows);
+          if (!h.ok) { fail('schedule_scope_hydrate_refused'); problems.push('schedule_scope_hydrate_refused:' + h.reason); }
         }
       }
 
@@ -483,6 +545,19 @@
           db.run('DELETE FROM agent_reminders');
           for (const r of reminderRecords) {
             db.run('INSERT INTO agent_reminders (id, title, due_at, notes, created_at, cancelled, acknowledged) VALUES (?, ?, ?, ?, ?, ?, ?)', [r.id, r.title, r.dueAt, r.notes === undefined ? null : r.notes, r.createdAt, r.cancelled ? 1 : 0, r.acknowledged ? 1 : 0]);
+          }
+          if (schedules) {
+            const scheduleRecords = schedules.exportAll();
+            if (typeof schedules.exportScopeState === 'function') {
+              db.run('DELETE FROM agent_schedule_scopes');
+              for (const sc of schedules.exportScopeState()) {
+                db.run('INSERT INTO agent_schedule_scopes (scope, paused) VALUES (?, ?)', [sc.scope, sc.paused ? 1 : 0]);
+              }
+            }
+            db.run('DELETE FROM agent_schedules');
+            for (const r of scheduleRecords) {
+              db.run('INSERT INTO agent_schedules (id, title, scope, due_at, notes, created_at, paused, cancelled, deferred_to, fired_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', [r.id, r.title, r.scope, r.dueAt, r.notes === undefined ? null : r.notes, r.createdAt, r.paused ? 1 : 0, r.cancelled ? 1 : 0, r.deferredTo === null || r.deferredTo === undefined ? null : r.deferredTo, r.firedAt === null || r.firedAt === undefined ? null : r.firedAt]);
+            }
           }
         });
         lastPersistedSeq = lastSeq;

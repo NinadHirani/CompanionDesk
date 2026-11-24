@@ -177,6 +177,24 @@ CREATE TABLE IF NOT EXISTS agent_reminders (
   cancelled INTEGER NOT NULL DEFAULT 0,
   acknowledged INTEGER NOT NULL DEFAULT 0
 );
+-- M5 slice 1: schedules the USER set through the product surface. Fired
+-- exactly once; quiet hours defer, never drop (see src/agent-scheduler.js).
+CREATE TABLE IF NOT EXISTS agent_schedules (
+  id TEXT PRIMARY KEY,
+  title TEXT NOT NULL,
+  scope TEXT NOT NULL,
+  due_at INTEGER NOT NULL,
+  notes TEXT,
+  created_at INTEGER NOT NULL,
+  paused INTEGER NOT NULL DEFAULT 0,
+  cancelled INTEGER NOT NULL DEFAULT 0,
+  deferred_to INTEGER,
+  fired_at INTEGER
+);
+CREATE TABLE IF NOT EXISTS agent_schedule_scopes (
+  scope TEXT PRIMARY KEY,
+  paused INTEGER NOT NULL
+);
 -- Schema version stamp (agent persistence). One row, key 'version'. An
 -- unversioned database is stamped additively on load; a database written by
 -- a NEWER build is never read, downgraded or repaired by an older one.

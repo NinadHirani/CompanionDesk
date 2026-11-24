@@ -76,6 +76,18 @@ const IPC_CHANNELS = Object.freeze([
   // transition through the persistence layer's durable audit guarantees,
   // and refuses everything else. Run start/step/resume/abort, approvals,
   // grants, stop and persistence stay main-only and are never listed here.
+  // M5 slice 1: the proactive scheduler's USER surface. These are product
+  // channels like settings:*, driven by explicit user gestures in the UI;
+  // they are NOT part of the Gate 2 agent contract (ipc-contract.js
+  // RENDERER_CHANNELS stays read-only) and the agent registry never sees
+  // the scheduler. "Proactive actions run only on schedules the user set"
+  // is enforced by that split: no agent path can create, pause or fire one.
+  'schedules:create',
+  'schedules:list',
+  'schedules:pause',
+  'schedules:resume',
+  'schedules:cancel',
+
   'status:get',
   'runs:get',
   'audit:read',

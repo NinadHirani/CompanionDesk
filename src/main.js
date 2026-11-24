@@ -56,6 +56,7 @@ const { createDisplayDelivery } = require('./agent-display-delivery');
 const { createRunDriver } = require('./agent-run-driver');
 const { createReminderBook } = require('./agent-reminders');
 const { createAgentSurface } = require('./agent-surface');
+const { createSchedulerSurface } = require('./scheduler-surface');
 const { createAgentRuntime, createAgentStack } = require('./agent-runtime');
 const { createAgentPersistence } = require('./agent-persistence');
 
@@ -84,6 +85,8 @@ let agentAudit = null;
   let agentRunDriver = null;
 let agentOrchestrator = null;
 let agentNotifications = null;
+let agentScheduler = null;
+let schedulerSurface = null;
 // Main-owned notification display store (blueprint 3j.3): separate from the
 // persisted desk, in-memory only, no read semantics. The renderer reads it
 // through the existing notifications:read channel and can never write it.
@@ -210,6 +213,9 @@ async function init() {
       agentOrchestrator = stack.orchestrator;
       agentNotifications = stack.notifications;
       agentReminders = stack.reminders;
+      // M5 slice 1: the proactive scheduler rides the same stack and the
+      // same durable persistence path as the Gate 2 desks.
+      agentScheduler = stack.schedules;
       return stack;
     },
   });
@@ -365,6 +371,80 @@ function registerUpdates() {
   } catch (err) {
     console.warn('updates unavailable:', err && err.message);
   }
+}
+
+// M5 slice 1: the proactive delivery loop. Main-process only, no network,
+// no cloud. A scheduler tick marks due schedules fired EXACTLY ONCE; the
+// user's opt-in settings decide whether an OS notification is actually
+// shown. Quiet hours defer a due schedule to the window's end and never
+// drop it (the scheduler enforces that). Every delivery attempt or skip is
+// audited through the persistence layer's durable log. Nothing here runs
+// unless the user both created a schedule AND turned delivery on.
+function proactiveQuietHours(s) {
+  return {
+    enabled: s.proactive_quiet_enabled === true,
+    start: typeof s.proactive_quiet_start === 'string' ? s.proactive_quiet_start : '22:00',
+    end: typeof s.proactive_quiet_end === 'string' ? s.proactive_quiet_end : '08:00',
+  };
+}
+
+function proactiveScopeAllowed(s, scope) {
+  if (s.proactive_enabled !== true) return false;
+  return scope === 'reminder' ? s.proactive_scope_reminder === true : s.proactive_scope_deadline === true;
+}
+
+// The OS notification adapter. Deliberately tiny and isolated: everything
+// around it (ticks, quiet hours, exactly-once, audit) is pure and tested;
+// this is the one impure boundary, guarded so an unsupported platform
+// reports a clean refusal instead of throwing.
+function createOsNotifier() {
+  let Notification = null;
+  try { Notification = require('electron').Notification; } catch (e) { Notification = null; }
+  return (title, body) => {
+    if (!Notification || typeof Notification.isSupported !== 'function' || !Notification.isSupported()) {
+      return { ok: false, reason: 'unsupported' };
+    }
+    try {
+      const n = new Notification({ title, body });
+      n.show();
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, reason: 'show_failed' };
+    }
+  };
+}
+const osNotifier = createOsNotifier();
+
+let proactiveTimer = null;
+function runProactiveTick() {
+  if (proactiveTimer === null) return; // loop stopped
+  // A blocked runtime or missing persistence means no tick at all: the
+  // in-memory fired mark could not be persisted, so firing now could
+  // re-fire after a restart. Fail closed by doing nothing.
+  if (!agentRuntime.isActive() || !agentScheduler || !agentPersistence) return;
+  let s;
+  try { s = P.getSettings(db); } catch (e) { return; }
+  const result = agentScheduler.tick(Date.now(), { quietHours: proactiveQuietHours(s) });
+  if (!result.due.length && !result.deferred.length) return;
+  for (const r of result.due) {
+    let outcome;
+    if (proactiveScopeAllowed(s, r.scope)) {
+      const delivered = osNotifier(r.title, r.notes || (r.scope === 'reminder' ? 'Reminder' : 'Deadline'));
+      outcome = delivered && delivered.ok === true ? 'shown' : 'failed:' + ((delivered && delivered.reason) || 'unknown');
+    } else {
+      outcome = 'skipped_settings';
+    }
+    try {
+      agentPersistence.appendAudit({ actor: 'system', action: 'proactive.delivery', detail: { id: r.id, scope: r.scope, outcome } });
+    } catch (e) { /* the fired mark is already durable-side pending; never throw from the timer */ }
+  }
+  try { agentPersistence.save(); } catch (e) { /* best effort; next tick converges */ }
+}
+
+function startProactiveLoop() {
+  if (proactiveTimer !== null) return;
+  proactiveTimer = setInterval(runProactiveTick, 60000);
+  if (typeof proactiveTimer.unref === 'function') proactiveTimer.unref();
 }
 
 function registerIpc() {
@@ -681,9 +761,25 @@ app.whenReady().then(async () => {
     // transaction, flushed before the desk flips) and refuses on any
     // integrity or durability failure.
     ipcMain.handle('notifications:ack', agentSurface.handlers['notifications:ack']);
+    // M5 slice 1: the scheduler's user surface. Product channels (like
+    // settings:*), registered as literal lines so the ipc-sync structural
+    // guard keeps the allowlist, the preload and these handlers in step.
+    // The scheduler is NOT part of the agent contract and the agent
+    // registry never sees it.
+    if (!agentScheduler) throw new Error('scheduler not constructed');
+    schedulerSurface = createSchedulerSurface({ schedules: agentScheduler, persistence: agentPersistence });
+    ipcMain.handle('schedules:create', schedulerSurface.handlers['schedules:create']);
+    ipcMain.handle('schedules:list', schedulerSurface.handlers['schedules:list']);
+    ipcMain.handle('schedules:pause', schedulerSurface.handlers['schedules:pause']);
+    ipcMain.handle('schedules:resume', schedulerSurface.handlers['schedules:resume']);
+    ipcMain.handle('schedules:cancel', schedulerSurface.handlers['schedules:cancel']);
   } catch (e) {
     console.error('[agent] read-only surface unavailable:', e && e.message);
   }
+  // M5 slice 1: start the proactive delivery loop only after the surfaces
+  // are registered. With no schedules and delivery off by default it is
+  // inert: the first fire happens only for a schedule the user created.
+  startProactiveLoop();
   overlay = createOverlayController({
     preloadPath: path.join(__dirname, 'preload.js'),
     htmlPath: path.join(__dirname, '..', 'renderer', 'overlay.html'),

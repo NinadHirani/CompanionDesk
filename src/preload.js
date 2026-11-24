@@ -78,6 +78,14 @@ const IPC_CHANNELS = [
   // validates the id and stays authoritative. No main-only channel (run
   // start/step/resume/abort, approvals, grants, stop, persistence) may
   // ever be added here.
+  // M5 slice 1: the proactive scheduler user surface (product channels,
+  // NOT part of the Gate 2 agent contract).
+  'schedules:create',
+  'schedules:list',
+  'schedules:pause',
+  'schedules:resume',
+  'schedules:cancel',
+
   'status:get',
   'runs:get',
   'audit:read',
