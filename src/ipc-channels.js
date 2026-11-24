@@ -67,6 +67,16 @@ const IPC_CHANNELS = Object.freeze([
   'ollama:diskCheck',
   'ollama:pullStart',
   'ollama:pullCancel',
+
+  // Gate 2 read-only agent surface (ipc-contract.js RENDERER_CHANNELS).
+  // Every one of these is a read; run start/step/resume/abort, approvals,
+  // grants, stop and persistence stay main-only and are never listed here.
+  'status:get',
+  'runs:get',
+  'audit:read',
+  'providers:get',
+  'notifications:read',
+  'reminders:read',
 ]);
 
 // Messages main may PUSH to a window (streaming tokens and the like). The

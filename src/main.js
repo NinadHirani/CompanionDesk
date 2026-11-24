@@ -39,6 +39,21 @@ const { todayIso, localNowIso, addDaysIso } = require('./dates');
 const { createUpdateController } = require('./updater');
 const policy = require('./update-policy');
 
+// Gate 2 wiring: the agent runtime is owned by main. The renderer reaches
+// it only through the six read-only channels of ipc-contract.js (wired by
+// agent-surface.js). Run start/step/resume/abort, approvals, grants,
+// emergency stop and persistence are main-only and are NOT wired to any
+// handler in this slice: nothing in this file calls them either.
+const { createRegistry } = require('./tool-registry');
+const { createApprovalDesk } = require('./approval');
+const { createEmergencyStop } = require('./emergency-stop');
+const { createAuditLog } = require('./audit');
+const { createPolicyEngine } = require('./policy-engine');
+const { createOrchestrator } = require('./agent-orchestrator');
+const { createNotificationDesk } = require('./agent-notifications');
+const { createReminderBook } = require('./agent-reminders');
+const { createAgentSurface } = require('./agent-surface');
+
 const SMOKE = process.argv.includes('--smoke');
 
 let db = null;
@@ -53,6 +68,17 @@ const askControllers = new Map();
 let secureStore = null;
 let win = null;
 let overlay = null;
+
+// The in-memory agent runtime (Gate 2). Constructed in init(); nothing in
+// main starts or advances a run in this slice.
+let agentRegistry = null;
+let agentApprovals = null;
+let agentStop = null;
+let agentAudit = null;
+let agentOrchestrator = null;
+let agentNotifications = null;
+let agentReminders = null;
+let agentSurface = null;
 
 function vaultDir() {
   return path.join(app.getPath('userData'), 'vault');
@@ -116,6 +142,62 @@ async function init() {
   // Cloud fallback is double-gated: the saved key AND the explicit
   // cloud_enabled setting (default false). A key alone arms nothing.
   ai = createAi({ geminiKey: () => secureStore.readKey(), cloudEnabled: P.getSettings(db).cloud_enabled === true });
+  // In-memory agent runtime. Every component is pure and local; the audit
+  // log starts at its genesis and lives only in this process in this slice.
+  agentRegistry = createRegistry();
+  agentApprovals = createApprovalDesk({});
+  agentStop = createEmergencyStop();
+  agentAudit = createAuditLog({});
+  const agentEngine = createPolicyEngine({ registry: agentRegistry, approvals: agentApprovals, emergencyStop: agentStop });
+  agentOrchestrator = createOrchestrator({ engine: agentEngine, approvals: agentApprovals, emergencyStop: agentStop, audit: agentAudit });
+  agentNotifications = createNotificationDesk({});
+  agentReminders = createReminderBook({});
+  agentSurface = createAgentSurface({
+    status: () => {
+      const active = agentOrchestrator.activeRun();
+      return {
+        agentActive: true,
+        stopped: agentStop.isActive() === true,
+        activeRun: active ? active.runId : null,
+        notificationsPending: agentNotifications.pending().length,
+        remindersScheduled: agentReminders.list().filter((x) => x.cancelled !== true).length,
+        auditEntries: agentAudit.snapshot().entries.length,
+      };
+    },
+    listRuns: (runId) => {
+      if (runId) {
+        const st = agentOrchestrator.getRun(runId);
+        return st ? [st] : [];
+      }
+      const active = agentOrchestrator.activeRun();
+      return active ? [active] : [];
+    },
+    readAudit: (f) => {
+      const fromSeq = Number.isInteger(f.fromSeq) ? f.fromSeq : 1;
+      const limit = Number.isInteger(f.limit) ? f.limit : 500;
+      const snap = agentAudit.snapshot();
+      const entries = snap.entries.filter((e) => e.seq >= fromSeq).slice(0, limit);
+      return { base: snap.base, entries, lastHash: snap.lastHash, verified: agentAudit.verify().ok === true };
+    },
+    listProviders: async (name) => {
+      const sel = await modelSelection();
+      const status = ProviderStatus.buildProviderStatus({
+        ollamaUp: sel.ollama,
+        installed: sel.installed,
+        chat: sel.chat,
+        vision: sel.vision,
+        secureStore: secureStore.status(),
+        cloudEnabled: P.getSettings(db).cloud_enabled === true,
+        ollamaFault: sel.fault || null,
+        caps: sel.caps,
+        capsFaults: sel.capsFaults || null,
+      });
+      const list = [status].filter(Boolean);
+      return name ? list.filter((x) => x && x.name === name) : list;
+    },
+    listNotifications: (limit) => agentNotifications.list().slice(0, Number.isInteger(limit) ? limit : 500),
+    listReminders: (limit) => agentReminders.list().slice(0, Number.isInteger(limit) ? limit : 500),
+  });
 }
 
 function createWindow() {
@@ -461,6 +543,23 @@ function registerIpc() {
 
 app.whenReady().then(async () => {
   await init();
+  // Gate 2 wiring: register the read-only agent surface, one literal line
+  // per contract channel so the ipc-sync structural guard can parse them
+  // and prove main registers a handler for every channel and no others.
+  // If construction failed, nothing registers and every renderer call
+  // fails closed. The handlers themselves come from agent-surface.js,
+  // whose tests prove its key set equals the contract's RENDERER_CHANNELS.
+  try {
+    if (!agentSurface) throw new Error('agent surface not constructed');
+    ipcMain.handle('status:get', agentSurface.handlers['status:get']);
+    ipcMain.handle('runs:get', agentSurface.handlers['runs:get']);
+    ipcMain.handle('audit:read', agentSurface.handlers['audit:read']);
+    ipcMain.handle('providers:get', agentSurface.handlers['providers:get']);
+    ipcMain.handle('notifications:read', agentSurface.handlers['notifications:read']);
+    ipcMain.handle('reminders:read', agentSurface.handlers['reminders:read']);
+  } catch (e) {
+    console.error('[agent] read-only surface unavailable:', e && e.message);
+  }
   overlay = createOverlayController({
     preloadPath: path.join(__dirname, 'preload.js'),
     htmlPath: path.join(__dirname, '..', 'renderer', 'overlay.html'),

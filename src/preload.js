@@ -69,6 +69,16 @@ const IPC_CHANNELS = [
   'ollama:diskCheck',
   'ollama:pullStart',
   'ollama:pullCancel',
+
+  // Gate 2 read-only agent surface. Mirrors RENDERER_CHANNELS in
+  // ipc-contract.js exactly; no main-only channel (run start/step/resume/
+  // abort, approvals, grants, stop, persistence) may ever be added here.
+  'status:get',
+  'runs:get',
+  'audit:read',
+  'providers:get',
+  'notifications:read',
+  'reminders:read',
 ];
 
 // Messages main may push to this window. Mirrors IPC_EVENTS in ipc-channels.js.
