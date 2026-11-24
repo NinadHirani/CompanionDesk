@@ -32,6 +32,19 @@ test('screen observation stays off until the user enables it', () => {
   const r = validatePatch({ screen_observation_enabled: true });
   assert.equal(r.ok, true);
   assert.equal(r.clean.screen_observation_enabled, 'true');
+
+  // M7 slice 2: screen-observation mode keys.
+  assert.equal(normalizeSettings({}).screen_mode, 'manual');
+  assert.equal(normalizeSettings({ screen_mode: 'session' }).screen_mode, 'session');
+  assert.equal(normalizeSettings({ screen_mode: 'nonsense' }).screen_mode, 'manual');
+  assert.equal(normalizeSettings({}).screen_background_consent, false);
+  assert.equal(normalizeSettings({ screen_background_consent: 'true' }).screen_background_consent, true);
+  const m = validatePatch({ screen_mode: 'background', screen_background_consent: true });
+  assert.equal(m.ok, true);
+  assert.equal(m.clean.screen_mode, 'background');
+  assert.equal(m.clean.screen_background_consent, 'true');
+  assert.equal(validatePatch({ screen_mode: 'auto' }).errors[0], 'invalid_value:screen_mode');
+
   assert.equal(validatePatch({ screen_observation_enabled: 'yes' }).ok, false);
 });
 

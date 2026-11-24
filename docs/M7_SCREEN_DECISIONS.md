@@ -1,38 +1,45 @@
-# M7 decision brief: screen observation (open)
+# M7 screen observation: decision and implementation status
 
-Nothing about capture has been built or enabled beyond b920187's
-decision-independent groundwork. Both decisions below are yours alone;
-nothing proceeds on either until you answer.
+## Decided by Ninad (24 Nov 2026)
 
-## Decision 1: what should screen observation actually do?
+Screen observation is three user-selectable modes, shown as a picker in
+settings. Nothing is enabled until the user selects a mode and explicitly
+starts it; the default is manual/off.
 
-Only three honest shapes exist:
+- **A. Manual look** (default): a look happens only when the user
+  explicitly asks. No session, no background anything.
+- **B. Active session**: the user explicitly starts and stops a visible
+  session; CompanionDesk observes only during that session.
+- **C. Background assist**: available ONLY on laptops and desktops,
+  never on Android or any mobile platform. It requires a separate
+  explicit opt-in consent, shows a persistent indicator while on, can be
+  paused or stopped at any time, requires at least one configured app
+  exclusion, runs a conservative cadence (30 s interval floor), processes
+  locally only, uploads nothing, and retains no screen content by
+  default.
 
-1. **On-demand only** (no background anything): observation runs when you
-   click/ask ("what's on my screen?"), one shot, result shown, nothing
-   stored. Safest; least useful as a companion.
-2. **Triggered within a session**: while the companion is actively helping
-   you on a task you started, it may look at the screen (bounded session,
-   visible indicator), and stops the moment the session ends. Middle
-   ground; still no independent background activity.
-3. **Background assist**: it watches continuously in the background and
-   offers help when it notices something. Most useful, most invasive,
-   slowest to trust; needs an always-visible indicator and per-session
-   or per-app scope rules you would have to define.
+## Implemented in the policy slice (capture engine still disabled)
 
-Trade-off in one line: value rises with intrusiveness; your standing
-rules (opt-in, visible, no retention, no upload, no silent decisions)
-apply to every shape, and shape 3 cannot be built acceptably without
-more policy decisions from you than 1 or 2.
+- `src/screen-mode.js`: the pure mode policy. Start is refused unless the
+  source is an explicit user action (capture never autostarts), manual
+  mode can never start, background is refused on mobile platforms at
+  selection AND at start even with consent stored, background without its
+  consent record is refused, one observation runs at a time, stop/pause
+  are always available, the indicator contract is pinned (persistent for
+  background), and a screen permission may be requested only as part of
+  an explicit user action.
+- `src/settings.js`: `screen_mode` (manual/session/background, default
+  manual) and `screen_background_consent` (default false) join
+  `screen_observation_enabled` (master switch, still false by default).
+- Settings UI: a mode picker with the three options and, for background,
+  a separate consent checkbox that is visible only when background is
+  selected.
+- Deterministic tests pin every rule above; full suite green.
 
-## Decision 2: interval, if anything recurring at all
+## Still a boundary
 
-Applies only to shapes 2-3. Options: manual (every look is you asking),
-fixed slow cadence (e.g. every 30-60s while a session is active), or
-event-driven (only on a signal such as a focus change). Faster intervals
-buy responsiveness at the cost of CPU/battery and comfort; event-driven
-is usually the right default because it observes only when something
-changed, and we would default to manual for shape 2.
-
-Answer when ready: "shape 1/2/3" and, if not 1, an interval preference.
-No other question is bundled here.
+The capture engine itself remains disabled and unbuilt: it needs real
+screen-capture permission flows, device testing on each desktop platform,
+and the engine wiring (sessions through src/screen-observation.js, the
+interval/exclusion config, the visible indicator in the overlay). No
+capture, permission request, or indicator runs from this slice alone.

@@ -121,6 +121,9 @@
     quietStart: document.getElementById('s-quiet-start'),
     quietEnd: document.getElementById('s-quiet-end'),
     voice: document.getElementById('s-voice'),
+    screenMode: document.getElementById('s-screen-mode'),
+    screenConsent: document.getElementById('s-screen-consent'),
+    screenNote: document.getElementById('screen-mode-note'),
   };
 
   function fillSettings(s) {
@@ -143,7 +146,22 @@
     if (F.quietStart) F.quietStart.value = s.proactive_quiet_start || '22:00';
     if (F.quietEnd) F.quietEnd.value = s.proactive_quiet_end || '08:00';
     if (F.voice) F.voice.checked = s.voice_enabled === true;
+    if (F.screenMode) F.screenMode.value = s.screen_mode || 'manual';
+    if (F.screenConsent) F.screenConsent.checked = s.screen_background_consent === true;
+    syncScreenMode();
   }
+
+  // Background assist needs its own consent box ticked; the picker makes
+  // that visible instead of failing silently at save time.
+  function syncScreenMode() {
+    if (!F.screenMode || !F.screenConsent || !F.screenNote) return;
+    const wantsConsent = F.screenMode.value === 'background';
+    F.screenConsent.parentElement.style.display = wantsConsent ? '' : 'none';
+    F.screenNote.textContent = wantsConsent
+      ? 'Background assist is laptop/desktop only. It will not run until you explicitly start it, and it never runs on Android.'
+      : '';
+  }
+  if (F.screenMode) F.screenMode.addEventListener('change', syncScreenMode);
 
   // Model choices come only from what Ollama already has installed; nothing
   // is pulled from here. A saved model that has disappeared resets to Default.
@@ -230,6 +248,10 @@
     if (F.quietStart) payload.proactive_quiet_start = F.quietStart.value;
     if (F.quietEnd) payload.proactive_quiet_end = F.quietEnd.value;
     if (F.voice) payload.voice_enabled = F.voice.checked;
+    if (F.screenMode) {
+      payload.screen_mode = F.screenMode.value;
+      payload.screen_background_consent = F.screenMode.value === 'background' && F.screenConsent.checked;
+    }
     const res = await api.settings_save(payload);
     if (res.ok) { fillSettings(res.settings); msg.textContent = 'Saved.'; msg.className = 'hint'; UI.today.refresh(); }
     else { msg.textContent = UI.friendlyError(res.error); msg.className = 'hint error'; }

@@ -31,7 +31,14 @@ const DEFAULTS = Object.freeze({
   proactive_quiet_start: '22:00',
   proactive_quiet_end: '08:00',
   voice_enabled: false, // M6 slice 1: voice stays off until the user enables it
-  screen_observation_enabled: false, // M7 slice 1: session-scoped screen observation stays off until the user enables it
+  screen_observation_enabled: false, // M7: master switch; stays off until the user enables it
+  // M7 slice 2 (Ninad's decision): screen observation is a mode choice.
+  // 'manual' (default) is option A, 'session' option B, 'background'
+  // option C. Background additionally needs its own explicit consent and
+  // is desktop-only; the policy layer (src/screen-mode.js) refuses it on
+  // mobile platforms regardless of what is stored here.
+  screen_mode: 'manual',
+  screen_background_consent: false,
 });
 
 const ENUMS = Object.freeze({
@@ -39,8 +46,9 @@ const ENUMS = Object.freeze({
   tone: ['direct', 'warm', 'formal'],
   brevity: ['short', 'normal', 'detailed'],
   hardware_profile: ['auto', 'lightweight', 'balanced', 'powerful'],
+  screen_mode: ['manual', 'session', 'background'],
 });
-const BOOLEANS = ['learn_from_activity', 'suggest_memories', 'cloud_personal', 'cloud_enabled', 'onboarding_done', 'proactive_enabled', 'proactive_scope_reminder', 'proactive_scope_deadline', 'proactive_quiet_enabled', 'voice_enabled', 'screen_observation_enabled'];
+const BOOLEANS = ['learn_from_activity', 'suggest_memories', 'cloud_personal', 'cloud_enabled', 'onboarding_done', 'proactive_enabled', 'proactive_scope_reminder', 'proactive_scope_deadline', 'proactive_quiet_enabled', 'voice_enabled', 'screen_observation_enabled', 'screen_background_consent'];
 // 'HH:MM' 24h local clock times bounding the quiet window.
 const QUIET_TIME_KEYS = ['proactive_quiet_start', 'proactive_quiet_end'];
 const QUIET_TIME_RE = /^([01][0-9]|2[0-3]):[0-5][0-9]$/;

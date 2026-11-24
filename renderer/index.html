@@ -211,6 +211,18 @@
       <h2>Voice input</h2>
       <p class="hint">Off by default. Voice runs entirely on this computer: audio exists only while you are recording, goes to the local whisper program, and is then discarded; nothing is stored and nothing is uploaded. The microphone is used only during an explicit Speak press, never at startup.</p>
       <label class="check"><input id="s-voice" type="checkbox" /> Enable push-to-talk voice input</label>
+      <h2>Screen observation</h2>
+      <p class="hint">Off by default. Nothing looks at your screen until you pick a mode below and explicitly start it. Everything is processed on this computer only: nothing is stored and nothing is uploaded. The screen-capture permission is requested only when you act, never at startup. Background assist exists only on laptops and desktops; it never runs on Android.</p>
+      <div class="field">
+        <label for="s-screen-mode">Mode</label>
+        <select id="s-screen-mode">
+          <option value="manual">Manual look (only when you ask)</option>
+          <option value="session">Active session (you start and stop a visible session)</option>
+          <option value="background">Background assist (laptops and desktops only)</option>
+        </select>
+      </div>
+      <label class="check"><input id="s-screen-consent" type="checkbox" /> I understand background assist watches continuously while on, shows a persistent indicator, can be paused or stopped at any time, and requires at least one app exclusion</label>
+      <p id="screen-mode-note" class="hint" role="status"></p>
       <button id="settings-save" class="primary">Save</button>
       <p id="settings-msg" class="hint" role="status"></p>
     </section>

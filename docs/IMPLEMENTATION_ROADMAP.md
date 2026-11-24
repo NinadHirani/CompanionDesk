@@ -523,6 +523,22 @@ stop; Android foreground service compliant with platform rules.
 
 ## M7 - Screen understanding v2 (2-3 wks)
 
+Ninad's decision (24 Nov 2026): three selectable modes - manual look
+(default), active session, and background assist restricted to
+laptops/desktops behind a separate explicit consent, persistent
+indicator, easy pause/stop, app exclusions, conservative cadence,
+local-only processing, no cloud upload, no screen-content retention by
+default. Never enabled silently; screen permission only after a user
+action; no capture at startup.
+
+Policy slice shipped: `src/screen-mode.js` (mode policy, fail closed and
+test-pinned), `screen_mode`/`screen_background_consent` settings keys,
+and the settings UI picker with the background consent checkbox. The
+capture engine stays disabled and unbuilt pending real permission flows
+and device testing on each desktop platform; nothing captures, requests
+a permission, or shows an indicator from the policy slice alone.
+
+
 **Slice 1 (landed 24 Nov 2026): decision-independent groundwork; the
 interface only, no capture engine.** New `src/screen-observation.js` is the
 pure observation-session state machine the M7 line asks for: opt-in
