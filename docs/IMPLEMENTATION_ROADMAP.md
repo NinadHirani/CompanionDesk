@@ -420,6 +420,15 @@ see `docs/M2_MEMORY_V2_DESIGN.md` and `experiments/memory-v2-harness/`.
 No automatic extraction, no inferred-fact auto-saving, no background
 monitoring in this phase.
 
+24 Nov 2026: the measured harness core (slices 0-5) is ported to
+`src/memory-retrieval.js` and `src/memory-store.js` as PURE, UNWIRED
+library modules (contract tests pin them to `src/memory.js`; a wiring
+lock test keeps every other `src/` file from requiring them). All four
+open decisions remain untouched: no `Sensitive:` convention, no task
+budgets, no synonym shipping, no embeddings. The decision sheet with
+recommended conservative defaults is `docs/M4_MEMORY_DECISIONS.md`;
+wiring waits on the owner's answers.
+
 ## M5 - Proactive behavior (1-2 wks)
 
 Main-process scheduler persisted in the DB; OS notifications for confirmed
