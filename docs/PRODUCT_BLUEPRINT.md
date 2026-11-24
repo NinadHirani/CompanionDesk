@@ -1,21 +1,24 @@
 # CompanionDesk Product Blueprint
 
 Status: **proposed** in direction; M0 and M1 are COMPLETE on main, verified
-24 Nov 2026. The current verified baseline is main `e2eac24` with 497
+24 Nov 2026. The current verified baseline is main `e0fa026` with 512
 passing tests, Fo-reported from a full `npm test` run at that head
-(497/497, selftest included). All three main-branch CI workflows are green
-on that head: CI (run 45315064899), CI macOS + Linux (run 45315064806) and
-Android APK (run 45315072733, explicitly dispatched). Gate 2 slice 1
-(agent safety foundation) and its hardening remain pure, isolated modules
-with NO product wiring, NO tools registered beyond test fixtures and NO UI
-or IPC; since slice 2 the audit log is persisted (see 3c), still with no
-wiring. Gate 2 slice 2 (persistence) is additive-only storage with the
-same no-wiring boundary. Earlier prep/harness work (slice-6 sanitizer
-hardening, Gate 1 repo-only benchmark scripts + selftest and comparison
-assembler, M4 memory-v2 harness) remains harness only, NOT product
-memory-v2 wiring. No actual OnePlus device measurements exist; the OnePlus
-12R and MacBook Air M1 are validation targets only. Doc-only commits after
-the baseline do not change these numbers. This document states the agreed product vision and the
+(512/512, selftest included). CI and CI macOS + Linux are green on that
+head (runs 45317499561 and 45317499508); Android APK was explicitly
+dispatched (run 45317767361). Gate 2 slices 1-3 (agent safety foundation,
+hardening, persistence, orchestrator) are pure, isolated modules with NO
+product wiring, NO tools registered beyond test fixtures and NO UI or IPC;
+slice 2 persists the audit log and slice 3 adds the orchestrator (see 3d),
+still with no wiring. The M1 slice 6 diagnostics were independently
+re-audited on 24 Nov 2026 and hardened (strict errno allowlist and strict
+status normalization in classifyFailure itself; every diagnostic path was
+verified to pass through the shared fault() sanitizer). Earlier
+prep/harness work (slice-6 sanitizer hardening, Gate 1 repo-only benchmark
+scripts + selftest and comparison assembler, M4 memory-v2 harness) remains
+harness only, NOT product memory-v2 wiring. No actual OnePlus device
+measurements exist; the OnePlus 12R and MacBook Air M1 are validation
+targets only. Doc-only commits after the baseline do not change these
+numbers. This document states the agreed product vision and the
 verified current state. No decision here is accepted until Ninad approves
 it. Every feature is marked **implemented** (verified against the
 current baseline named in the Status header) or **planned** (not built; do not assume otherwise).
@@ -193,9 +196,9 @@ claims to literally experience emotions.
 - Update policy that never auto-installs unsigned builds; update modes
   disabled/auto/manual-download (`src/update-policy.js`, `src/updater.js`).
 - Health check and onboarding interview (`src/health.js`, `src/onboarding.js`).
-- 497 passing unit/integration tests (258 baseline; model selection +18, conversation history +17, optional key storage +13, M1 provider registry/task router/cloud gate +25, M1 per-ask routing integration +18, M1 review fixes +18, M1 hardware profiles +12, M1 provider status +11, M1 provider contract tests +18, M1 provider fault diagnostics +18, fault-detail sanitization review fix +3, offline memory-v2 retrieval harness +12, memory-v2 harness slice 4 fold fix and bridges +5, memory-v2 store contract tests +9, Gate 2 agent safety foundation +35, Gate 2 security hardening +8, Gate 2 persistence +17); CI, CI macOS + Linux and Android APK all green on the
-  current baseline `e2eac24` (runs 45315064899, 45315064806 and
-  45315072733);
+- 512 passing unit/integration tests (258 baseline; model selection +18, conversation history +17, optional key storage +13, M1 provider registry/task router/cloud gate +25, M1 per-ask routing integration +18, M1 review fixes +18, M1 hardware profiles +12, M1 provider status +11, M1 provider contract tests +18, M1 provider fault diagnostics +18, fault-detail sanitization review fix +3, offline memory-v2 retrieval harness +12, memory-v2 harness slice 4 fold fix and bridges +5, memory-v2 store contract tests +9, Gate 2 agent safety foundation +35, Gate 2 security hardening +8, Gate 2 persistence +17, M1 diagnostics hardening +2, Gate 2 orchestrator +13); CI and CI macOS + Linux green on the
+  current baseline `e0fa026` (runs 45317499561 and 45317499508; Android
+  APK explicitly dispatched, run 45317767361);
   public Android debug-APK preview release.
 
 ## 3b. Gate 2 slice 1 (implemented as pure modules, 24 Nov 2026)
@@ -257,6 +260,41 @@ decision for the wiring slice. Tests: 17 new cases covering the additive
 migration from an old-schema database, restart round-trips, rollback,
 tamper detection with evidence preserved, duplicate ids, backup/restore,
 and archive-then-prune.
+
+## 3d. Gate 2 slice 3 (implemented as the orchestrator, 24 Nov 2026)
+
+A bounded, declarative run loop over a pre-declared plan (plan, act,
+observe, verify, recover), composed from the slice 1/2 pure modules.
+Still NO product wiring: no UI, no IPC, no tool adapters, no model call,
+and no free-form agent loop. Every step names one registered tool, exact
+args, and its own executor closure, so the module stays pure and the
+wiring slice binds real tools later. Fail-closed semantics: the emergency
+stop is checked before every step and pauses the run, and only an explicit
+resume continues (refused while the stop is active); a step flagged
+needsApproval never executes on its own, the run pauses in
+awaiting_approval, and the approval the caller hands in on resume must be
+one the user's explicit yes created outside the orchestrator (the
+orchestrator never creates an approval), verified against the exact tool
+and args and consumed immediately before execution, once; authorization is
+re-checked before every attempt and a denied authorization aborts the run
+and is never skippable, with the denial audited separately from the
+terminal run.aborted entry; an uninterpretable step result or a throwing
+step is a failure, not a success or a crash; bounded retries (0-3)
+re-execute under fresh authorization, and an approval-gated step that
+already consumed its approval goes back to the approval pause instead of
+re-running on a used approval; per-step recovery is abort (default) or
+skip; every transition is audited with bounded detail objects matching the
+audit sanitizer's schema; one active run at a time, released when the run
+finishes. Documented limits: run state is in-memory only in this slice
+(there is no persistence surface and nothing resumes after a restart; the
+wiring layer will call agent-persistence around this module), and per-step
+wall-clock budgets are the wiring slice's job because steps here are
+synchronous. Tests: 13 new cases covering the full audit sequence, plan
+validation, denial handling, approval pause/resume with
+wrong/fabricated/expired/used approvals refused, consumed approvals never
+reused on retry, stop pause and explicit resume, bounded retries, skip vs
+abort recovery, malformed results failing closed, verify hooks, and the
+single-active-run rule.
 
 ## 4. Planned, NOT implemented
 

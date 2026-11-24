@@ -1,20 +1,23 @@
 # CompanionDesk Implementation Roadmap
 
 Status: M0 and M1 are COMPLETE on main (verified 24 Nov 2026; current
-baseline `e2eac24`, 497 passing tests, Fo-reported from a full `npm test`
-run at that head (497/497, selftest included). All three main-branch CI
-workflows are green on that head: CI (run 45315064899), CI macOS + Linux
-(run 45315064806), Android APK (run 45315072733, explicitly dispatched).
-Gate 2 slice 1 (agent safety foundation) and its hardening are pure,
-isolated modules with NO product wiring, NO tools registered beyond test
-fixtures and NO UI or IPC. Gate 2 slice 2 (persistence) is additive-only
-storage, same boundary: six CREATE TABLE IF NOT EXISTS tables, a narrow
-storage adapter, fail-closed startup verification, pending approvals
-invalidated on restart, no auto-resume, archive-then-prune retention.
-Earlier prep/harness work (slice-6 sanitizer hardening, Gate 1 repo-only
-benchmark scripts + selftest and comparison assembler, M4 memory-v2
-harness) remains harness only, NOT product memory-v2 wiring. No actual
-OnePlus device measurements exist). Supersedes `docs/COMPANIONDESK_ROADMAP.md` and
+baseline `e0fa026`, 512 passing tests, Fo-reported from a full `npm test`
+run at that head (512/512, selftest included). CI and CI macOS + Linux
+green on that head (runs 45317499561, 45317499508); Android APK explicitly
+dispatched (run 45317767361). Gate 2 slice 1 (agent safety foundation) and
+its hardening are pure, isolated modules with NO product wiring, NO tools
+registered beyond test fixtures and NO UI or IPC. Slice 2 (persistence) is
+additive-only storage, same boundary. Slice 3 (orchestrator) is a pure
+declarative run loop over the slice 1/2 modules with approval pauses,
+stop pauses, bounded retries, skip/abort recovery and a full audit trail,
+still with no wiring and in-memory run state only. The M1 slice 6
+diagnostics were independently re-audited and hardened on 24 Nov 2026
+(strict errno allowlist and strict status normalization in
+classifyFailure; every diagnostic path verified to pass through the shared
+fault() sanitizer). Earlier prep/harness work (slice-6 sanitizer
+hardening, Gate 1 repo-only benchmark scripts + selftest and comparison
+assembler, M4 memory-v2 harness) remains harness only, NOT product
+memory-v2 wiring. No actual OnePlus device measurements exist). Supersedes `docs/COMPANIONDESK_ROADMAP.md` and
 `docs/FEATURE_GAP.md` once approved; those files stay until then. Phases
 are dependency-ordered with explicit gates. Phases M2-M8 below are planned
 unless stated as implemented; M0 and M1 are the only implemented phases.
@@ -252,10 +255,23 @@ the anchored tail stays locally verifiable). Documented limits: file-level
 durability is the same debounced flush every table uses, and recovery from
 a detected integrity failure is an explicit decision left to the wiring
 slice. The 3b audit limitation is now closed for locally stored history by
-the persisted anchor. Remaining Gate 2 work: the orchestrator (plan, act,
-observe, verify, recover), the first harmless tools (notifications,
-reminders, ICS events; NO shell or filesystem tools in this phase), the
-prompt-injection corpus before any grant widening, and UI/IPC wiring.
+the persisted anchor. SLICE 3 (orchestrator) is IMPLEMENTED on main (24 Nov 2026, `e0fa026`),
+still with NO product wiring: a pure, declarative run loop over the
+slice 1/2 modules with no free-form agent loop and no model call. Every
+step names one registered tool, exact args, and its own executor closure.
+Fail-closed semantics as documented in the blueprint 3d section: stop
+pause with explicit resume only, approval pauses where the orchestrator
+never creates an approval itself and consumes a user-created one exactly
+once before execution, denied authorization aborting unskippably,
+malformed results and throwing steps failing closed, bounded retries
+(0-3) with used approvals never reused, skip/abort recovery, and a full
+transition audit. Documented limits: in-memory run state only (no
+persistence surface, nothing resumes after restart) and synchronous steps
+(per-step wall-clock budgets belong to the wiring slice). Remaining Gate
+2 work: the first harmless tools (notifications, reminders, ICS events;
+NO shell or filesystem tools in this phase), the prompt-injection corpus
+before any grant widening, and UI/IPC wiring (which will bind the
+persistence and orchestrator surfaces together).
 Acceptance: policy
 engine refuses ungranted calls (tested); payments, purchases, destructive
 deletion, and legal or binding submissions are denied unless fresh,
