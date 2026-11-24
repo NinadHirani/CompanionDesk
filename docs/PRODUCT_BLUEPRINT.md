@@ -572,8 +572,68 @@ at the first failure so later records stay unread for a later drain; the
 batch is bounded (default 10, only lowerable); malformed records are
 refused unread (record_invalid) before reaching the sink. 16 tests cover
 the real-desk normal paths and stub-desk hostile paths. The sink wiring
-into the app's real surface is the next, separately reviewed step;
-scheduling and file output remain unwired gates after it.
+is verified blocked by design (3j.1); scheduling and file output remain
+unwired gates.
+
+## 3j.1. Delivery sink wiring: verified blocked by design (24 Nov 2026)
+
+The delivery gate asked whether the pure bridge can be wired to the app's
+real user-visible in-app notification surface without weakening guarantees.
+Answer: no, and the blocker is structural, not incidental. Verified on main
+at `8f67138` by direct reads:
+
+- The renderer is contractually read-only: RENDERER_CHANNELS is exactly six
+  read channels and validatePreloadAllowlist proves the preload surface
+  equals that set. There is no renderer-to-main path at all, so no display
+  acknowledgement can reach main. Adding one would make a persisted state
+  change (a markRead on renderer input) triggerable by the renderer, which
+  widens the renderer surface exactly as the standing boundary forbids, and
+  would require amending the read-only contract first: a consequential
+  security decision that goes in front of review before any renderer-facing
+  change.
+- Even with such a channel, an untrusted renderer's acknowledgement is not a
+  defensible display acknowledgement under the contract's own security model.
+- The current in-app surface (renderer/agent-panel.js) displays only a
+  queued COUNT read directly from the agent-notifications desk through
+  notifications:read; main's listNotifications reader returns the desk's own
+  list. There is no per-record display surface and no separate display
+  store, so nothing today can accept and display a delivered record, and
+  wiring delivery would either be a no-op against the same source or would
+  flip read flags nothing has displayed.
+
+The bridge therefore stays UNWIRED (no createDeliveryBridge call anywhere in
+main, preload or surface; verified). Faking a main-side acknowledgement was
+rejected: the desk queue is already the read channel's source, so "accepted
+into a store the UI renders" would describe a surface that does not exist,
+and would mark records read that no human has seen.
+
+Design needed to unblock, in review order:
+
+1. Renderer display, read-only, no contract change: agent-panel renders the
+   notification records themselves (id, title, body, priority) by polling
+   the existing notifications:read channel. Zero new authority; UI work
+   only, its own reviewed slice.
+2. A main-owned bounded display store as the delivery target, separate from
+   the desk queue, served through the same read-only channel pattern
+   (additive read data, no new channels, no new renderer methods).
+3. The acknowledgement decision, which belongs to the user because it
+   defines what "displayed" means: (a) accept main-side validated store
+   acceptance as the acknowledgement, defensible once a real display store
+   exists because main observes its own store accepting a bounded, validated
+   record that the renderer then renders on its next poll; or (b) a narrow
+   renderer-to-main ack channel carrying only a record id, validated against
+   a main-owned pending-delivery ledger, which requires amending the
+   read-only contract first and whose verdict is only as trustworthy as the
+   renderer (documented as at-least-once, with loss bounded to re-delivery
+   and never integrity). Either choice is an explicit, separately reviewed
+   gate; neither is implemented here.
+
+No source or test changes in this gate: the adversarial classes a wiring
+would introduce (renderer-supplied payloads, ack verdicts, duplicate
+delivery into a live surface) do not exist in an unwired state, and the
+read-only surface the blocker rests on is already pinned by the existing
+contract tests (allowlist equality, strict validation, refusals).
+Scheduling and file output remain unwired gates.
 
 ## 4. Planned, NOT implemented
 
