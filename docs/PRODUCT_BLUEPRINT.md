@@ -1,10 +1,9 @@
 # CompanionDesk Product Blueprint
 
 Status: **proposed** in direction; M0 and M1 are COMPLETE on main, verified
-24 Nov 2026. The current verified baseline is main `9addfdb` with 614
-passing tests, Fo-reported from a full `npm test` run at that head
-(614/614, selftest included). CI, CI macOS + Linux and Android APK are all
-green on that head (runs 45323544121, 45323543975 and 45323765018). Gate 2 slices 1-6 (agent safety foundation,
+24 Nov 2026. The current verified baseline is main `d499347` with 622
+passing tests, Fo-reported from a full `npm test` and selftest run at that
+head (622/622, selftest included). Gate 2 slices 1-6 (agent safety foundation,
 hardening, persistence, orchestrator, first harmless tools, injection
 corpus, IPC contract) are pure, isolated modules with NO product wiring,
 NO UI and NO IPC beyond the slice 6 CONTRACT module, which is itself
@@ -206,7 +205,7 @@ claims to literally experience emotions.
 - Update policy that never auto-installs unsigned builds; update modes
   disabled/auto/manual-download (`src/update-policy.js`, `src/updater.js`).
 - Health check and onboarding interview (`src/health.js`, `src/onboarding.js`).
-- 614 passing unit/integration tests (258 baseline; model selection +18, conversation history +17, optional key storage +13, M1 provider registry/task router/cloud gate +25, M1 per-ask routing integration +18, M1 review fixes +18, M1 hardware profiles +12, M1 provider status +11, M1 provider contract tests +18, M1 provider fault diagnostics +18, fault-detail sanitization review fix +3, offline memory-v2 retrieval harness +12, memory-v2 harness slice 4 fold fix and bridges +5, memory-v2 store contract tests +9, Gate 2 agent safety foundation +35, Gate 2 security hardening +8, Gate 2 persistence +17, M1 diagnostics hardening +2, Gate 2 orchestrator +13, orchestrator audit hardening +13, first harmless tools +18, ICS
+- 622 passing unit/integration tests (258 baseline; model selection +18, conversation history +17, optional key storage +13, M1 provider registry/task router/cloud gate +25, M1 per-ask routing integration +18, M1 review fixes +18, M1 hardware profiles +12, M1 provider status +11, M1 provider contract tests +18, M1 provider fault diagnostics +18, fault-detail sanitization review fix +3, offline memory-v2 retrieval harness +12, memory-v2 harness slice 4 fold fix and bridges +5, memory-v2 store contract tests +9, Gate 2 agent safety foundation +35, Gate 2 security hardening +8, Gate 2 persistence +17, M1 diagnostics hardening +2, Gate 2 orchestrator +13, orchestrator audit hardening +13, first harmless tools +18, ICS
   hardening +5, injection corpus +27, IPC contract +5, IPC contract review hardening +11, agent surface
   wiring +21); CI, CI macOS + Linux and Android APK all green on the
   current baseline `9addfdb` (runs 45323544121, 45323543975, 45323765018);
@@ -437,6 +436,64 @@ validation-before-read, bounded shaping, caps, refusal-on-throw,
 dispatcher registration, fail-closed construction) and the shipped
 preload/renderer structure (inlined-list extraction, main-only absence,
 invoke-only, text-only panel). Full suite 614/614.
+
+## 3i. Gate 2 persistence wiring slice P1 (24 Nov 2026): the two
+harmless-tool desks, a versioned schema stamp, and bounded loads
+
+The slice-2 persistence core (audit chain and anchor, grants, approvals,
+emergency stop, agent runs; fail-closed load, atomic writes, audited pruning,
+no automatic run resumption) was already implemented and reviewed. Slice P1
+completes the state inventory the milestone asked for and adds the guarantees
+it names:
+
+- **Notifications and reminders persist.** The two desks gain bounded
+  `exportAll()` and strict, all-or-nothing `hydrate()`: every record must
+  match the exact shape `create()` produces (same caps: title 120, body or
+  notes 500, priority enum, `ntf-`/`rem-` id forms), ids must be unique, an
+  overflow beyond the 100-record caps is refused whole and never truncated,
+  and the id sequence resumes where persistence left off so ids cannot
+  collide after a restart. A past `dueAt` is accepted on hydrate (history is
+  restored, not re-validated against the future-only create rule).
+- **Versioned schema.** `agent_schema` holds one stamp, key `version`. A
+  fresh or unversioned store is stamped `1` additively; a store written by a
+  NEWER build is never read, downgraded, repaired or hydrated by an older
+  one: load fails closed before any other read, writes refuse, and no row is
+  deleted or modified. Migration so far is only additive table creation.
+- **Bounded serialization.** `load()` refuses any persisted audit detail
+  blob larger than 4096 characters before parsing it (fail closed, the row
+  named, nothing deleted); the sanitizer already bounds every entry, and
+  run summaries are capped at 300 characters at write.
+- **Secret exclusion.** The persistence layer writes only its declared
+  columns and hydrates only the desks' declared fields, so unknown fields
+  are dropped rather than round-tripped; secure key material lives in the
+  existing safeStorage/keychain store and never enters this database. A test
+  plants a token-shaped unknown field and proves it appears in no persisted
+  row of any agent table.
+- **Durability is acknowledged.** `appendAudit()` persists the entry and the
+  anchor in one transaction before reporting success, so a caller may treat
+  the transition as committed only after that acknowledgment. The new
+  `durableAudit()` wrapper binds this to the real log for the orchestrator
+  (next slice): `append()` returns success only after persist, reports
+  persist failures as failures (the entry stays in memory for the next
+  save to converge; it is never a validation result), and passes validation
+  results through untouched.
+- **Fail-closed startup and no auto-resume are unchanged:** corruption,
+  tampering, gaps, invalid rows or an unanchored tail hydrate nothing, refuse
+  every write, and delete or repair nothing; a `running` agent_runs row stays
+  exactly as it was and no resume API exists.
+- **Renderer stays read-only.** This slice adds no IPC surface: persistence
+  is main-process-only by construction; wiring it into main.js (construct,
+  load at startup, durable audit for the orchestrator, save before quit,
+  integrity surfaced through the read-only status) is the next, separately
+  reviewed slice P2.
+
+8 tests cover these classes: desk round-trips across a double restart with
+id continuity, unknown-field (secret) exclusion scanned across every agent
+table, an oversized detail blob failing closed with the row preserved,
+schema stamping (fresh, additive, newer-refused), append durability without
+an explicit save, convergence after a persist failure, hydrate overflow and
+malformed-record refusals, and the durable wrapper's acknowledge/report
+semantics. Full suite 622/622.
 
 ## 4. Planned, NOT implemented
 

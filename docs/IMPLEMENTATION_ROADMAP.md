@@ -1,8 +1,8 @@
 # CompanionDesk Implementation Roadmap
 
 Status: M0 and M1 are COMPLETE on main (verified 24 Nov 2026; current
-baseline `9addfdb`, 614 passing tests, Fo-reported from a full `npm test`
-run at that head (614/614, selftest included). CI, CI macOS + Linux and
+baseline `d499347`, 622 passing tests, Fo-reported from a full `npm test`
+run at that head (622/622, selftest included). CI, CI macOS + Linux and
 Android APK green on that head (runs 45323544121, 45323543975,
 45323765018). Gate 2 slice 1 (agent safety
 foundation) and its hardening are pure, isolated modules with NO product

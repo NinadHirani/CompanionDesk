@@ -74,8 +74,13 @@ propose-then-confirm principle is unchanged.
     rendering) and is now wired read-only end to end (section 3h: agent
     surface in main, one literal handler registration per channel, the
     preload and a text-only renderer panel; writes unreachable from the
-    renderer; baseline 9addfdb, 614 tests). Persistence wiring
-    (hydrate/write) stays a separate, explicitly-reviewed gate.
+    renderer; baseline 9addfdb, 614 tests). Persistence slice P1 is now
+    implemented (blueprint section 3i: notifications and reminders persist
+    with strict all-or-nothing hydrate, a versioned schema stamp, bounded
+    loads, secret exclusion, acknowledged append durability, 8 new tests,
+    622 total). Main-process wiring of the persistence layer (startup load,
+    durable audit for the orchestrator, save before quit) is the next
+    explicitly-reviewed gate.
 
 Risks unchanged: per-OS permissions (Accessibility, Screen Recording,
 Android foreground-service types) must fail closed; privacy expectations are
