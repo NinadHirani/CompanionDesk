@@ -21,8 +21,10 @@
 //  3. An OS permission may be requested only as part of an explicit user
 //     action on a capability about to be used - never at startup, never
 //     preemptively, never in bulk.
-//  4. Revocation is immediate and per app; the audit log records grants,
-//     revocations and approvals with ids and scopes only.
+//  4. Revocation is immediate and per app; an explicit enable is
+//     reversible (disabling revokes that capability's grants first); the
+//     audit log records grants, revocations, disables and approvals with
+//     ids and scopes only, bounded in memory.
 //  5. UNRESTRICTED_DEVICE_ACCESS is a constant false: the architecture
 //     states in code that total access is not a thing the app can have.
 
@@ -32,6 +34,9 @@
 })(typeof self !== 'undefined' ? self : this, function () {
   const UNRESTRICTED_DEVICE_ACCESS = false;
   const MAX_APPS = 200;
+  const MAX_SCOPES = 32;
+  const MAX_SCOPE_LEN = 120;
+  const MAX_AUDIT = 1000; // in-memory ring: the durable audit trail is the persistence layer's job
 
   // The catalog. osPermission is what the OPERATING SYSTEM will ask for;
   // the app can only surface that ask at the right moment. ui_automation
@@ -66,6 +71,7 @@
 
     function auditEntry(action, appId, cap, extra) {
       audit.push(Object.freeze({ action, appId, capability: cap, at: t(), ...(extra || {}) }));
+      if (audit.length > MAX_AUDIT) audit.splice(0, audit.length - MAX_AUDIT);
     }
 
     function list() {
@@ -92,6 +98,23 @@
       return { ok: true, osPermission: def.osPermission, class: def.class };
     }
 
+    // The inverse of enable. Requires a user action; immediately revokes
+    // every grant of the capability across apps (fail-safe: access dies
+    // first), then clears the enable. Capabilities that never needed an
+    // explicit enable are simply not_enabled here.
+    function disable(cap, { userInitiated } = {}) {
+      if (!CATALOG[cap]) return { ok: false, reason: 'unknown_capability' };
+      if (!supports(cap, platform)) return { ok: false, reason: 'unsupported_platform' };
+      if (userInitiated !== true) return { ok: false, reason: 'requires_user_action' };
+      if (!enabled.has(cap)) return { ok: false, reason: 'not_enabled' };
+      for (const [appId, caps] of grants) {
+        if (caps.has(cap)) revoke(appId, cap);
+      }
+      enabled.delete(cap);
+      auditEntry('device_access.disabled', null, cap, {});
+      return { ok: true };
+    }
+
     // A grant covers one capability for one app id with explicit scopes.
     function grant(appId, cap, { scopes = [], userInitiated } = {}) {
       if (!CATALOG[cap]) return { ok: false, reason: 'unknown_capability' };
@@ -102,7 +125,11 @@
       if (def.explicitEnable && !enabled.has(cap)) return { ok: false, reason: 'capability_not_enabled' };
       if (!Array.isArray(scopes) || scopes.length === 0) return { ok: false, reason: 'no_scopes' };
       if (new Set(scopes).size !== scopes.length) return { ok: false, reason: 'duplicate_scope' };
-      if (grants.size >= MAX_APPS) return { ok: false, reason: 'too_many_apps' };
+      if (scopes.length > MAX_SCOPES) return { ok: false, reason: 'too_many_scopes' };
+      for (const s of scopes) {
+        if (typeof s !== 'string' || !s.trim() || s.length > MAX_SCOPE_LEN) return { ok: false, reason: 'scope_invalid' };
+      }
+      if (!grants.has(appId) && grants.size >= MAX_APPS) return { ok: false, reason: 'too_many_apps' };
       if (!grants.has(appId)) grants.set(appId, new Map());
       const caps = grants.get(appId);
       if (!caps.has(cap)) caps.set(cap, { scopes: [], grantedAt: t() });
@@ -158,8 +185,8 @@
       return { ok: true, osPermission: def.osPermission };
     }
 
-    return Object.freeze({ enable, grant, revoke, revokeApp, authorize, osPermissionRequest, list, listAudit, platform: () => platform });
+    return Object.freeze({ enable, disable, grant, revoke, revokeApp, authorize, osPermissionRequest, list, listAudit, platform: () => platform });
   }
 
-  return { createDeviceAccessCentre, CATALOG, supports, APPROVAL_CLASSES, UNRESTRICTED_DEVICE_ACCESS };
+  return { createDeviceAccessCentre, CATALOG, supports, APPROVAL_CLASSES, UNRESTRICTED_DEVICE_ACCESS, MAX_AUDIT };
 });

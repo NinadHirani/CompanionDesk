@@ -20,6 +20,12 @@ gated, disabled, or unmeasured; every line matches the roadmap evidence.
   roving focus, question changes are announced to screen readers, and
   "Skip the rest" needs a confirming second click (it ends the interview
   for good).
+- Device Access Centre hardening: an explicit enable is now reversible
+  (disable requires a user action and revokes that capability's grants
+  first), grant scopes are validated as typed, non-empty, length- and
+  count-capped strings, the audit log is bounded in memory, and the
+  app-count bound no longer refuses a re-grant to an app already on the
+  books.
 - Proactive scheduler fixes: editing a schedule's due time now clears the
   stale quiet-hours deferral (a moved due no longer fires at the old
   deferred moment), and a failed audit append or save now rolls back
