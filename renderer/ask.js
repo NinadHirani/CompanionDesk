@@ -463,8 +463,11 @@
           createdId = null;
           const del = await api.chat_delete({ id: emptyId });
           if (del.ok && currentId === emptyId) { currentId = null; await refreshList(null); }
-          input.value = question;
         }
+        // Every failure path hands the question back for a retry: a
+        // declined ask must not eat the typed question, whether its
+        // thread was newly created or one the user already had.
+        if (!input.value.trim()) input.value = question;
       });
     } else {
       const cancelled = isAskCancel(res.error);

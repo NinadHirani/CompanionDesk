@@ -432,6 +432,17 @@ test('a reload mid-ask leaves an empty thread that the boot sweep removes once',
   assert.ok(s.includes('let bootSwept = false;'), 'the boot guard is separate from the boot-landing flag');
 });
 
+test('a declined consent ask hands the question back on every path', () => {
+  const s = read('renderer/ask.js');
+  const i = s.indexOf("stayBtn.addEventListener('click'");
+  assert.ok(i > 0, 'the decline handler exists');
+  const chunk = s.slice(i, i + 1400);
+  const created = chunk.indexOf('if (createdId)');
+  const restore = chunk.indexOf('if (!input.value.trim()) input.value = question;');
+  assert.ok(restore > -1, 'the decline restores the question for a retry');
+  assert.ok(created > -1 && restore > created, 'the restore is not gated on a newly created thread');
+});
+
 test('a failed thread creation at ask start is surfaced, not mislabeled as single-shot', () => {
   const s = read('renderer/ask.js');
   assert.ok(s.includes('let createFailed = false;'), 'creation failure is tracked separately');
