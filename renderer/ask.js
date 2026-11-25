@@ -18,9 +18,12 @@
   const newChatBtn = document.getElementById('ask-newchat');
   const renameInput = document.getElementById('ask-rename-input');
   let currentId = null;
-  // An unresolved cloud-consent prompt: its card and the ask's own
-  // thread, so a switch that detaches the card can clean the thread up.
-  let consentPending = null;
+  // Unresolved cloud-consent prompts: each row's card and the ask's
+  // own thread, so a switch that detaches a card can clean its thread
+  // up. A list, not a single slot: a second ask can render a new
+  // consent row while an earlier one is still unanswered, and the
+  // earlier one must not lose its cleanup when the newer one lands.
+  const pendingConsents = [];
   const titles = new Map();
 
   // Chat order: messages append oldest-first so the thread reads like a
@@ -132,19 +135,18 @@
   async function loadSelected() {
     currentId = convSel.value ? Number(convSel.value) : null;
     log.innerHTML = '';
-    // A consent prompt left behind by a switch is dead: clearing the log
-    // detaches its card and it can no longer be answered. The same
-    // checked rule as the failed ask applies: only a thread with no
-    // messages is removed, and only the ask's own thread.
-    if (consentPending && !consentPending.entry.isConnected) {
-      const dead = consentPending;
-      consentPending = null;
-      if (dead.threadId) {
-        const msgs = await api.chat_messages({ id: dead.threadId });
-        if (msgs.ok && Array.isArray(msgs.messages) && msgs.messages.length === 0) {
-          const del = await api.chat_delete({ id: dead.threadId });
-          if (del.ok) await refreshList(currentId);
-        }
+    // Consent prompts left behind by a switch are dead: clearing the
+    // log detaches their cards and they can no longer be answered. The
+    // same checked rule as the failed ask applies: only a thread with
+    // no messages is removed, and only the ask's own thread.
+    for (const dead of [...pendingConsents]) {
+      if (dead.entry.isConnected) continue;
+      pendingConsents.splice(pendingConsents.indexOf(dead), 1);
+      if (!dead.threadId) continue;
+      const msgs = await api.chat_messages({ id: dead.threadId });
+      if (msgs.ok && Array.isArray(msgs.messages) && msgs.messages.length === 0) {
+        const del = await api.chat_delete({ id: dead.threadId });
+        if (del.ok) await refreshList(currentId);
       }
     }
     if (!currentId) { updateSub(null); return; }
@@ -302,9 +304,11 @@
       // The prompt survives only while its card is on screen: switching
       // conversations detaches the row with no way back, so the ask's
       // own thread must not linger empty behind it.
-      consentPending = { entry, threadId: createdId || null };
+      const consentItem = { entry, threadId: askThreadId || null };
+      pendingConsents.push(consentItem);
       sendBtn.addEventListener('click', async () => {
-        consentPending = null;
+        const ci = pendingConsents.indexOf(consentItem);
+        if (ci >= 0) pendingConsents.splice(ci, 1);
         sendBtn.disabled = true;
         stayBtn.disabled = true;
         row.remove();
@@ -371,7 +375,8 @@
         }
       });
       stayBtn.addEventListener('click', async () => {
-        consentPending = null;
+        const ci = pendingConsents.indexOf(consentItem);
+        if (ci >= 0) pendingConsents.splice(ci, 1);
         // Decline: the question stays on this device and the local failure
         // is what gets reported. No cloud request is ever made for it.
         row.remove();

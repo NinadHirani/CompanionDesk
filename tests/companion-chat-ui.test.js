@@ -298,17 +298,17 @@ test('streamed answers are announced to screen readers via a live region', () =>
 
 test('an abandoned cloud-consent prompt cleans up its empty thread on switch', () => {
   const s = read('renderer/ask.js');
-  assert.ok(s.includes('let consentPending = null;'), 'the unresolved consent is tracked');
-  assert.ok(s.includes('consentPending = { entry, threadId: createdId || null };'), 'the consent row registers its card and the ask thread');
+  assert.ok(s.includes('const pendingConsents = [];'), 'unresolved consents are tracked');
+  assert.ok(s.includes('const consentItem = { entry, threadId: askThreadId || null };'), 'the consent row registers its card and the ask thread');
+  assert.ok(s.includes('pendingConsents.push(consentItem);'), 'the registration lands in the tracked list');
   const ls = s.indexOf('async function loadSelected()');
   const chunk = s.slice(ls, ls + 1000);
-  assert.ok(chunk.includes('!consentPending.entry.isConnected'), 'the switch is detected by the card leaving the page');
+  assert.ok(s.includes('if (dead.entry.isConnected) continue;'), 'the switch is detected by the card leaving the page');
   assert.ok(chunk.includes('msgs.messages.length === 0'), 'the thread is checked empty, never assumed');
   assert.ok(chunk.includes('api.chat_delete({ id: dead.threadId })'), 'only the ask own thread is removed');
-  assert.equal((s.match(/consentPending = null;/g) || []).length, 4, 'declaration plus clears on switch, send and stay');
   const send = s.indexOf("sendBtn.addEventListener('click'");
   const stay = s.indexOf("stayBtn.addEventListener('click'");
-  assert.ok(send > 0 && stay > send, 'both consent buttons clear the tracker');
+  assert.ok(send > 0 && stay > send, 'both consent buttons retire their own consent');
 });
 
 test('a failed consented cloud ask cleans up its empty thread in place', () => {
@@ -321,4 +321,18 @@ test('a failed consented cloud ask cleans up its empty thread in place', () => {
   assert.equal((chunk.match(/await cleanupEmptyAsk\(\)/g) || []).length, 3, 'the throw and both failure branches clean up');
   assert.ok(chunk.includes('msgs.messages.length === 0'), 'the thread is checked empty, never assumed');
   assert.ok(chunk.includes('api.chat_delete({ id: emptyId })'), 'only the ask own thread is removed');
+});
+
+test('every abandoned consent prompt is tracked, not just the latest', () => {
+  const s = read('renderer/ask.js');
+  assert.ok(s.includes('const pendingConsents = [];'), 'consents are tracked as a list');
+  assert.ok(s.includes('const consentItem = { entry, threadId: askThreadId || null };') && s.includes('pendingConsents.push(consentItem);'), 'each consent registers its card and its ask thread');
+  const ls = s.indexOf('async function loadSelected()');
+  const chunk = s.slice(ls, ls + 1400);
+  assert.ok(chunk.includes('[...pendingConsents]'), 'a switch sweeps every tracked consent');
+  assert.ok(chunk.includes('pendingConsents.splice(pendingConsents.indexOf(dead), 1);'), 'swept consents leave the list');
+  const send = s.indexOf("sendBtn.addEventListener('click'");
+  const stay = s.indexOf("stayBtn.addEventListener('click'");
+  const splices = (s.match(/pendingConsents\.indexOf\(consentItem\)/g) || []).length;
+  assert.equal(splices, 2, 'send and stay each retire their own consent');
 });
