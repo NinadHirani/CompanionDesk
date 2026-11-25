@@ -36,6 +36,7 @@
     const at = String(now || '');
     if (!at) return { ok: false, error: 'bad_request' };
     db.run('INSERT INTO conversations (title, created_at, updated_at) VALUES (?, ?, ?)', [t, at, at]);
+    db.persist();
     return { ok: true, conversation: { id: db.lastId(), title: t, created_at: at, updated_at: at } };
   }
 
@@ -82,6 +83,7 @@
       if (title) db.run('UPDATE conversations SET title = ? WHERE id = ?', [title, id]);
     }
     db.run('UPDATE conversations SET updated_at = ? WHERE id = ?', [now, id]);
+    db.persist();
     return { ok: true, id: db.lastId(), title };
   }
 
@@ -91,6 +93,7 @@
     const t = cleanTitle(title);
     if (!t) return { ok: false, error: 'invalid_title' };
     db.run('UPDATE conversations SET title = ? WHERE id = ?', [t, id]);
+    db.persist();
     return { ok: true, id, title: t };
   }
 
@@ -98,6 +101,7 @@
     if (!Number.isInteger(id)) return { ok: false, error: 'bad_request' };
     db.run('DELETE FROM chat_messages WHERE conversation_id = ?', [id]);
     db.run('DELETE FROM conversations WHERE id = ?', [id]);
+    db.persist();
     return { ok: true, deleted: true };
   }
 
