@@ -5,8 +5,12 @@ defines no M9; per its numbering note, a coordinated-release phase becomes M9
 only when Ninad explicitly defines it. GROUNDWORK 25 Nov 2026: proposed items
 1 and 5 are landed without defining the phase - a CHANGELOG.md and
 `tests/first-run-defaults.test.js` (the first-run privacy-defaults acceptance
-pin). Nothing else here is implemented, scheduled, wired, or promised; no
-signing, no distribution, no update feed.
+pin), and the first-run interview now closes with a privacy step that
+explains the standing defaults and applies nothing (src/onboarding.js,
+question 7 of 7; a no-auto-enable test pins that no interview answer can
+set anything beyond name, tone and brevity). Nothing else here is
+implemented, scheduled, wired, or promised; no signing, no distribution,
+no update feed.
 
 ## What the phase would be
 

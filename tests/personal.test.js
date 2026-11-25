@@ -77,7 +77,7 @@ test('suggestions can be switched off, and are not repeated once pending', async
 test('onboarding answers land in memory and settings; skipping and finishing work', async () => {
   const c = await ctx();
   assert.equal(P.getOnboarding(c.db).done, false);
-  assert.equal(P.getOnboarding(c.db).questions.length, 6);
+  assert.equal(P.getOnboarding(c.db).questions.length, 7);
   assert.deepEqual(P.answerOnboarding(c, { id: 'name', answer: 'Asha' }), { ok: true, applied: 'settings' });
   assert.deepEqual(P.answerOnboarding(c, { id: 'goal', answer: 'a 9 in Quantum Computing' }), { ok: true, applied: 'memory' });
   assert.deepEqual(P.answerOnboarding(c, { id: 'hours', answer: '' }), { ok: true, applied: 'skipped' });

@@ -2,7 +2,10 @@
 
 // First-run interview. Fixed questions, so it works with no model at all.
 // Every answer is optional. What the student says becomes a plain bullet in
-// their me.md or a setting; nothing is inferred.
+// their me.md or a setting; nothing is inferred. The interview closes with
+// a privacy step that EXPLAINS the standing defaults and applies nothing:
+// answering it can never enable the cloud, voice, wake word, screen
+// capture, proactive delivery or anything else.
 
 const { cleanLine } = require('./settings');
 const { sanitizeBullet } = require('./memory');
@@ -28,6 +31,13 @@ const QUESTIONS = Object.freeze([
   { id: 'best', kind: 'choice', options: Object.keys(BEST_TIME), prompt: 'When do you work best?' },
   { id: 'outside', kind: 'text', prompt: 'Anything with a deadline outside class? Applications, hackathons, exams you registered for. Name them now; you can add the dates later.' },
   { id: 'style', kind: 'choice', options: Object.keys(STYLE), prompt: 'How should I talk to you?' },
+  {
+    id: 'privacy',
+    kind: 'choice',
+    options: ['Keep the private defaults (recommended)', 'Show me the settings later'],
+    prompt:
+      'Last one, and it changes nothing by itself. The defaults on a fresh install: everything runs on this computer; nothing is sent anywhere unless you turn the cloud fallback on yourself and approve each ask; voice input, the wake word, screen reading and proactive notifications are all off until you switch them on in About; nothing is recorded in the background; anything you mark sensitive in memory stays in the session and is never written to disk. Keep the private defaults, or look at the settings later?',
+  },
 ]);
 
 // -> { ok: true, skipped: true }
@@ -48,6 +58,7 @@ function interpretAnswer(id, answer) {
 
   if (q.kind === 'choice') {
     if (!q.options.includes(answer)) return { ok: false, error: 'invalid_answer' };
+    if (id === 'privacy') return { ok: true, skipped: true }; // an acknowledgment, never a setting
     if (id === 'best') return { ok: true, memory: { section: 'Routines', text: BEST_TIME[answer] } };
     return { ok: true, settings: { ...STYLE[answer] } };
   }

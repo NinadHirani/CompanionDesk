@@ -1,7 +1,8 @@
 'use strict';
 
-// First run: six short, skippable questions. Everything the student says
-// becomes a plain line in their about-me file or a setting.
+// First run: seven short, skippable questions. Everything the student says
+// becomes a plain line in their about-me file or a setting; the closing
+// privacy question only explains the standing defaults and applies nothing.
 (function () {
   const { api, el } = UI;
   let questions = [];

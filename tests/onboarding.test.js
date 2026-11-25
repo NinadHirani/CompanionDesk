@@ -6,8 +6,8 @@ const { QUESTIONS, interpretAnswer } = require('../src/onboarding');
 const { validatePatch } = require('../src/settings');
 const { SECTIONS, sanitizeBullet } = require('../src/memory');
 
-test('there are six fixed questions and every one can be skipped', () => {
-  assert.equal(QUESTIONS.length, 6);
+test('there are seven fixed questions and every one can be skipped', () => {
+  assert.equal(QUESTIONS.length, 7);
   for (const q of QUESTIONS) {
     for (const blank of [null, undefined, '', '   ']) {
       assert.deepEqual(interpretAnswer(q.id, blank), { ok: true, skipped: true }, `${q.id} / ${JSON.stringify(blank)}`);
@@ -48,4 +48,30 @@ test('bad answers are refused instead of coerced', () => {
   assert.deepEqual(interpretAnswer('style', 'Sarcastic'), { ok: false, error: 'invalid_answer' });
   assert.deepEqual(interpretAnswer('goal', { evil: true }), { ok: false, error: 'invalid_answer' });
   assert.deepEqual(interpretAnswer('nope', 'x'), { ok: false, error: 'unknown_question' });
+  assert.deepEqual(interpretAnswer('privacy', 'Turn everything on'), { ok: false, error: 'invalid_answer' });
+});
+
+test('the closing privacy question only acknowledges; it applies nothing', () => {
+  const q = QUESTIONS.find((x) => x.id === 'privacy');
+  for (const opt of q.options) {
+    assert.deepEqual(interpretAnswer('privacy', opt), { ok: true, skipped: true });
+  }
+});
+
+test('NO AUTO-ENABLE: no onboarding answer can set anything beyond name, tone and brevity', () => {
+  const allowed = new Set(['user_name', 'tone', 'brevity']);
+  for (const q of QUESTIONS) {
+    const answers = q.kind === 'choice' ? q.options
+      : q.kind === 'number' ? [q.min, q.max, String(q.min)]
+      : ['Asha', 'something with a deadline', 'finish the thesis'];
+    for (const a of answers) {
+      const r = interpretAnswer(q.id, a);
+      if (r.settings) {
+        for (const key of Object.keys(r.settings)) {
+          assert.ok(allowed.has(key), `${q.id} produced unexpected setting ${key}`);
+        }
+      }
+      assert.ok(!r.memory || ['Goals', 'Routines', 'Facts'].includes(r.memory.section));
+    }
+  }
 });
