@@ -257,6 +257,15 @@ test('the ask Enter path respects the in-flight guard, one ask at a time', () =>
   assert.ok(head.includes('if (btn.disabled) return;'), 'submit refuses a second ask while one is pending');
 });
 
+test('a failed fresh ask cleans up its empty thread instead of littering the list', () => {
+  const s = read('renderer/ask.js');
+  const plain = s.slice(s.indexOf("UI.friendlyError(res.error), 'error'"));
+  assert.ok(plain.includes('msgs.messages.length === 0'), 'the plain failure path removes only a thread with no messages');
+  assert.ok(plain.includes('log.appendChild(entry)'), 'the error card stays on screen after the cleanup');
+  const caught = s.slice(s.indexOf("UI.friendlyError('ask_failed'), 'error'"));
+  assert.ok(caught.includes('msgs.messages.length === 0'), 'the transport-crash path follows the same rule');
+});
+
 test('a pending ask keeps its own thread; completion never yanks the picker back', () => {
   const s = read('renderer/ask.js');
   assert.ok(s.includes('const askThreadId = currentId;'), 'the ask captures its thread at submit time');

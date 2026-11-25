@@ -205,6 +205,23 @@
       entry.appendChild(el('p', UI.friendlyError('ask_failed'), 'error'));
       if (!input.value.trim()) input.value = question;
       btn.disabled = false;
+      // The same rule as the declined ask: a thread created for a crashed
+      // ask stays empty (nothing was saved), so it goes away instead of
+      // littering the list. Checked, not assumed: only a thread with no
+      // messages is removed, and the error card stays on screen.
+      if (createdId) {
+        const emptyId = createdId;
+        createdId = null;
+        const msgs = await api.chat_messages({ id: emptyId });
+        if (msgs.ok && Array.isArray(msgs.messages) && msgs.messages.length === 0) {
+          const del = await api.chat_delete({ id: emptyId });
+          if (del.ok && currentId === emptyId) {
+            currentId = null;
+            await refreshList(null);
+            log.appendChild(entry);
+          }
+        }
+      }
       scrollToLatest(true);
       return;
     }
@@ -309,6 +326,24 @@
     } else {
       entry.appendChild(el('p', UI.friendlyError(res.error), 'error'));
       btn.disabled = false;
+      // The same rule as the declined ask: a thread created for a failed
+      // ask stays empty (nothing was saved), so it goes away instead of
+      // littering the list. Checked, not assumed: only a thread with no
+      // messages is removed, and the error card stays on screen.
+      if (createdId) {
+        const emptyId = createdId;
+        createdId = null;
+        const msgs = await api.chat_messages({ id: emptyId });
+        if (msgs.ok && Array.isArray(msgs.messages) && msgs.messages.length === 0) {
+          const del = await api.chat_delete({ id: emptyId });
+          if (del.ok && currentId === emptyId) {
+            currentId = null;
+            await refreshList(null);
+            log.appendChild(entry);
+            scrollToLatest(true);
+          }
+        }
+      }
     }
 
     if (res.ok) {
