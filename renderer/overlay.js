@@ -187,8 +187,18 @@
     micBtn.textContent = 'Speak';
     micBtn.disabled = true;
     hint.textContent = 'Transcribing';
-    const pcm = await rec.stop();
     processing = true;
+    // The recorder itself can fail before the transcription call: a
+    // crashed stop() must not strand the mic button or the hint either.
+    let pcm;
+    try {
+      pcm = await rec.stop();
+    } catch (err) {
+      processing = false;
+      micBtn.disabled = false;
+      showError('transcribe_failed');
+      return;
+    }
     // A transport crash must not strand the mic button: the failure is
     // reported in place and both flags release.
     let res;

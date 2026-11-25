@@ -473,6 +473,17 @@ test('the overlay Screen and mic listeners cannot be stranded by a rejection eit
   assert.ok(errs.includes('screen_windows_failed:') && errs.includes('voice_status_failed:'), 'both codes carry wording');
 });
 
+test('a crashed recorder stop releases the mic like a failed transcription', () => {
+  const ov = read('renderer/overlay.js');
+  const stop = ov.indexOf('async function stopAndTranscribe');
+  const chunk = ov.slice(stop, ov.indexOf('api.voice_transcribe', stop));
+  assert.ok(chunk.includes('try {'), 'rec.stop() is guarded before the transcription call');
+  assert.ok(chunk.includes('pcm = await rec.stop();'), 'the pcm read is the guarded await');
+  assert.ok(chunk.includes('processing = true;'), 'the processing flag covers the stop window too');
+  assert.ok(chunk.includes('processing = false;') && chunk.includes('micBtn.disabled = false;'), 'a crashed stop releases both flags');
+  assert.ok(chunk.includes("showError('transcribe_failed')"), 'a crashed stop reports in place');
+});
+
 test('an overlay rejection cannot strand the ask, the transcription, or the mic button', () => {
   const ov = read('renderer/overlay.js');
   const run = ov.indexOf('async function runAsk');
