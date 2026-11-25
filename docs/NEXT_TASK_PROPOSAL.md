@@ -35,6 +35,12 @@ green on the D1 commit.
    schedule_create enablement kept as separate approval gates.
    Remaining approvals on this line: D-S2 (the scheduled driver kind)
    and the schedule_create enable step, each its own gate.
+   STATUS 25 Nov 2026: the D-S2 decision brief is written and committed
+   (docs/D_S2_DECISION_BRIEF.md): exact behavior if the kind is added,
+   the plan-source gap, the stricter fire-time origin proof D-S2 needs
+   beyond D1, tests that would change, risks, three alternatives
+   (defer recommended), and the exact approval wording. Docs only; no
+   gate moved.
 
 2. WAKE-WORD VERIFICATION RESEARCH (docs only; standing direction "the
    search continues"). The two undecided items in docs/M6_VOICE_DECISIONS.md
