@@ -170,6 +170,12 @@
   function updateSub(title) {
     const sub = document.getElementById('ask-sub');
     if (!sub) return;
+    // The inline rename editor owns the header while it is open: a list
+    // refresh finishing underneath it (an ask completing mid-rename) must
+    // not re-show the stale title beside the editor. The editor's own
+    // commit and cancel paths call updateSub again after hiding, so the
+    // header never stays stale.
+    if (renameInput && !renameInput.hidden) return;
     if (title) { sub.textContent = title; sub.hidden = false; }
     else { sub.textContent = ''; sub.hidden = true; }
   }

@@ -520,6 +520,16 @@ test('a failed thread creation at ask start is surfaced, not mislabeled as singl
   assert.ok(personal.includes('return { ok: true, answer };'), 'the desktop single-shot return is unchanged');
 });
 
+test('a refresh finishing under an open rename editor leaves the header to the editor', () => {
+  const ask = read('renderer/ask.js');
+  assert.ok(ask.includes("if (renameInput && !renameInput.hidden) return;"),
+    'updateSub yields to an open rename editor');
+  assert.ok(ask.includes("renameInput.hidden = true;\n    if (!res.ok)"),
+    'a failed rename hides the editor before restoring the header');
+  assert.ok(ask.includes("{ renameInput.hidden = true; restoreSubTitle(); }"),
+    'the blur exit hides the editor before restoring the header');
+});
+
 test('a completed exchange whose thread vanished is surfaced as a save failure, not success', () => {
   const bridge = read('src/web/bridge.js');
   assert.ok(bridge.includes("const first = CompanionChatHistory.addMessage(db, conversationId, 'user', prompt, now);"), 'the bridge checks the first save');
