@@ -115,3 +115,12 @@ test('ai:token is allowlisted on both sides of the IPC boundary and tagged per r
   assert.ok(main.includes("sender.send('ai:token', { request_id: requestId, piece: String(piece) })"), 'tokens are tagged with the request id');
   assert.ok(main.includes('onToken: (piece)'), 'the ask pipeline forwards model tokens');
 });
+
+test('auto-scroll follows streaming only near the bottom; user actions snap to the newest message', () => {
+  const s = read('renderer/ask.js');
+  assert.ok(s.includes('function nearBottom()'), 'the near-bottom check exists');
+  assert.ok(s.includes('if (!force && !nearBottom()) return;'), 'streaming growth does not yank a reader back down');
+  assert.ok(s.includes('scrollToLatest(true);'), 'user actions force the snap to the newest message');
+  const token = s.slice(s.indexOf("api.on('ai:token'"));
+  assert.ok(token.includes('scrollToLatest()'), 'token growth scrolls only when guarded');
+});

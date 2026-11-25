@@ -36,7 +36,17 @@
     return entry;
   }
 
-  function scrollToLatest() {
+  function nearBottom() {
+    return log.scrollHeight - log.scrollTop - log.clientHeight < 120;
+  }
+
+  function scrollToLatest(force) {
+    // Growing answers (streaming tokens included) only follow the user when
+    // they are already reading the latest message; scrolling up to read
+    // history must not be yanked back down. Actions the user took
+    // themselves (sending, opening a thread, accepting the cloud offer)
+    // always snap to the newest message.
+    if (!force && !nearBottom()) return;
     const last = log.lastElementChild;
     if (last) last.scrollIntoView({ block: 'nearest' });
   }
@@ -77,7 +87,7 @@
     if (!res.ok) { currentId = null; convSel.value = ''; updateSub(null); return; }
     updateSub(titles.get(String(currentId)) || `Chat ${currentId}`);
     for (const m of res.messages) addCard(m.content, m.role === 'user' ? 'q' : 'answer');
-    scrollToLatest();
+    scrollToLatest(true);
   }
 
   async function submit() {
@@ -103,7 +113,7 @@
     const pending = el('p', `${companionName()} is thinking`, 'hint');
     entry.appendChild(pending);
     log.appendChild(entry);
-    scrollToLatest();
+    scrollToLatest(true);
     input.value = '';
 
     const requestId = (typeof crypto !== 'undefined' && crypto.randomUUID)
@@ -185,7 +195,7 @@
         waiting.remove();
         if (res2.ok) {
           entry.appendChild(el('p', res2.answer, 'answer'));
-          scrollToLatest();
+          scrollToLatest(true);
           if (res2.conversation_id) {
             currentId = res2.conversation_id;
             await refreshList(currentId);
