@@ -432,6 +432,20 @@ test('a reload mid-ask leaves an empty thread that the boot sweep removes once',
   assert.ok(s.includes('let bootSwept = false;'), 'the boot guard is separate from the boot-landing flag');
 });
 
+test('an abandoned consent prompt hands its question back, not silent loss', () => {
+  const s = read('renderer/ask.js');
+  assert.ok(s.includes('const consentItem = { entry, threadId: askThreadId || null, question };'), 'the consent item carries its question');
+  const i = s.indexOf('for (const dead of [...pendingConsents])');
+  assert.ok(i > 0, 'the abandonment sweep exists');
+  const chunk = s.slice(i, i + 700);
+  const splice = chunk.indexOf('pendingConsents.splice');
+  const restore = chunk.indexOf('input.value = dead.question');
+  assert.ok(restore > splice, 'the sweep restores the abandoned question');
+  assert.ok(chunk.includes('!input.value.trim()'), 'the restore never overwrites a retyped question');
+  const threadGuard = chunk.indexOf('if (!dead.threadId) continue;');
+  assert.ok(threadGuard > restore, 'the restore also covers a thread-less abandoned ask');
+});
+
 test('a declined consent ask hands the question back on every path', () => {
   const s = read('renderer/ask.js');
   const i = s.indexOf("stayBtn.addEventListener('click'");

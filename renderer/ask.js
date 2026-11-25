@@ -196,6 +196,11 @@
     for (const dead of [...pendingConsents]) {
       if (dead.entry.isConnected) continue;
       pendingConsents.splice(pendingConsents.indexOf(dead), 1);
+      // An abandoned question was never saved: the consent prompt only
+      // appears after the local ask failed, so nothing reached history.
+      // Hand it back instead of dropping it, without overwriting a
+      // question the user already retyped.
+      if (dead.question && !input.value.trim()) input.value = dead.question;
       if (!dead.threadId) continue;
       const msgs = await api.chat_messages({ id: dead.threadId });
       if (msgs.ok && Array.isArray(msgs.messages) && msgs.messages.length === 0) {
@@ -374,7 +379,7 @@
       // The prompt survives only while its card is on screen: switching
       // conversations detaches the row with no way back, so the ask's
       // own thread must not linger empty behind it.
-      const consentItem = { entry, threadId: askThreadId || null };
+      const consentItem = { entry, threadId: askThreadId || null, question };
       pendingConsents.push(consentItem);
       sendBtn.addEventListener('click', async () => {
         const ci = pendingConsents.indexOf(consentItem);
