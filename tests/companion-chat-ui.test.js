@@ -630,3 +630,13 @@ test('a fast second mic click cannot open a second mic stream while the first st
   assert.ok(chunk.includes('starting = true;'), 'the start attempt raises the flag before its first await');
   assert.ok(chunk.includes('finally {'), 'the flag releases on every path out of the start sequence');
 });
+
+test('a recorder setup failure after getUserMedia releases the mic tracks', () => {
+  const rec = read('renderer/recorder.js');
+  const gumAt = rec.indexOf('getUserMedia');
+  const setupAt = rec.indexOf('addModule');
+  const guardAt = rec.indexOf('// a failed AudioContext or worklet setup must not leave the mic hot');
+  const stopAt = guardAt > 0 ? rec.indexOf('for (const t of stream.getTracks()) t.stop();', guardAt) : -1;
+  assert.ok(gumAt > 0 && setupAt > gumAt, 'setup runs after getUserMedia');
+  assert.ok(guardAt > 0 && stopAt > guardAt, 'the setup failure guard releases the tracks before rethrowing');
+});

@@ -12,35 +12,43 @@
       audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true },
       video: false,
     });
-    const ctx = new AudioContext({ sampleRate: 16000 });
-    await ctx.audioWorklet.addModule('recorder-worklet.js');
-    const source = ctx.createMediaStreamSource(stream);
-    const capture = new AudioWorkletNode(ctx, 'companion-capture');
-    const mute = ctx.createGain();
-    mute.gain.value = 0; // the node must be connected to run; never play the mic back
-    const chunks = [];
-    capture.port.onmessage = (e) => chunks.push(e.data);
-    source.connect(capture);
-    capture.connect(mute);
-    mute.connect(ctx.destination);
-    await ctx.resume();
+    // a failed AudioContext or worklet setup must not leave the mic hot:
+    // release() does not exist yet, so the tracks are stopped here and the
+    // failure is rethrown for the caller to report in place.
+    try {
+      const ctx = new AudioContext({ sampleRate: 16000 });
+      await ctx.audioWorklet.addModule('recorder-worklet.js');
+      const source = ctx.createMediaStreamSource(stream);
+      const capture = new AudioWorkletNode(ctx, 'companion-capture');
+      const mute = ctx.createGain();
+      mute.gain.value = 0; // the node must be connected to run; never play the mic back
+      const chunks = [];
+      capture.port.onmessage = (e) => chunks.push(e.data);
+      source.connect(capture);
+      capture.connect(mute);
+      mute.connect(ctx.destination);
+      await ctx.resume();
 
-    let finished = false;
-    function release() {
-      if (finished) return;
-      finished = true;
-      clearTimeout(timer);
-      capture.disconnect();
-      source.disconnect();
+      let finished = false;
+      function release() {
+        if (finished) return;
+        finished = true;
+        clearTimeout(timer);
+        capture.disconnect();
+        source.disconnect();
+        for (const t of stream.getTracks()) t.stop();
+        ctx.close();
+      }
+      const timer = setTimeout(() => { if (onAutoStop) onAutoStop(); }, MAX_SECONDS * 1000);
+
+      return {
+        stop() { release(); return Promise.resolve(window.CompanionPcm.floatChunksToPcm16(chunks)); },
+        cancel() { release(); chunks.length = 0; },
+      };
+    } catch (err) {
       for (const t of stream.getTracks()) t.stop();
-      ctx.close();
+      throw err;
     }
-    const timer = setTimeout(() => { if (onAutoStop) onAutoStop(); }, MAX_SECONDS * 1000);
-
-    return {
-      stop() { release(); return Promise.resolve(window.CompanionPcm.floatChunksToPcm16(chunks)); },
-      cancel() { release(); chunks.length = 0; },
-    };
   }
 
   window.CompanionRecorder = { startRecording, MAX_SECONDS };
