@@ -135,7 +135,14 @@
     // The overlay stays single-shot; only the ask view creates threads.
     let createdId = null;
     if (!currentId) {
-      const made = await api.chat_new();
+      let made = null;
+      try {
+        made = await api.chat_new();
+      } catch (err) {
+        // A thrown bridge error falls back to the same path as a failed
+        // reply: the ask still runs, just without a persisted thread.
+        made = null;
+      }
       if (made && made.ok && made.conversation && made.conversation.id) {
         createdId = made.conversation.id;
         currentId = createdId;
@@ -177,7 +184,21 @@
       scrollToLatest();
     }) : null;
 
-    const res = await api.ai_ask({ prompt: question, conversation_id: currentId, request_id: requestId });
+    let res;
+    try {
+      res = await api.ai_ask({ prompt: question, conversation_id: currentId, request_id: requestId });
+    } catch (err) {
+      // A bridge or transport crash must not strand the thread: the hint
+      // and its clock leave, the question returns to the input for a
+      // retry, and the send button unlocks again.
+      if (stopTokens) stopTokens();
+      pending.remove();
+      entry.appendChild(el('p', UI.friendlyError('ask_failed'), 'error'));
+      if (!input.value.trim()) input.value = question;
+      btn.disabled = false;
+      scrollToLatest(true);
+      return;
+    }
     if (stopTokens) stopTokens();
     pending.remove();
     if (res.ok) {
@@ -232,7 +253,17 @@
         waiting.appendChild(document.createTextNode(' '));
         waiting.appendChild(cancel2);
         startThinkingClock(waitingText);
-        const res2 = await api.ai_ask({ prompt: question, conversation_id: currentId, cloud_consent: true, request_id: consentId });
+        let res2 = null;
+        try {
+          res2 = await api.ai_ask({ prompt: question, conversation_id: currentId, cloud_consent: true, request_id: consentId });
+        } catch (err) {
+          // Same rule on the consented cloud path: the waiting hint and
+          // its clock leave, and the failure is reported in place.
+          waiting.remove();
+          entry.appendChild(el('p', UI.friendlyError('ask_failed'), 'error'));
+          scrollToLatest(true);
+          return;
+        }
         waiting.remove();
         if (res2.ok) {
           entry.appendChild(el('p', res2.answer, 'answer'));

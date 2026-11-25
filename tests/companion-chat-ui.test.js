@@ -144,3 +144,24 @@ test('the thinking hint counts elapsed seconds and leaves no timer behind', () =
   assert.match(s, /pendingText\);\n {4}startThinkingClock|startThinkingClock\(pendingText\)/, 'the main ask path starts the clock');
   assert.ok(s.includes('startThinkingClock(waitingText);'), 'the cloud-consent waiting path starts the clock too');
 });
+
+test('a failed or crashed ask leaves no stuck thinking state', () => {
+  const s = read('renderer/ask.js');
+  assert.ok(s.includes('try {\n      res = await api.ai_ask('), 'the main ask call is guarded');
+  assert.ok(s.includes("UI.friendlyError('ask_failed')"), 'a friendly error is shown on a crash');
+  const mainCatch = s.slice(s.indexOf('res = await api.ai_ask('), s.indexOf('needs_cloud_consent'));
+  assert.ok(mainCatch.includes('btn.disabled = false;'), 'the send button unlocks after a crash');
+  assert.ok(mainCatch.includes('input.value = question;'), 'the question returns to the input for a retry');
+  assert.ok(mainCatch.includes('pending.remove();'), 'the thinking hint leaves the page');
+  const consentCall = s.indexOf('res2 = await api.ai_ask(');
+  assert.ok(consentCall > 0, 'the consented cloud call is guarded too');
+  const consentCatch = s.slice(consentCall, consentCall + 900);
+  assert.ok(consentCatch.includes('waiting.remove()'), 'the waiting hint leaves on a crash there too');
+  assert.ok(s.includes('try {\n        made = await api.chat_new();'), 'a thrown thread-creation error cannot strand the button');
+});
+
+test('ask_failed maps to a plain retry message', () => {
+  const s = read('renderer/errors.js');
+  assert.ok(s.includes('ask_failed:'), 'the code is mapped in errors.js');
+  assert.ok(s.includes('try again.'), 'the message invites a retry');
+});
