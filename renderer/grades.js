@@ -86,7 +86,9 @@
       // never counts. On those rows the category line becomes a select of
       // the course's real grading categories, so the student can put the
       // work where the syllabus says it belongs.
-      if (counted(a)) {
+      if (counted(a) || !course.weights.length) {
+        // With no grading weights at all there is nothing to map onto, so
+        // the row keeps its plain line and the card's own hint explains.
         what.appendChild(el('div', [a.category, a.due_date ? fmtDay(a.due_date) : 'no confirmed date'].filter(Boolean).join(', '), 'meta'));
       } else {
         const catRow = el('div', null, 'meta inline');

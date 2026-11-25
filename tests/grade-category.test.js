@@ -67,6 +67,7 @@ test('both surfaces wire the category fix to one shared handler', () => {
   assert.match(grades, /api\.assignment_setCategory\(/, 'the Grades view can fix a category');
   assert.match(grades, /not counted/, 'uncounted rows say so');
   assert.match(grades, /counted\(a\)/, 'counted rows keep their plain category line');
+  assert.match(grades, /!course\.weights\.length/, 'with no grading weights there is nothing to map onto, so rows keep their plain line');
   const bridge = read('src/web/bridge.js');
   assert.match(bridge, /CompanionServices\.reclassifyAssignment\(/, 'the web/mobile build reuses the desktop handler');
   const errs = read('renderer/errors.js');
