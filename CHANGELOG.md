@@ -20,6 +20,11 @@ gated, disabled, or unmeasured; every line matches the roadmap evidence.
   roving focus, question changes are announced to screen readers, and
   "Skip the rest" needs a confirming second click (it ends the interview
   for good).
+- Screen-mode policy fixes: background cadence config is now defined only
+  for background mode (it previously answered session-mode callers with
+  the 30 s background floor), and its exclusions are validated like the
+  observation module's (typed, non-empty, length- and count-capped,
+  normalized for matching) instead of accepted as any array.
 - Device Access Centre hardening: an explicit enable is now reversible
   (disable requires a user action and revokes that capability's grants
   first), grant scopes are validated as typed, non-empty, length- and

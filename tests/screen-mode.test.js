@@ -119,3 +119,17 @@ test('elapsed time is reported and frozen at pause', () => {
   now = 9000;
   assert.equal(p.elapsedMs(), 3000, 'a paused observation is not accruing time');
 });
+
+test('background config is background-mode-only and its exclusions are typed, capped and normalized', () => {
+  const s = policy({ mode: 'session' });
+  assert.equal(s.backgroundConfig({ intervalMs: 60000, exclusions: ['bank'] }).reason, 'not_background_mode');
+  const p = policy({ mode: 'background', backgroundConsent: true });
+  assert.equal(p.backgroundConfig({ intervalMs: 60000, exclusions: [42] }).reason, 'bad_exclusions');
+  assert.equal(p.backgroundConfig({ intervalMs: 60000, exclusions: [''] }).reason, 'bad_exclusions');
+  assert.equal(p.backgroundConfig({ intervalMs: 60000, exclusions: ['x'.repeat(121)] }).reason, 'bad_exclusions');
+  assert.equal(p.backgroundConfig({ intervalMs: 60000, exclusions: Array.from({ length: 51 }, (_, i) => 'a' + i) }).reason, 'bad_exclusions');
+  const ok = p.backgroundConfig({ intervalMs: 60000, exclusions: ['  Bank App ', 'WALLET'] });
+  assert.equal(ok.ok, true);
+  assert.deepEqual(ok.config.exclusions, ['bank app', 'wallet']);
+  assert.ok(Object.isFrozen(ok.config.exclusions));
+});

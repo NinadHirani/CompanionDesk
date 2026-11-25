@@ -41,6 +41,10 @@
   const SESSION_MIN_INTERVAL_MS = 5000;   // matches src/screen-observation.js
   const BACKGROUND_MIN_INTERVAL_MS = 30000; // conservative cadence for C
   const MAX_INTERVAL_MS = 600000;
+  // Exclusion bounds mirror src/screen-observation.js so both surfaces
+  // accept exactly the same exclusion lists.
+  const MAX_EXCLUSIONS = 50;
+  const MAX_EXCLUSION_LEN = 120;
   const LOCAL_ONLY = true;
   const RETAIN_BY_DEFAULT = false;
 
@@ -112,12 +116,22 @@
     // observation may run. Session cadence stays at the looser floor.
     // -> { ok, config } | { ok: false, reason }
     function backgroundConfig({ intervalMs, exclusions } = {}) {
-      const floor = active && active.kind === 'background' ? BACKGROUND_MIN_INTERVAL_MS : BACKGROUND_MIN_INTERVAL_MS;
-      if (!Number.isInteger(intervalMs) || intervalMs < floor || intervalMs > MAX_INTERVAL_MS) {
+      // Defined for background mode only: the 30 s floor and the
+      // exclusion requirement are background cadence rules.
+      if (mode !== 'background') return { ok: false, reason: 'not_background_mode' };
+      if (!Number.isInteger(intervalMs) || intervalMs < BACKGROUND_MIN_INTERVAL_MS || intervalMs > MAX_INTERVAL_MS) {
         return { ok: false, reason: 'bad_interval' };
       }
       if (!Array.isArray(exclusions) || exclusions.length === 0) return { ok: false, reason: 'exclusions_required' };
-      return { ok: true, config: Object.freeze({ intervalMs, exclusions: Object.freeze([...exclusions]) }) };
+      if (exclusions.length > MAX_EXCLUSIONS) return { ok: false, reason: 'bad_exclusions' };
+      const clean = [];
+      for (const e of exclusions) {
+        if (typeof e !== 'string') return { ok: false, reason: 'bad_exclusions' };
+        const v = e.trim().toLowerCase();
+        if (!v || v.length > MAX_EXCLUSION_LEN) return { ok: false, reason: 'bad_exclusions' };
+        clean.push(v);
+      }
+      return { ok: true, config: Object.freeze({ intervalMs, exclusions: Object.freeze(clean) }) };
     }
 
     // A screen permission may be requested only as part of an explicit
@@ -155,6 +169,7 @@
   return {
     MODES, DEFAULT_MODE, DESKTOP_PLATFORMS, isDesktop, validateSelection,
     SESSION_MIN_INTERVAL_MS, BACKGROUND_MIN_INTERVAL_MS, MAX_INTERVAL_MS,
+    MAX_EXCLUSIONS, MAX_EXCLUSION_LEN,
     LOCAL_ONLY, RETAIN_BY_DEFAULT,
     createScreenModePolicy,
   };
