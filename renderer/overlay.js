@@ -151,6 +151,15 @@
   }
 
   document.getElementById('ov-screen').addEventListener('click', async () => {
+    // One ask at a time, the same guard the mic button already enforces: a
+    // screen ask cannot start while another ask is still running. The
+    // refusal is reported in place and the picker never opens, so no
+    // window can end up labelled "Sending only this window..." while
+    // nothing is sent.
+    if (busy || starting) {
+      hint.textContent = `${companionName} is still answering. Wait for the answer, then click Screen.`;
+      return;
+    }
     if (!input.value.trim()) { hint.textContent = 'Type your question first, then click Screen.'; input.focus(); return; }
     hidePreview();
     // A bridge or transport crash must not strand the Screen button: the
