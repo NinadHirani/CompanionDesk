@@ -4,6 +4,8 @@
 (function () {
   const MESSAGES = {
     window_gone: 'That window was closed. Click Screen and pick again.',
+  screen_windows_failed: 'The window list could not be read. Click Screen and try again.',
+  voice_status_failed: 'Voice could not be checked. Try again in a moment.',
   screen_permission: 'Allow screen recording for CompanionDesk in your system privacy settings, then restart the app.',
   capture_failed: 'I could not capture the screen.',
   vision_failed: 'The vision model did not answer. Check that Ollama is running.',

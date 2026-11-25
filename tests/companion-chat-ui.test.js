@@ -443,6 +443,19 @@ test('a cancelled or failed consented ask hands the question back like the other
   assert.ok(chunk.includes('catch (err)'), 'the consented throw path is covered');
 });
 
+test('the overlay Screen and mic listeners cannot be stranded by a rejection either', () => {
+  const ov = read('renderer/overlay.js');
+  const screen = ov.indexOf("document.getElementById('ov-screen')");
+  const voice = ov.indexOf('async function stopAndTranscribe');
+  assert.ok(screen > 0 && voice > screen, 'both listeners are read in order');
+  const screenChunk = ov.slice(screen, voice);
+  assert.ok(screenChunk.includes('try {') && screenChunk.includes("showError('screen_windows_failed')"), 'a thrown window listing reports in place');
+  const micChunk = ov.slice(voice, ov.indexOf('readBtn.addEventListener', voice));
+  assert.ok(micChunk.includes('try {') && micChunk.includes("showError('voice_status_failed')"), 'a thrown status check reports in place');
+  const errs = read('renderer/errors.js');
+  assert.ok(errs.includes('screen_windows_failed:') && errs.includes('voice_status_failed:'), 'both codes carry wording');
+});
+
 test('an overlay rejection cannot strand the ask, the transcription, or the mic button', () => {
   const ov = read('renderer/overlay.js');
   const run = ov.indexOf('async function runAsk');

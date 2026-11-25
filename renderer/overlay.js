@@ -147,7 +147,15 @@
   document.getElementById('ov-screen').addEventListener('click', async () => {
     if (!input.value.trim()) { hint.textContent = 'Type your question first, then click Screen.'; input.focus(); return; }
     hidePreview();
-    const res = await api.screen_windows();
+    // A bridge or transport crash must not strand the Screen button: the
+    // failure is reported in place, like the ask path.
+    let res;
+    try {
+      res = await api.screen_windows();
+    } catch (err) {
+      showError('screen_windows_failed');
+      return;
+    }
     if (!res.ok) { showError(res.error); return; }
     picker.replaceChildren();
     const title = document.createElement('p');
@@ -202,7 +210,13 @@
   micBtn.addEventListener('click', async () => {
     if (busy) return;
     if (recording) { await stopAndTranscribe(); return; }
-    const status = await api.voice_status();
+    let status;
+    try {
+      status = await api.voice_status();
+    } catch (err) {
+      showError('voice_status_failed');
+      return;
+    }
     if (status.enabled === false) { showError('voice_disabled'); return; }
     if (!status.available) {
       answer.textContent = status.reason === 'no_model'
