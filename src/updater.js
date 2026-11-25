@@ -92,6 +92,8 @@ function createUpdateController(deps) {
   ipc.handle('update:status', () => state);
   ipc.handle('update:check', async () => {
     try {
+      autoUpdater.autoDownload = false; // a plain check never downloads, even
+      // after a failed download attempt left the switch armed.
       setPhase('checking');
       await autoUpdater.checkForUpdates();
     } catch (err) {
