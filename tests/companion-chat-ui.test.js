@@ -243,3 +243,9 @@ test('chat bubbles wrap long unbroken tokens at every viewport width', () => {
   assert.ok(a.includes('overflow-wrap: anywhere'), 'the answer bubble breaks long tokens');
   assert.ok(css.slice(css.indexOf('.ov-answer {')).includes('overflow-wrap: anywhere'), 'the overlay answer breaks long tokens too');
 });
+
+test('the overlay open button reports a refused overlay instead of doing nothing', () => {
+  const s = read('renderer/about.js');
+  assert.ok(!s.includes('() => api.overlay_show());'), 'the result of overlay_show is not dropped');
+  assert.ok(s.includes('ovMsg.textContent = UI.friendlyError(res.error)'), 'a refused overlay shows the shared friendly wording');
+});

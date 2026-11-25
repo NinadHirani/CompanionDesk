@@ -456,7 +456,12 @@
     if (res.ok) { ovInput.value = res.hotkey; ovMsg.textContent = `Saved. Press ${res.hotkey} to open the overlay.`; ovMsg.className = 'hint'; }
     else { ovMsg.textContent = UI.friendlyError(res.error); ovMsg.className = 'hint error'; }
   });
-  document.getElementById('ov-open').addEventListener('click', () => api.overlay_show());
+  // A refused overlay (the web build has none) must say so, not silently
+  // do nothing; on the desktop the call succeeds and stays silent.
+  document.getElementById('ov-open').addEventListener('click', async () => {
+    const res = await api.overlay_show();
+    if (!res.ok) { ovMsg.textContent = UI.friendlyError(res.error); ovMsg.className = 'hint error'; }
+  });
 
   // ---- setup check ---------------------------------------------------------------
   const STATUS_TEXT = { ok: 'Ready', needed: 'Needed', optional: 'Optional' };
