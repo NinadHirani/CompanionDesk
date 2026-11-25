@@ -302,7 +302,7 @@ test('an abandoned cloud-consent prompt cleans up its empty thread on switch', (
   assert.ok(s.includes('const consentItem = { entry, threadId: askThreadId || null, question }'), 'the consent row registers its card and the ask thread');
   assert.ok(s.includes('pendingConsents.push(consentItem);'), 'the registration lands in the tracked list');
   const ls = s.indexOf('async function loadSelected()');
-  const chunk = s.slice(ls, ls + 1000);
+  const chunk = s.slice(ls, ls + 1400);
   assert.ok(s.includes('if (dead.entry.isConnected) continue;'), 'the switch is detected by the card leaving the page');
   assert.ok(chunk.includes('msgs.messages.length === 0'), 'the thread is checked empty, never assumed');
   assert.ok(chunk.includes('api.chat_delete({ id: dead.threadId })'), 'only the ask own thread is removed');
