@@ -406,6 +406,11 @@
         if (ci >= 0) pendingConsents.splice(ci, 1);
         sendBtn.disabled = true;
         stayBtn.disabled = true;
+        // The consented cloud ask is an ask in flight: hold the same
+        // one-ask-at-a-time guard the first ask holds, so a second ask
+        // cannot start (and overwrite activeAsk) while this one runs.
+        // Re-opened on every exit below.
+        btn.disabled = true;
         row.remove();
         // The consented cloud ask can fail like any ask: the thread it
         // was created for is still empty (nothing was saved), so the
@@ -453,12 +458,14 @@
           // Every failure path hands the question back for a retry: the
           // consented ask's own outcomes are no exception.
           if (!input.value.trim()) input.value = question;
+          btn.disabled = false;
           scrollToLatest(true);
           await cleanupEmptyAsk();
           return;
         } finally { activeAsk = null; }
         waiting.remove();
         if (res2.ok) {
+          btn.disabled = false;
           entry.appendChild(el('p', res2.answer, 'answer'));
           appendSaveHint(entry, res2);
           if (createFailed) appendCreateFailedHint(entry);
@@ -469,11 +476,13 @@
           }
         } else if (res2.needs_cloud_consent) {
           // Should not happen after consent; treat as the local failure it is.
+          btn.disabled = false;
           entry.appendChild(el('p', UI.friendlyError(res2.local_error || res2.error), 'error'));
           if (!input.value.trim()) input.value = question;
           await cleanupEmptyAsk();
         } else {
           const cancelled = isAskCancel(res2.error);
+          btn.disabled = false;
           entry.appendChild(el('p', cancelled ? 'Ask cancelled.' : UI.friendlyError(res2.error), cancelled ? 'hint' : 'error'));
           if (!input.value.trim()) input.value = question;
           await cleanupEmptyAsk();
