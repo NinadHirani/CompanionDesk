@@ -124,3 +124,14 @@ test('auto-scroll follows streaming only near the bottom; user actions snap to t
   const token = s.slice(s.indexOf("api.on('ai:token'"));
   assert.ok(token.includes('scrollToLatest()'), 'token growth scrolls only when guarded');
 });
+
+test('the conversation picker carries relative activity stamps', () => {
+  const s = read('renderer/ask.js');
+  assert.ok(s.includes('function relativeStamp(iso)'), 'a relative-time helper exists');
+  assert.ok(s.includes("if (mins < 1) return 'just now'"), 'minutes bucket');
+  assert.ok(s.includes('return `${mins}m ago`'), 'minutes label');
+  assert.ok(s.includes('return `${hours}h ago`'), 'hours label');
+  assert.ok(s.includes("if (days === 1) return 'yesterday'"), 'yesterday label');
+  assert.ok(s.includes('o.textContent = stamp ? `${title} (${stamp})` : title;'), 'picker options show title with stamp');
+  assert.ok(s.includes('titles.set(String(c.id), title);'), 'the plain title, not the stamped text, feeds rename and the header');
+});

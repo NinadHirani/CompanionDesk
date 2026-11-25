@@ -51,6 +51,23 @@
     if (last) last.scrollIntoView({ block: 'nearest' });
   }
 
+  // Companion-first: the picker shows how recently each thread was active,
+  // so the reopened thread is recognizable at a glance. Times are the
+  // device's own.
+  function relativeStamp(iso) {
+    const t = Date.parse(iso);
+    if (!Number.isFinite(t)) return '';
+    const mins = Math.round((Date.now() - t) / 60000);
+    if (mins < 1) return 'just now';
+    if (mins < 60) return `${mins}m ago`;
+    const hours = Math.floor(mins / 60);
+    if (hours < 24) return `${hours}h ago`;
+    const days = Math.floor(hours / 24);
+    if (days === 1) return 'yesterday';
+    if (days < 7) return `${days}d ago`;
+    return new Date(t).toLocaleDateString();
+  }
+
   async function refreshList(keepId) {
     const res = await api.chat_list();
     if (!res.ok) return;
@@ -59,9 +76,13 @@
     convSel.innerHTML = '<option value="">New chat</option>';
     for (const c of res.conversations) {
       const o = document.createElement('option');
+      const title = c.title || `Chat ${c.id}`;
+      const stamp = relativeStamp(c.updated_at);
       o.value = String(c.id);
-      o.textContent = c.title || `Chat ${c.id}`;
-      titles.set(String(c.id), o.textContent);
+      o.textContent = stamp ? `${title} (${stamp})` : title;
+      // The plain title is what rename edits and the header shows; the
+      // stamp is picker dressing only.
+      titles.set(String(c.id), title);
       convSel.appendChild(o);
     }
     const keep = wanted && titles.has(String(wanted)) ? String(wanted) : '';
