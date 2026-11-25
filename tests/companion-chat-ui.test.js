@@ -364,3 +364,15 @@ test('the desktop HTML carries every element the ask script needs', () => {
     }
   }
 });
+
+test('a long unbroken thread title or status note wraps instead of pushing the page sideways', () => {
+  const s = read('renderer/styles.css');
+  assert.ok(s.includes('.ask-sub { color: var(--muted); font-size: 12px; margin: 4px 0 0; overflow-wrap: anywhere; }'), 'the thread title line wraps long runs');
+  assert.ok(s.includes('#ask-conv-bar select { flex: 1 1 12rem; min-width: 0; text-overflow: ellipsis; }'), 'the conversation picker shrinks and truncates instead of sizing to its longest title');
+  assert.ok(s.includes('.hint { color: var(--muted); font-size: 12px; margin: 6px 0; overflow-wrap: anywhere; }'), 'status hints wrap long runs');
+  for (const rule of ['.error { color: var(--bad); overflow-wrap: anywhere; }',
+    '.hint.error { color: var(--bad); overflow-wrap: anywhere; }',
+    '.ov-answer.error { color: var(--bad); overflow-wrap: anywhere; }']) {
+    assert.ok(s.includes(rule), `error rule wraps long runs: ${rule}`);
+  }
+});

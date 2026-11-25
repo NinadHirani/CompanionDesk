@@ -105,7 +105,7 @@ select { padding: 4px 8px; }
 .plain li { padding: 4px 0; }
 .empty { color: var(--muted); margin: 4px 0; }
 .companion-lead { color: var(--ink); font-weight: 600; margin: 0 0 6px; }
-.ask-sub { color: var(--muted); font-size: 12px; margin: 4px 0 0; }
+.ask-sub { color: var(--muted); font-size: 12px; margin: 4px 0 0; overflow-wrap: anywhere; }
 
 .crunch {
   margin-top: 12px; padding: 10px 12px;
@@ -121,7 +121,7 @@ details.unconfirmed summary { cursor: pointer; }
 details.unconfirmed ul { margin: 6px 0 0; padding-left: 18px; }
 
 #import-result p { background: var(--surface); border: 1px solid var(--line); padding: 8px 12px; border-radius: 6px; margin: 0 0 8px; }
-.error { color: var(--bad); }
+.error { color: var(--bad); overflow-wrap: anywhere; }
 
 /* ---- navigation, forms and the new views ---- */
 [hidden] { display: none !important; }
@@ -134,8 +134,8 @@ details.unconfirmed ul { margin: 6px 0 0; padding-left: 18px; }
 .narrow { max-width: 680px; margin: 0 auto; padding: 20px 24px 40px; }
 .card h3 { font-size: 13px; margin: 14px 0 4px; }
 
-.hint { color: var(--muted); font-size: 12px; margin: 6px 0; }
-.hint.error { color: var(--bad); }
+.hint { color: var(--muted); font-size: 12px; margin: 6px 0; overflow-wrap: anywhere; }
+.hint.error { color: var(--bad); overflow-wrap: anywhere; }
 .meta { color: var(--muted); font-size: 12px; }
 
 .field { display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px; }
@@ -197,7 +197,7 @@ body.overlay { display: flex; flex-direction: column; height: 100vh; padding: 12
 .ov-top { display: flex; gap: 8px; }
 .ov-top input { font-size: 15px; padding: 9px 10px; }
 .ov-answer { flex: 1; overflow-y: auto; white-space: pre-wrap; line-height: 1.5; overflow-wrap: anywhere; }
-.ov-answer.error { color: var(--bad); }
+.ov-answer.error { color: var(--bad); overflow-wrap: anywhere; }
 body.overlay .hint { margin: 0; }
 
 pre.doc { white-space: pre-wrap; font: inherit; font-size: 12px; max-height: 320px; overflow-y: auto; background: var(--bg); padding: 10px; border-radius: 6px; }
@@ -262,7 +262,7 @@ details summary { cursor: pointer; margin: 6px 0; }
 /* The conversation bar is a compact inline row at every width; on small
    screens the label moves to its own line (below). */
 #ask-conv-bar { display: flex; flex-direction: row; flex-wrap: wrap; gap: 6px; align-items: center; }
-#ask-conv-bar select { flex: 1 1 12rem; }
+#ask-conv-bar select { flex: 1 1 12rem; min-width: 0; text-overflow: ellipsis; }
 #ask-conv-bar button { flex: 0 0 auto; }
 
 /* Companion-first on small screens: the tab row scrolls instead of wrapping,
