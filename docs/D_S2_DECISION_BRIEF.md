@@ -1,5 +1,10 @@
 # D-S2 decision brief: the run-driver 'scheduled' kind (25 Nov 2026)
 
+DECIDED 25 Nov 2026: DEFER (alternative 1). Ninad picked deferral; the
+scheduled kind stays OUT of the driver allowlist and this brief stays on
+file for the Stage B review. schedule_create enablement remains a
+separate approval gate.
+
 Prepared for Ninad's D-S2 review. DOCS ONLY: no code, no test, no gate
 moved. Every claim below cites the current main docs or code (main at
 95164e9, both CI workflows green). Nothing here changes any behavior:
