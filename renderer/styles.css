@@ -233,3 +233,6 @@ details summary { cursor: pointer; margin: 6px 0; }
 .course-form .actions, .course-row .actions { flex: 0 0 auto; }
 .course-form .hint, .course-confirm .hint { flex: 1 1 100%; margin: 0; }
 .course-confirm { flex: 1 1 100%; }
+
+.meta.inline { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; }
+.meta.inline select { max-width: 12rem; }

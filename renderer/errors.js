@@ -69,6 +69,7 @@
     invalid_date: 'That is not a real date.',
     date_in_past: 'That date has already passed.',
     duplicate: 'You already have that one.',
+    category_unknown: "Pick one of this course's grading categories, or leave it not counted.",
     course_name_empty: 'Add a course name.',
     invalid_credit_hours: 'Credit hours should be a number, like 4.',
     not_found: 'That one is already gone. Refresh and try again.',

@@ -74,12 +74,45 @@
       card.appendChild(el('p', `Not counted, no matching grading category: ${st.unweighted.join(', ')}.`, 'hint'));
     }
 
+    const sameCategory = (x, y) => String(x).trim().toLowerCase() === String(y).trim().toLowerCase();
+    const counted = (a) => course.weights.some((w) => sameCategory(w.category, a.category));
+
     const list = el('ul', null, 'rows plain-rows');
     for (const a of course.assignments) {
       const li = document.createElement('li');
       const what = el('div', null, 'what');
       what.appendChild(el('div', a.title, 'title'));
-      what.appendChild(el('div', [a.category, a.due_date ? fmtDay(a.due_date) : 'no confirmed date'].filter(Boolean).join(', '), 'meta'));
+      // A row whose category matches no grading weight earns a score that
+      // never counts. On those rows the category line becomes a select of
+      // the course's real grading categories, so the student can put the
+      // work where the syllabus says it belongs.
+      if (counted(a)) {
+        what.appendChild(el('div', [a.category, a.due_date ? fmtDay(a.due_date) : 'no confirmed date'].filter(Boolean).join(', '), 'meta'));
+      } else {
+        const catRow = el('div', null, 'meta inline');
+        catRow.appendChild(el('span', a.category ? `${a.category}, not counted: ` : 'Not counted. Put it in: '));
+        const sel = document.createElement('select');
+        sel.setAttribute('aria-label', `Grading category for ${a.title}`);
+        const none = document.createElement('option');
+        none.value = '';
+        none.textContent = 'not counted';
+        sel.appendChild(none);
+        for (const w of course.weights) {
+          const opt = document.createElement('option');
+          opt.value = w.category;
+          opt.textContent = w.category;
+          if (a.category && sameCategory(w.category, a.category)) opt.selected = true;
+          sel.appendChild(opt);
+        }
+        sel.addEventListener('change', async () => {
+          const res = await api.assignment_setCategory({ id: a.id, category: sel.value || null });
+          if (!res.ok) { msg.textContent = UI.friendlyError(res.error); msg.className = 'hint error'; return; }
+          await refresh();
+        });
+        catRow.appendChild(sel);
+        if (a.due_date) catRow.appendChild(el('span', fmtDay(a.due_date)));
+        what.appendChild(catRow);
+      }
       li.appendChild(what);
       li.appendChild(numberInput(`Score for ${a.title}, percent`, a.score, async (v, input) => {
         const res = await api.grades_setScore({ id: a.id, score: v });

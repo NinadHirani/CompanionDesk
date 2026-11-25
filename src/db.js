@@ -518,6 +518,17 @@ CREATE TABLE IF NOT EXISTS agent_schema (
     }
 
     // ---- scores the user has entered for graded work ----------------------
+    // Fix the grading category on one assignment (syllabus extraction gets
+    // it wrong sometimes). Passing null puts it back to uncategorized, which
+    // is how an assignment is left out of the grade. Returns the updated
+    // row, or null when the id does not exist.
+    setAssignmentCategory(assignmentId, category) {
+      if (!this.all('SELECT id FROM assignments WHERE id = ?', [assignmentId]).length) return null;
+      this.run('UPDATE assignments SET category = ? WHERE id = ?', [category || null, assignmentId]);
+      this.persist();
+      return this.all('SELECT * FROM assignments WHERE id = ?', [assignmentId])[0];
+    }
+
     setScore(assignmentId, scorePct, recordedAt) {
       this.run(
         'INSERT INTO scores (assignment_id, score_pct, recorded_at) VALUES (?, ?, ?) ON CONFLICT(assignment_id) DO UPDATE SET score_pct = excluded.score_pct, recorded_at = excluded.recorded_at',

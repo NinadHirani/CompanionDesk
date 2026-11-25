@@ -138,4 +138,30 @@ function removeCourse(db, payload) {
   return { ok: true, removed };
 }
 
-module.exports = { getBrief, setDone, learningEnabled, editDeadline, addCourse, renameCourse, removeCourse };
+// ---- grade category fix -------------------------------------------------
+// An assignment the syllabus parser put in no category (or in one the
+// syllabus never defined) earns a score that never counts: the gradebook
+// only counts categories the syllabus weights. This maps a row onto one of
+// its course's real grading categories, or clears it back to uncounted.
+
+function sameCategory(a, b) {
+  return String(a).trim().toLowerCase() === String(b).trim().toLowerCase();
+}
+
+function reclassifyAssignment(db, payload) {
+  if (!payload || !Number.isInteger(payload.id)) return { ok: false, error: 'bad_request' };
+  const a = db.getAssignment(payload.id);
+  if (!a) return { ok: false, error: 'not_found' };
+  let category = null;
+  if (payload.category !== undefined && payload.category !== null && String(payload.category).trim() !== '') {
+    const weights = db.listGradeWeights(a.course_id);
+    const match = weights.find((w) => sameCategory(w.category, payload.category));
+    if (!match) return { ok: false, error: 'category_unknown' };
+    category = match.category;
+  }
+  const updated = db.setAssignmentCategory(payload.id, category);
+  if (!updated) return { ok: false, error: 'not_found' };
+  return { ok: true, assignment: { id: updated.id, title: updated.title, category: updated.category } };
+}
+
+module.exports = { getBrief, setDone, learningEnabled, editDeadline, addCourse, renameCourse, removeCourse, reclassifyAssignment };

@@ -24,6 +24,7 @@ const IPC_CHANNELS = [
   'cloud:removeKey',
   'brief:today',
   'assignment:setDone',
+  'assignment:setCategory',
   'settings:get',
   'settings:save',
   'hardware:report',
