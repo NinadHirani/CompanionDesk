@@ -359,6 +359,18 @@
       return e;
     }
 
+    // A cancel that lands while the cloud health probe runs is the caller's
+    // cancellation, never a provider-down refusal: the router only sees
+    // health facts, so without this the abort would surface as a bogus
+    // "cloud is down" error. Same posture as the post-probe cancelled check.
+    function ensureNotCancelled(fault, signal) {
+      if ((signal && signal.aborted) || (fault && fault.code === 'cancelled')) {
+        const e = refusalError('cancelled');
+        e.name = 'AbortError';
+        throw e;
+      }
+    }
+
     // Probe-and-route only, no execution. The screen path uses this so its
     // decision comes from the same router the chat path uses.
     async function routeTask(task, {
@@ -457,7 +469,11 @@
       if (!decision.ok && decision.reason === 'gemini_health_unknown' && cloudConsent) {
         // The user consented to this cloud try; health is the only unknown.
         // Probe it now (bounded) and let the router decide with the fact.
-        const healthy = await probeCloudHealth(signal);
+        // Bounded probe; a caller cancel during it must surface as the
+        // cancellation it is, never as a provider-down refusal.
+        const health = await probeCloudHealthDetailed(signal);
+        ensureNotCancelled(health.fault, signal);
+        const healthy = health.healthy;
         const again = await routeTask(task, {
           privacyMode, cloudEnabled, cloudConsent, model, visionModel, signal,
           ollamaHealth: false, installedModels: [], geminiHealth: healthy,
@@ -527,7 +543,11 @@
       // check cloud health now (bounded) and let the router decide again
       // with the fresh fact. Everything else is an honest refusal.
       if (!decision.ok && decision.reason === 'gemini_health_unknown') {
-        const healthy = await probeCloudHealth(signal);
+        // Bounded probe; a caller cancel during it must surface as the
+        // cancellation it is, never as a provider-down refusal.
+        const health = await probeCloudHealthDetailed(signal);
+        ensureNotCancelled(health.fault, signal);
+        const healthy = health.healthy;
         const again = await routeTask(task, {
           privacyMode, cloudEnabled, cloudConsent, model, visionModel, signal,
           ollamaHealth: probe.healthy, installedModels: probe.models || [],

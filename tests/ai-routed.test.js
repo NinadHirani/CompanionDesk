@@ -355,3 +355,53 @@ test('retirement never touches the local route and preserves the user configurat
   assert.equal(answer, 'local answer');
   assert.equal(fetch.calls.filter((c) => c.url.includes('generativelanguage')).length, 0);
 });
+
+test('REGRESSION: a cancel during the cloud health probe is a cancellation, not a provider-down refusal (completeRouted)', async () => {
+  const controller = new AbortController();
+  const fetch = mockFetch([
+    // Ollama answers 500: the local provider is down, so the router wants
+    // the cloud and the health probe is the next step. The caller cancels
+    // while that probe runs.
+    ['/api/tags', () => ({ ok: false, status: 500 })],
+    ['generativelanguage.googleapis.com', (opts) => {
+      if (opts.signal && opts.signal.aborted) { const e = new Error('aborted'); e.name = 'AbortError'; throw e; }
+      return { ok: true, json: async () => ({ models: [] }) };
+    }],
+  ]);
+  const ai = baseAi(fetch);
+  const pending = ai.completeRouted({ system: 's', prompt: 'p', cloudConsent: true, signal: controller.signal });
+  controller.abort();
+  await assert.rejects(
+    () => pending,
+    (err) => err.name === 'AbortError' || err.reason === 'cancelled'
+  );
+  // A cancel must never turn into a cloud call.
+  assert.equal(fetch.calls.filter((c) => c.url.includes(':generateContent')).length, 0);
+});
+
+test('REGRESSION: a cancel during reconsideration after a local failure is a cancellation, not a provider-down refusal', async () => {
+  const controller = new AbortController();
+  const fetch = mockFetch([
+    OLLAMA_UP,
+    // The local chat fails for a real reason, THEN the caller cancels while
+    // reconsideration probes cloud health: the abort lands on a macrotask,
+    // after the failure has propagated past the caller-abort guard.
+    ['/api/chat', () => {
+      setTimeout(() => controller.abort(), 0);
+      return { ok: false, status: 500, text: async () => '' };
+    }],
+    // The cloud health probe hangs until the cancel arrives, then rejects
+    // the way a real fetch does.
+    ['generativelanguage.googleapis.com', (opts) => new Promise((_, reject) => {
+      const onAbort = () => { const e = new Error('aborted'); e.name = 'AbortError'; reject(e); };
+      if (opts.signal.aborted) onAbort();
+      else opts.signal.addEventListener('abort', onAbort);
+    })],
+  ]);
+  const ai = baseAi(fetch);
+  await assert.rejects(
+    () => ai.completeRouted({ system: 's', prompt: 'p', cloudConsent: true, signal: controller.signal }),
+    (err) => err.name === 'AbortError' || err.reason === 'cancelled'
+  );
+  assert.equal(fetch.calls.filter((c) => c.url.includes(':generateContent')).length, 0);
+});
