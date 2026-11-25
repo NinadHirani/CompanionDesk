@@ -350,7 +350,7 @@ test('a cancelled ask reads as cancelled, not as a failure', () => {
   assert.equal((s.match(/'Ask cancelled\.'/g) || []).length, 4, 'every ask-completion site shows the neutral note on a cancel');
   assert.equal((s.match(/cancelled \? 'hint' : 'error'/g) || []).length, 4, 'a cancel is a hint, never styled as an error');
   assert.ok(s.includes("UI.friendlyError('ask_failed')"), 'real crashes keep their wording');
-  assert.ok(s.includes('if (cancelled && !input.value.trim()) input.value = question;'), 'a cancelled ask hands the question back');
+  assert.ok(s.includes("if (!input.value.trim()) input.value = question;\n      btn.disabled = false;"), 'a cancelled ask hands the question back (the restore is unconditional, so plain failures get it too)');
 });
 
 test('the desktop HTML carries every element the ask script needs', () => {
@@ -518,6 +518,20 @@ test('a failed thread creation at ask start is surfaced, not mislabeled as singl
   assert.ok(bridge.includes('return { ok: true, answer };'), 'the bridge single-shot return is unchanged');
   const personal = read('src/personal.js');
   assert.ok(personal.includes('return { ok: true, answer };'), 'the desktop single-shot return is unchanged');
+});
+
+test('a plain failed ask hands the question back for a retry, cancelled or not', () => {
+  const ask = read('renderer/ask.js');
+  // The generic failure branch restores unconditionally; only the wording
+  // of its error card depends on cancellation.
+  assert.ok(ask.includes("if (cancelled && !input.value.trim()) input.value = question;") === false,
+    'the cancelled-only restore is gone');
+  assert.ok(ask.includes("if (!input.value.trim()) input.value = question;\n      // The same rule as the declined ask") ||
+    ask.includes("if (!input.value.trim()) input.value = question;\n      btn.disabled = false;"),
+    'a plain failure restores the question before any other work');
+  // The crashed-ask path keeps its unconditional restore too.
+  assert.ok(ask.includes("if (!input.value.trim()) input.value = question;\n      btn.disabled = false;\n      // The same rule as the declined ask"),
+    'the crash path still restores unconditionally');
 });
 
 test('a refresh finishing under an open rename editor leaves the header to the editor', () => {

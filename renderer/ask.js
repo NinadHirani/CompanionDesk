@@ -488,7 +488,9 @@
     } else {
       const cancelled = isAskCancel(res.error);
       entry.appendChild(el('p', cancelled ? 'Ask cancelled.' : UI.friendlyError(res.error), cancelled ? 'hint' : 'error'));
-      if (cancelled && !input.value.trim()) input.value = question;
+      // The same rule as the crashed and declined asks: a failed ask must
+      // not eat the typed question, cancelled or not.
+      if (!input.value.trim()) input.value = question;
       btn.disabled = false;
       // The same rule as the declined ask: a thread created for a failed
       // ask stays empty (nothing was saved), so it goes away instead of
