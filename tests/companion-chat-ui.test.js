@@ -406,3 +406,16 @@ test('the rename input accepts exactly what conversation history keeps', () => {
     assert.equal(t[1], cap, `${f}: the rename input cap matches the history store cap, so a chosen title is never silently shortened`);
   }
 });
+
+test('deleting the thread that holds an in-flight ask cancels it first', () => {
+  const s = read('renderer/ask.js');
+  assert.ok(s.includes('let activeAsk = null;'), 'the in-flight ask is tracked');
+  assert.equal((s.match(/activeAsk = \{ requestId/g) || []).length, 2, 'both ask call sites mark their in-flight state');
+  assert.equal((s.match(/finally \{ activeAsk = null; \}/g) || []).length, 2, 'both call sites clear it when the ask settles');
+  const del = s.indexOf("deleteBtn.addEventListener('click'");
+  const chunk = s.slice(del, del + 900);
+  const i = chunk.indexOf('const res = await api.chat_delete({ id: currentId })');
+  const before = chunk.slice(0, i);
+  assert.ok(before.includes('activeAsk && activeAsk.threadId === currentId'), 'the delete consults the in-flight ask state first');
+  assert.ok(before.includes('await api.ai_cancel({ request_id: activeAsk.requestId })'), 'the delete cancels the stranded call before clearing the log');
+});

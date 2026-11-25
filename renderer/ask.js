@@ -24,6 +24,11 @@
   // consent row while an earlier one is still unanswered, and the
   // earlier one must not lose its cleanup when the newer one lands.
   const pendingConsents = [];
+  // The in-flight ask's id and thread, when one is running. Deleting the
+  // thread that holds it must cancel the call first, or its only Cancel
+  // button (inside the log the delete clears) vanishes and the model call
+  // strands with the send button disabled forever.
+  let activeAsk = null;
   const titles = new Map();
 
   // Chat order: messages append oldest-first so the thread reads like a
@@ -235,6 +240,7 @@
     // persist to that thread and must not yank the picker or header back.
     const askThreadId = currentId;
     let res;
+    activeAsk = { requestId, threadId: currentId };
     try {
       res = await api.ai_ask({ prompt: question, conversation_id: currentId, request_id: requestId });
     } catch (err) {
@@ -270,7 +276,7 @@
       }
       scrollToLatest(true);
       return;
-    }
+    } finally { activeAsk = null; }
     if (stopTokens) stopTokens();
     pending.remove();
     if (res.ok) {
@@ -360,6 +366,7 @@
         waiting.appendChild(cancel2);
         startThinkingClock(waitingText);
         let res2 = null;
+        activeAsk = { requestId: consentId, threadId: askThreadId };
         try {
           res2 = await api.ai_ask({ prompt: question, conversation_id: askThreadId, cloud_consent: true, request_id: consentId });
         } catch (err) {
@@ -371,7 +378,7 @@
           scrollToLatest(true);
           await cleanupEmptyAsk();
           return;
-        }
+        } finally { activeAsk = null; }
         waiting.remove();
         if (res2.ok) {
           entry.appendChild(el('p', res2.answer, 'answer'));
@@ -485,6 +492,12 @@
     // Explicit confirmation: deleting removes the messages from this device
     // for good.
     if (!confirm(`Delete "${name}"? Its messages are removed from this computer and cannot be recovered.`)) return;
+    if (activeAsk && activeAsk.threadId === currentId) {
+      // This delete clears the log holding the in-flight ask's Cancel
+      // button, so cancel the call here first, like that row's own
+      // Cancel does. Otherwise it strands with no way to stop it.
+      await api.ai_cancel({ request_id: activeAsk.requestId });
+    }
     const res = await api.chat_delete({ id: currentId });
     if (!res.ok) { alert('Delete failed.'); return; }
     currentId = null;
