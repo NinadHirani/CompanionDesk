@@ -103,6 +103,12 @@
     cancel.addEventListener('click', async () => { await refresh(); refocusRow(item.id, 'due-list'); });
     actions.append(save, cancel);
     form.append(title, date, examLabel, actions, msg);
+    // Keyboard convention: Enter saves, Escape cancels. The checkbox keeps
+    // Space for toggling, so Enter fires only from the text and date fields.
+    form.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') { e.preventDefault(); cancel.click(); }
+      else if (e.key === 'Enter' && (e.target === title || e.target === date)) { e.preventDefault(); save.click(); }
+    });
     li.replaceChildren(form);
     title.focus();
   }
@@ -271,6 +277,11 @@
     cancel.addEventListener('click', async () => { await refresh(); refocusRow(c.id, 'course-list'); });
     actions.append(save, cancel);
     form.append(actions, msg);
+    // Same keyboard convention as the deadline editor: Enter saves, Escape cancels.
+    form.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') { e.preventDefault(); cancel.click(); }
+      else if (e.key === 'Enter' && (e.target === name || e.target === code || e.target === term)) { e.preventDefault(); save.click(); }
+    });
     li.replaceChildren(form);
     name.focus();
   }

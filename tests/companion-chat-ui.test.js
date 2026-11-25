@@ -193,6 +193,15 @@ test('row editors return focus to the row after the list re-renders', () => {
   assert.ok(used >= 6, 'refocusRow is wired after every editor close, got ' + used);
 });
 
+test('row editors take Enter to save and Escape to cancel', () => {
+  const src = read('renderer/app.js');
+  assert.ok(src.includes("form.addEventListener('keydown', (e) => {"), 'the editor forms listen for keys');
+  assert.ok(src.includes("(e.target === title || e.target === date)"), 'the deadline editor fires save on Enter from its text and date fields');
+  assert.ok(src.includes("(e.target === name || e.target === code || e.target === term)"), 'the course editor fires save on Enter from its text fields');
+  const escapes = src.split("if (e.key === 'Escape') { e.preventDefault(); cancel.click(); }").length - 1;
+  assert.ok(escapes >= 2, 'both editors dismiss on Escape, got ' + escapes);
+});
+
 test('the AI status chip is a real button, keyboard-reachable', () => {
   for (const copy of ['renderer/index.html', 'web/index.html']) {
     const html = read(copy);
