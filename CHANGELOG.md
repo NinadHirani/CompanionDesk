@@ -15,8 +15,13 @@ gated, disabled, or unmeasured; every line matches the roadmap evidence.
 - D-S2 decision recorded: DEFER; the scheduled kind stays out of the
   driver allowlist and the decision brief stays on file for the Stage B
   review.
-- Release groundwork: this changelog, and a first-run acceptance test
-  pinning the standing privacy defaults on a fresh install.
+- Release groundwork: this changelog, a first-run acceptance test
+  pinning the standing privacy defaults on a fresh install, the first-run
+  privacy explainer step, and a release-metadata preflight
+  (scripts/release-check.js, wired into the test suite CI runs on every
+  push) that validates the package.json / changelog / tag-convention
+  consistency. It reads files only; it builds, signs, and publishes
+  nothing.
 
 ### 24 November 2026
 - M4 memory v2: the owner resolved all four open decisions; measured
