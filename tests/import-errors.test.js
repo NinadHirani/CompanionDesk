@@ -46,3 +46,28 @@ test('unreachable Ollama surfaces an actionable message', () => {
   const e2 = new Error('ollama_http_500');
   assert.match(humanizeImportError(e2), /Start Ollama/);
 });
+
+test('the shared 5 MB import ceiling is exposed and bounded', () => {
+  const ie = require('../src/import-errors');
+  assert.equal(ie.MAX_IMPORT_BYTES, 5 * 1024 * 1024);
+  assert.equal(ie.isImportTooLarge(5 * 1024 * 1024), false, 'exactly 5 MB passes');
+  assert.equal(ie.isImportTooLarge(5 * 1024 * 1024 + 1), true, 'one byte over refuses');
+  assert.equal(ie.isImportTooLarge(undefined), false, 'unknown size never claims too large');
+});
+
+test('a too-large import gets an actionable, saving-nothing message', () => {
+  const ie = require('../src/import-errors');
+  assert.match(ie.humanizeImportError({ code: 'file_too_large' }), /5 MB is the limit/);
+  assert.match(ie.humanizeImportError({ code: 'file_too_large' }), /Nothing was saved/);
+});
+
+test('both import surfaces enforce the ceiling before reading bytes', () => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const ingest = fs.readFileSync(path.join(__dirname, '..', 'src', 'ingest.js'), 'utf8');
+  assert.match(ingest, /isImportTooLarge\(fs\.statSync\(file\)\.size\)/, 'desktop ingest checks the file size first');
+  assert.ok(ingest.indexOf('isImportTooLarge') < ingest.indexOf('readFileSync'), 'guard runs before the read');
+  const bridge = fs.readFileSync(path.join(__dirname, '..', 'src', 'web', 'bridge.js'), 'utf8');
+  assert.match(bridge, /isImportTooLarge\(file\.size\)/, 'web bridge checks file.size first');
+  assert.ok(bridge.indexOf('isImportTooLarge') < bridge.indexOf('arrayBuffer()'), 'guard runs before the bytes are read');
+});

@@ -11,12 +11,22 @@
 // importing. The rule underneath every message: a failed import writes
 // NOTHING to the database or vault, so nothing ever needs undoing.
 
+// Import size ceiling, shared by the desktop ingest and the web/mobile
+// bridge: 5 MB of file bytes, same ceiling the calendar import enforces.
+const MAX_IMPORT_BYTES = 5 * 1024 * 1024;
+function isImportTooLarge(size) {
+  return typeof size === 'number' && Number.isFinite(size) && size > MAX_IMPORT_BYTES;
+}
+
 const MESSAGES = {
   empty_document:
     'No readable text came out of this file (it may be a scan or image-only PDF). ' +
     'Nothing was saved. Try a text-based PDF, or paste the text into a .txt file and import that.',
   unsupported_file_type:
     'Only PDF, TXT and MD files can be imported. Nothing was saved.',
+  file_too_large:
+    'That file is too large (5 MB is the limit). Nothing was saved. ' +
+    'Try a smaller file, or a text (.txt) export of it.',
   extraction_missing_course_name:
     'The document was read, but no course name was found in it, so it may not be a syllabus. ' +
     'Nothing was saved. Check the file and try again.',
@@ -38,5 +48,5 @@ function humanizeImportError(err) {
   if (code && MESSAGES[code]) return MESSAGES[code];
   return 'Import failed: ' + (raw || 'unknown error') + ' Nothing was saved.';
 }
-  return { humanizeImportError };
+  return { humanizeImportError, MAX_IMPORT_BYTES, isImportTooLarge };
 });

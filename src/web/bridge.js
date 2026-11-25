@@ -135,6 +135,9 @@
   }
 
   async function fileToText(file) {
+    if (CompanionImportErrors.isImportTooLarge(file.size)) {
+      throw CompanionCore.fail('file_too_large', 'That file is too large (5 MB is the limit).');
+    }
     const lower = String(file.name || '').toLowerCase();
     const bytes = await file.arrayBuffer();
     if (lower.endsWith('.pdf')) return { text: await pdfToText(bytes), kind: 'pdf' };

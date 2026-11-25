@@ -7,6 +7,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const { MAX_IMPORT_BYTES, isImportTooLarge } = require('./import-errors');
 const vault = require('./vault');
 const { parseModelJson, validateExtraction, validIsoDate } = require('./extraction-core');
 // pdf.js calls Uint8Array.prototype.toHex on some paths; make sure it exists
@@ -56,6 +57,7 @@ function loadPrompt() {
 }
 
 async function parseDocument(file) {
+  if (isImportTooLarge(fs.statSync(file).size)) throw new Error('file_too_large');
   const ext = path.extname(file).toLowerCase();
   if (ext === '.pdf') {
     return { text: await pdfToText(fs.readFileSync(file)), kind: 'pdf' };
