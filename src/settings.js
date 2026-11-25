@@ -162,4 +162,21 @@ function validatePatch(patch) {
   return { ok: errors.length === 0, clean, errors };
 }
 
-module.exports = { DEFAULTS, ENUMS, normalizeSettings, validatePatch, cleanLine, isValidModelId, NUMERIC };
+
+// The companion's display name for the UI. Falls back to the app name when
+// the user has not set one (or it is blank).
+function companionName(s) {
+  return cleanLine(s && s.assistant_name, 40) || 'CompanionDesk';
+}
+
+// The one-line greeting the companion shows on the Ask screen, addressed to
+// the user when their name is set. Same local-first copy everywhere.
+function companionGreeting(s) {
+  const name = companionName(s);
+  const who = cleanLine(s && s.user_name, 40);
+  return who
+    ? `Hi ${who}, ${name} here. Ask me about your deadlines, courses or notes.`
+    : `${name} here. Ask me about your deadlines, courses or notes.`;
+}
+
+module.exports = { DEFAULTS, ENUMS, normalizeSettings, validatePatch, cleanLine, isValidModelId, NUMERIC, companionName, companionGreeting };

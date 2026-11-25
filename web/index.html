@@ -10,7 +10,7 @@
 </head>
 <body>
   <header class="topbar">
-    <h1>CompanionDesk</h1>
+    <h1 id="app-title">CompanionDesk</h1>
     <nav class="tabs" id="tabs" aria-label="Sections">
       <button data-view="today" class="active">Today</button>
       <button data-view="ask">Ask</button>
@@ -102,6 +102,7 @@
   <main id="view-ask" class="narrow view" hidden>
     <section class="card">
       <h2>Ask</h2>
+      <p id="ask-greet" class="hint"></p>
       <div class="field"><label for="ask-input">Your question</label>
         <textarea id="ask-input" rows="3" maxlength="2000" placeholder="What is due this week? How should I plan Thursday?"></textarea>
       </div>

@@ -32,6 +32,7 @@ const { ingestSyllabus } = require('./ingest');
 const { humanizeImportError } = require('./import-errors');
 const { getBrief, setDone, editDeadline, addCourse, renameCourse, removeCourse, reclassifyAssignment } = require('./services');
 const P = require('./personal');
+const Settings = require('./settings');
 const G = require('./gradebook');
 const CAL = require('./calendar');
 const fs = require('fs');
@@ -520,6 +521,8 @@ function registerIpc() {
       due: db.listDue(today, addDaysIso(today, 7)),
       counts: db.counts(),
       student: (() => { const s = P.getSettings(db); return { enabled: skills.studentEnabled(s), active: skills.studentActive(db, s) }; })(),
+      settings: (() => { const s = P.getSettings(db); return s; })(),
+      identity: (() => { const s = P.getSettings(db); return { name: Settings.companionName(s), greeting: Settings.companionGreeting(s) }; })(),
       ai: await ai.status(),
     };
   });

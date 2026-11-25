@@ -347,9 +347,24 @@
     await refresh();
   });
 
+  // Companion identity (assistant_name): the window title, the header and
+  // the Ask greeting follow the name set in About. refresh() re-applies it,
+  // so a settings save updates the identity immediately (About calls
+  // UI.today.refresh() after saving).
+  function applyIdentity(state) {
+    const id = state.identity || {};
+    const name = id.name || 'CompanionDesk';
+    document.title = name;
+    const title = document.getElementById('app-title');
+    if (title) title.textContent = name;
+    const greet = document.getElementById('ask-greet');
+    if (greet) greet.textContent = id.greeting || '';
+  }
+
   async function refresh() {
     const [state, brief, cal] = await Promise.all([api.state_get(), api.brief_today(), api.calendar_upcoming({ days: 7 })]);
     latest = { state, brief };
+    applyIdentity(state);
     renderCalendar(cal);
     renderStatus(state.ai);
     applyStudentVisibility(state.student);
