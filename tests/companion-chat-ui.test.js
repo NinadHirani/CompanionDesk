@@ -135,3 +135,12 @@ test('the conversation picker carries relative activity stamps', () => {
   assert.ok(s.includes('o.textContent = stamp ? `${title} (${stamp})` : title;'), 'picker options show title with stamp');
   assert.ok(s.includes('titles.set(String(c.id), title);'), 'the plain title, not the stamped text, feeds rename and the header');
 });
+
+test('the thinking hint counts elapsed seconds and leaves no timer behind', () => {
+  const s = read('renderer/ask.js');
+  assert.ok(s.includes('function startThinkingClock(textNode)'), 'a shared elapsed-seconds clock exists');
+  assert.ok(s.includes("if (!textNode.isConnected) { clearInterval(timer); return; }"), 'the clock clears itself once the hint leaves the page');
+  assert.ok(s.includes('textNode.nodeValue = `${companionName()} is thinking (${Math.floor((Date.now() - started) / 1000)}s)`;'), 'only the hint text updates, the Cancel button stays');
+  assert.match(s, /pendingText\);\n {4}startThinkingClock|startThinkingClock\(pendingText\)/, 'the main ask path starts the clock');
+  assert.ok(s.includes('startThinkingClock(waitingText);'), 'the cloud-consent waiting path starts the clock too');
+});

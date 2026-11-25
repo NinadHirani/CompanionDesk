@@ -28,6 +28,20 @@
     return String(document.body.dataset.companionName || '').trim() || 'CompanionDesk';
   }
 
+  // Companion-first: the thinking hint shows how long the ask has been
+  // running. One 1 s interval per pending hint; the tick updates only the
+  // hint's own text node (the Cancel button beside it is untouched) and
+  // clears itself the moment the hint leaves the page (answer, error,
+  // cancel, or first streamed token), so no timer survives the turn.
+  function startThinkingClock(textNode) {
+    const started = Date.now();
+    const timer = setInterval(() => {
+      if (!textNode.isConnected) { clearInterval(timer); return; }
+      textNode.nodeValue = `${companionName()} is thinking (${Math.floor((Date.now() - started) / 1000)}s)`;
+    }, 1000);
+    return timer;
+  }
+
   function addCard(text, cls) {
     const entry = el('section', null, 'card qa');
     if (cls === 'answer') entry.appendChild(el('p', companionName(), 'who'));
@@ -131,7 +145,9 @@
 
     const entry = el('section', null, 'card qa');
     entry.appendChild(el('p', question, 'q'));
-    const pending = el('p', `${companionName()} is thinking`, 'hint');
+    const pending = el('p', null, 'hint');
+    const pendingText = document.createTextNode(`${companionName()} is thinking`);
+    pending.appendChild(pendingText);
     entry.appendChild(pending);
     log.appendChild(entry);
     scrollToLatest(true);
@@ -147,6 +163,7 @@
     cancelBtn.addEventListener('click', () => api.ai_cancel({ request_id: requestId }));
     pending.appendChild(document.createTextNode(' '));
     pending.appendChild(cancelBtn);
+    startThinkingClock(pendingText);
 
     // Streaming: model tokens arrive on the push channel while the ask
     // runs; the answer from the ask's own result stays authoritative and
@@ -202,7 +219,9 @@
         sendBtn.disabled = true;
         stayBtn.disabled = true;
         row.remove();
-        const waiting = el('p', `${companionName()} is thinking`, 'hint');
+        const waiting = el('p', null, 'hint');
+        const waitingText = document.createTextNode(`${companionName()} is thinking`);
+        waiting.appendChild(waitingText);
         entry.appendChild(waiting);
         const consentId = (typeof crypto !== 'undefined' && crypto.randomUUID)
           ? crypto.randomUUID()
@@ -212,6 +231,7 @@
         cancel2.addEventListener('click', () => api.ai_cancel({ request_id: consentId }));
         waiting.appendChild(document.createTextNode(' '));
         waiting.appendChild(cancel2);
+        startThinkingClock(waitingText);
         const res2 = await api.ai_ask({ prompt: question, conversation_id: currentId, cloud_consent: true, request_id: consentId });
         waiting.remove();
         if (res2.ok) {
