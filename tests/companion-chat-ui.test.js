@@ -59,3 +59,10 @@ test('the thinking indicator and the Ask heading carry the companion name', () =
   assert.ok(ov.includes("typeof thinking === 'function' ? thinking() : thinking"), 'thinking hints can be computed');
   assert.ok(ov.includes('is thinking`'), 'the overlay thinking hint names the companion');
 });
+
+test('the app opens on the companion chat once setup is done', () => {
+  const boot = read('renderer/boot.js');
+  assert.ok(boot.includes("needsSetup ? 'onboarding' : 'ask'"), 'ready state lands on the chat');
+  const ob = read('renderer/onboarding.js');
+  assert.ok(ob.includes("UI.show('ask')"), 'finishing setup ends in the chat');
+});

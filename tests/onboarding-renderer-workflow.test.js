@@ -134,7 +134,7 @@ test('the privacy step renders heading + body and completes the interview', asyn
   assert.equal(global.document.activeElement, byId['ob-next']);
   byId['ob-next'].click(); await flush();
   assert.equal(log.completed, 1, 'interview completes after the last question');
-  assert.deepEqual(log.shown, ['today']);
+  assert.deepEqual(log.shown, ['ask']); // companion-first landing
 });
 
 test('skip-the-rest needs a confirming second click; advancing disarms it', async () => {
@@ -151,5 +151,5 @@ test('skip-the-rest needs a confirming second click; advancing disarms it', asyn
   assert.equal(log.completed, 0);
   f.click(); await flush();
   assert.equal(log.completed, 1, 'second consecutive click confirms');
-  assert.deepEqual(log.shown, ['today']);
+  assert.deepEqual(log.shown, ['ask']); // companion-first landing
 });

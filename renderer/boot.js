@@ -8,6 +8,7 @@
   (async () => {
     await UI.today.refresh();
     const needsSetup = await UI.onboarding.start();
-    UI.show(needsSetup ? 'onboarding' : 'today');
+    // Companion-first: the app opens on the companion chat once setup is done.
+    UI.show(needsSetup ? 'onboarding' : 'ask');
   })();
 })();

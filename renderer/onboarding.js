@@ -87,7 +87,7 @@
   async function finish() {
     await api.onboarding_complete();
     await UI.today.refresh();
-    UI.show('today');
+    UI.show('ask'); // companion-first: setup ends in the companion chat
   }
 
   // Skipping everything ends the interview for good (it never runs again),
