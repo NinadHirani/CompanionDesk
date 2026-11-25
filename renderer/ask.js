@@ -16,6 +16,7 @@
   const renameBtn = document.getElementById('ask-rename');
   const deleteBtn = document.getElementById('ask-delete');
   const newChatBtn = document.getElementById('ask-newchat');
+  const renameInput = document.getElementById('ask-rename-input');
   let currentId = null;
   const titles = new Map();
 
@@ -209,15 +210,41 @@
     }
   }
 
-  renameBtn.addEventListener('click', async () => {
+  function restoreSubTitle() {
+    updateSub(currentId ? titles.get(String(currentId)) || `Chat ${currentId}` : null);
+  }
+
+  renameBtn.addEventListener('click', () => {
     if (!currentId) { convSel.focus(); return; }
-    const name = prompt('Rename this conversation', titles.get(String(currentId)) || '');
-    if (name === null) return;
+    // Inline rename: prompt() is unavailable inside Electron, so the title
+    // field itself becomes the editor.
+    const sub = document.getElementById('ask-sub');
+    sub.hidden = true;
+    renameInput.value = titles.get(String(currentId)) || '';
+    renameInput.hidden = false;
+    renameInput.focus();
+    renameInput.select();
+  });
+
+  renameInput.addEventListener('keydown', async (e) => {
+    if (e.key === 'Escape') {
+      renameInput.hidden = true;
+      restoreSubTitle();
+      return;
+    }
+    if (e.key !== 'Enter') return;
+    e.preventDefault();
+    const name = renameInput.value.trim();
     const res = await api.chat_rename({ id: currentId, title: name });
+    renameInput.hidden = true;
+    if (!res.ok) { alert(res.error === 'invalid_title' ? 'A name needs at least one character.' : 'Rename failed.'); restoreSubTitle(); return; }
     titles.set(String(currentId), name);
     updateSub(name);
-    if (!res.ok) { alert(res.error === 'invalid_title' ? 'A name needs at least one character.' : 'Rename failed.'); return; }
     await refreshList(currentId);
+  });
+
+  renameInput.addEventListener('blur', () => {
+    if (!renameInput.hidden) { renameInput.hidden = true; restoreSubTitle(); }
   });
 
   deleteBtn.addEventListener('click', async () => {
