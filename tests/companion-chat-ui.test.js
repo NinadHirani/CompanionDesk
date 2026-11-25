@@ -166,6 +166,13 @@ test('ask_failed maps to a plain retry message', () => {
   assert.ok(s.includes('try again.'), 'the message invites a retry');
 });
 
+test('the overlay submit path has no dangling calls: speech stops inline', () => {
+  const ov = read('renderer/overlay.js');
+  assert.ok(!ov.includes('stopSpeaking('), 'no dangling stopSpeaking call: it was defined nowhere and crashed every typed overlay ask');
+  const stops = ov.split('if (speech.isSpeaking()) speech.stop();').length - 1;
+  assert.ok(stops >= 3, 'every ask entry point stops a running read-aloud inline before asking');
+});
+
 test('chat bubbles wrap long unbroken tokens at every viewport width', () => {
   const css = read('renderer/styles.css');
   const q = css.slice(css.indexOf('.qa .q {'), css.indexOf('.qa .answer'));

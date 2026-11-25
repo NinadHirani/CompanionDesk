@@ -78,7 +78,8 @@
     if (!prompt || busy) return;
     busy = true;
     input.disabled = true;
-    stopSpeaking();
+    // Speech stops inline before asking.
+    if (speech.isSpeaking()) speech.stop();
     readBtn.hidden = true;
     answer.textContent = '';
     answer.classList.remove('error');
