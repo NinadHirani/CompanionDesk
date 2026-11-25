@@ -173,6 +173,8 @@ test('the chat log is a live region: new messages are announced', () => {
   assert.ok(ov.includes('<div id="ov-answer" class="ov-answer" aria-live="polite">'), 'the overlay answer already announces');
   const web = read('web/index.html');
   assert.ok(web.includes('<div id="ask-log" role="log">'), 'the web bundle keeps the same live-region semantics');
+  assert.ok(web.includes('<p class="hint" id="ob-progress" role="status" aria-live="polite">'), 'the web onboarding progress announces');
+  assert.ok(web.includes('<h2 id="ob-prompt" aria-live="polite">'), 'the web onboarding question announces');
 });
 
 test('the overlay submit path has no dangling calls: speech stops inline', () => {
