@@ -177,6 +177,17 @@ test('the chat log is a live region: new messages are announced', () => {
   assert.ok(web.includes('<h2 id="ob-prompt" aria-live="polite">'), 'the web onboarding question announces');
 });
 
+test('the AI status chip is a real button, keyboard-reachable', () => {
+  for (const copy of ['renderer/index.html', 'web/index.html']) {
+    const html = read(copy);
+    assert.ok(html.includes('<button id="ai-status" class="status" type="button">'), copy + ' makes the status chip a real button');
+    assert.ok(!html.includes('<span id="ai-status"'), copy + ' no longer ships the click-only span');
+  }
+  for (const copy of ['renderer/styles.css', 'web/styles.css']) {
+    assert.ok(read(copy).includes('button.status { border: 0; }'), copy + ' keeps the chip look borderless');
+  }
+});
+
 test('the section tabs announce the open section with aria-current', () => {
   const src = read('renderer/dom.js');
   assert.ok(src.includes("b.dataset.view === name) b.setAttribute('aria-current', 'true')"), 'dom.js sets aria-current on the open tab');
