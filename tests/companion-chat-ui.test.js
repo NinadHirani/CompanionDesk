@@ -166,6 +166,15 @@ test('ask_failed maps to a plain retry message', () => {
   assert.ok(s.includes('try again.'), 'the message invites a retry');
 });
 
+test('the chat log is a live region: new messages are announced', () => {
+  const html = read('renderer/index.html');
+  assert.ok(html.includes('<div id="ask-log" role="log">'), 'role=log gives the chat log polite live-region semantics');
+  const ov = read('renderer/overlay.html');
+  assert.ok(ov.includes('<div id="ov-answer" class="ov-answer" aria-live="polite">'), 'the overlay answer already announces');
+  const web = read('web/index.html');
+  assert.ok(web.includes('<div id="ask-log" role="log">'), 'the web bundle keeps the same live-region semantics');
+});
+
 test('the overlay submit path has no dangling calls: speech stops inline', () => {
   const ov = read('renderer/overlay.js');
   assert.ok(!ov.includes('stopSpeaking('), 'no dangling stopSpeaking call: it was defined nowhere and crashed every typed overlay ask');
