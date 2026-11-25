@@ -183,9 +183,8 @@ test('the AI status chip is a real button, keyboard-reachable', () => {
     assert.ok(html.includes('<button id="ai-status" class="status" type="button">'), copy + ' makes the status chip a real button');
     assert.ok(!html.includes('<span id="ai-status"'), copy + ' no longer ships the click-only span');
   }
-  for (const copy of ['renderer/styles.css', 'web/styles.css']) {
-    assert.ok(read(copy).includes('button.status { border: 0; }'), copy + ' keeps the chip look borderless');
-  }
+  // styles.css is a build output in web/ (regenerated before CI's smoke step), so only the renderer copy is asserted here
+  assert.ok(read('renderer/styles.css').includes('button.status { border: 0; }'), 'renderer/styles.css keeps the chip look borderless');
 });
 
 test('the section tabs announce the open section with aria-current', () => {
