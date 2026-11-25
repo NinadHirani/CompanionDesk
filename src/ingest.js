@@ -82,10 +82,10 @@ async function ingestSyllabus({ file, ai, db, vaultDir }) {
   if (!text.trim()) throw new Error('empty_document');
   const base = path.basename(file);
   const extracted = await extractSyllabus({ text, ai, fallbackCourseName: base.replace(/\.[^.]+$/, '') });
+  const existed = db.listCourses().some((c) => c.name === extracted.course.name && (c.code || '') === (extracted.course.code || ''));
   const courseId = db.upsertCourse({ ...extracted.course, source_file: base });
   db.setGradeWeights(courseId, extracted.grade_weights);
-  db.clearAssignments(courseId);
-  for (const a of extracted.assignments) db.addAssignment(courseId, a);
+  const refresh = db.refreshCourseAssignments(courseId, extracted.assignments);
   const classFile = vault.writeClassFile(vaultDir, extracted);
   const overviewFile = vault.writeSemesterOverview(vaultDir, db.listCourses());
   return {
@@ -93,6 +93,7 @@ async function ingestSyllabus({ file, ai, db, vaultDir }) {
     assignments: extracted.assignments.length,
     flagged: extracted.assignments.filter((x) => x.date_confidence !== 'extracted').length,
     warnings: extracted.warnings,
+    refresh: { ...refresh, existed },
     classFile,
     overviewFile,
   };

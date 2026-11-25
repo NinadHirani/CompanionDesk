@@ -422,6 +422,48 @@ CREATE TABLE IF NOT EXISTS agent_schema (
       this.persist();
     }
 
+    // Re-import refresh: sync a course's syllabus-sourced assignments with a
+    // fresh extraction without touching anything the user added by hand.
+    // Assignments are matched by title, case- and whitespace-insensitive: a
+    // match keeps its row id (so its scores survive) and gets its date,
+    // category and date confidence re-set; a title the new syllabus no
+    // longer lists is removed, unless the user added that deadline by hand.
+    // Returns { added, updated, removed } counts.
+    refreshCourseAssignments(courseId, assignments) {
+      const norm = (t) => String(t || '').trim().toLowerCase().replace(/\s+/g, ' ');
+      const rows = this.all('SELECT id, title, date_confidence FROM assignments WHERE course_id = ?', [courseId]);
+      const stale = new Map();
+      for (const r of rows) {
+        if (r.date_confidence === 'manual') continue;
+        stale.set(norm(r.title), r);
+      }
+      const seen = new Set();
+      let added = 0, updated = 0;
+      for (const a of assignments || []) {
+        const key = norm(a.title);
+        seen.add(key);
+        const existing = stale.get(key);
+        if (existing) {
+          this.run('UPDATE assignments SET due_date = ?, category = ?, date_confidence = ? WHERE id = ?',
+            [a.due_date || null, a.category || null, a.date_confidence || 'extracted', existing.id]);
+          stale.delete(key);
+          updated++;
+        } else {
+          this.run('INSERT INTO assignments (course_id, title, due_date, date_confidence, category) VALUES (?, ?, ?, ?, ?)',
+            [courseId, a.title, a.due_date || null, a.date_confidence || 'extracted', a.category || null]);
+          added++;
+        }
+      }
+      let removed = 0;
+      for (const r of stale.values()) {
+        this.run('DELETE FROM scores WHERE assignment_id = ?', [r.id]);
+        this.run('DELETE FROM assignments WHERE id = ?', [r.id]);
+        removed++;
+      }
+      this.persist();
+      return { added, updated, removed };
+    }
+
     addAssignment(courseId, { title, due_date, category, date_confidence }) {
       this.run(
         "INSERT INTO assignments (course_id, title, due_date, date_confidence, category) VALUES (?, ?, ?, ?, ?)",

@@ -211,10 +211,10 @@
           temperature: 0,
         });
         const extracted = CompanionCore.validateExtraction(CompanionCore.parseModelJson(raw), { fallbackCourseName: fallback });
+        const existed = db.listCourses().some((c) => c.name === extracted.course.name && (c.code || '') === (extracted.course.code || ''));
         const courseId = db.upsertCourse({ ...extracted.course, source_file: file.name });
         db.setGradeWeights(courseId, extracted.grade_weights);
-        db.clearAssignments(courseId);
-        for (const a of extracted.assignments) db.addAssignment(courseId, a);
+        const refresh = db.refreshCourseAssignments(courseId, extracted.assignments);
         summaries.push({
           ok: true,
           file: file.name,
@@ -222,6 +222,7 @@
           assignments: extracted.assignments.length,
           flagged: extracted.assignments.filter((x) => x.date_confidence !== 'extracted').length,
           warnings: extracted.warnings,
+          refresh: { ...refresh, existed },
         });
       } catch (err) {
         const e = err instanceof Error ? err : new Error(String(err));

@@ -393,7 +393,10 @@
     if (!res.ok) { box.appendChild(el('p', 'Import cancelled.')); return; }
     for (const s of res.summaries) {
       if (s.ok) {
-        box.appendChild(el('p', `${s.file}: ${s.course}, ${plural(s.assignments, 'assignment')}, ${s.flagged} flagged for checking.`));
+        const counts = s.refresh && s.refresh.existed
+          ? `, ${s.refresh.added} added, ${s.refresh.updated} refreshed, ${s.refresh.removed} removed`
+          : '';
+        box.appendChild(el('p', `${s.file}: ${s.course}, ${plural(s.assignments, 'assignment')}${counts}, ${s.flagged} flagged for checking.`));
       } else {
         box.appendChild(el('p', `${s.file}: ${s.message || s.error}`, 'error'));
       }
