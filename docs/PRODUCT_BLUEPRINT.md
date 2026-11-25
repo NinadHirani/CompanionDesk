@@ -1289,3 +1289,48 @@ Never claim the whole product is finished, never mark a planned feature as
 implemented, and never claim a capability on a platform it was not verified
 on. This file is updated as phases land, with the same implemented/planned
 discipline.
+
+## 3j.12. Run entry point (25 Nov 2026): IMPLEMENTED, nothing fires
+
+Decision D1, option (a): the scheduling gate is the ONLY source of run
+requests. Decided by Ninad on 25 Nov 2026; D-S2 (the scheduled driver
+kind) and the schedule_create enable step stay separate, unapproved
+gates. Implemented in src/agent-run-entry.js (pure, dependency-injected,
+no requires, no timers, no channels), wired in src/main.js as the ONLY
+caller of driver.run(), and tested in tests/gate2-run-entry.test.js
+(11 tests).
+
+What the entry does, in order, all fail closed:
+
+- Refusals in order: `args_invalid` (bad schedule id, missing/empty
+  plan, step without id/tool/args/run), `kind_refused` (the entry
+  accepts only kind `user`, so a caller-supplied non-user kind never
+  reaches the driver), `schedule_unknown`, `schedule_cancelled`,
+  `origin_unverified`, `intent_audit_failed`.
+- ORIGIN PROOF: a request names a schedule; the durable audit must
+  carry the scheduling gate's own creation entry (action `schedule.create`,
+  tool `schedule_create`, detail `schedule_id`) for exactly that id.
+  A schedule created on the product surface, and a gate schedule whose
+  creation audit never landed (the approved `audit_append_failed`
+  mode), can NEVER start a run.
+- INTENT BEFORE START (audit-first): after the origin proof the entry
+  appends the durable user-intent entry (actor `user`, action
+  `run.request`, detail { schedule_id, source `scheduling_gate` })
+  BEFORE calling driver.run(); an append failure refuses the run and
+  nothing starts. The driver's own pre-validation (registry existence,
+  capability, args schema) still runs inside driver.run(), which stays
+  the single enforcing point: an intent entry may exist for a request
+  the driver refused (for example with the production registry empty,
+  `plan_tool_unknown`), and that is the audit record of the attempt.
+- KIND DISCIPLINE: the entry always passes kind `user`; the driver's
+  own allowlist stays exactly [user] (re-pinned). The entry never forms
+  plans: the plan arrives from the caller (the future D-S2 firing
+  path); reminder-scope schedules carry no plan data.
+
+Still true after this slice: the scheduling tool stays unregistered
+and disabled; the production registry stays empty (re-pinned in
+src/main.js); nothing in this build calls requestRun, so no run can
+start. The wiring lock in tests/gate2-scheduling-gate.test.js now
+names the entry as the ONE lawful consumer of the gate's audit record:
+it must keep proving origin from the audit, must stay
+dependency-injected and must register nothing.

@@ -58,6 +58,7 @@ const { createNotificationDesk } = require('./agent-notifications');
 const { createNotificationsDisplayStore } = require('./agent-notifications-display');
 const { createDisplayDelivery } = require('./agent-display-delivery');
 const { createRunDriver } = require('./agent-run-driver');
+const { createRunEntry } = require('./agent-run-entry');
 const { createReminderBook } = require('./agent-reminders');
 const { createAgentSurface } = require('./agent-surface');
 const { createSchedulerSurface } = require('./scheduler-surface');
@@ -88,6 +89,7 @@ let agentStop = null;
 let agentAudit = null;
   let agentPersistence = null;
   let agentRunDriver = null;
+  let agentRunEntry = null;
 let agentOrchestrator = null;
 let agentNotifications = null;
 let agentScheduler = null;
@@ -253,6 +255,21 @@ async function init() {
         persistence: stack.persistence,
         notifications: stack.notifications,
         registry: stack.registry,
+      });
+      // Gate 2 3j.12, decision D1 (option a, 25 Nov 2026): the ONLY run
+      // entry point. A run reaches driver.run() exclusively through
+      // agentRunEntry.requestRun(), which fails closed unless the durable
+      // audit carries the scheduling gate's own schedule.create entry for
+      // the named schedule, then writes the durable user-intent entry
+      // BEFORE driver.run() and always passes kind 'user' (the 'scheduled'
+      // kind stays refused: D-S2 is a separate, unapproved gate).
+      // Nothing in this build calls requestRun: the scheduling gate's tool
+      // stays unregistered (no scheduling-gate schedule can exist yet) and
+      // the registry stays EMPTY, so no run can start.
+      agentRunEntry = createRunEntry({
+        driver: agentRunDriver,
+        book: stack.schedules,
+        audit: stack.persistence.durableAudit(),
       });
       agentOrchestrator = stack.orchestrator;
       agentNotifications = stack.notifications;

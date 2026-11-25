@@ -17,9 +17,11 @@ wiring, STT allowlist per the STT decision); M7 has its policy slice and
 observation-session machine; M8 has slices 1-3 (integrations registry,
 Device Access Centre policy core, workspace-views groundwork). Gate 2
 has slices 1-4, persistence wiring, notification gates, run-driver
-Stage A, and the scheduling gate (3j.11, D-S1) - implemented and NOT
-enabled; the production registry stays empty. Full suite 966/966,
-selftest PASS, both CI workflows green on 13a8f9a.
+Stage A, the scheduling gate (3j.11, D-S1), and the run entry point
+(3j.12, D1 option a, 25 Nov) - implemented and NOT enabled; the
+production registry stays empty and requestRun has no caller, so no
+run can start. Full suite 977/977, selftest PASS, both CI workflows
+green on the D1 commit.
 
 ## Ranked next tasks (each with its gate)
 
@@ -27,9 +29,12 @@ selftest PASS, both CI workflows green on 13a8f9a.
    choice; unblocks EVERYTHING in the agent workstream - a created
    schedule is inert until a run can start, and the Stage B proposal
    (3j.10) explicitly records "no run can start until D1 is decided".
-   Approval needed: a product decision from Ninad between the options
-   already sketched in 3j.9/3j.10 (explicit renderer action vs settings
-   file vs deferred registration). No code until he picks.
+   STATUS 25 Nov 2026: DECIDED and IMPLEMENTED. Ninad picked option (a)
+   (the scheduling gate as the run-request source) and the entry point
+   is implemented as blueprint 3j.12 (commit below), with D-S2 and the
+   schedule_create enablement kept as separate approval gates.
+   Remaining approvals on this line: D-S2 (the scheduled driver kind)
+   and the schedule_create enable step, each its own gate.
 
 2. WAKE-WORD VERIFICATION RESEARCH (docs only; standing direction "the
    search continues"). The two undecided items in docs/M6_VOICE_DECISIONS.md

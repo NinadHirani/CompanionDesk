@@ -9,7 +9,9 @@
 // reminder scope only, 365-day horizon, exact-duplicate refusal. Nothing
 // here registers anything: the production registry stays empty (pinned
 // below and by src/main.js), the run driver's 'scheduled' kind stays
-// refused (D-S2 deferred), and no run can start until Stage-A D1.
+// refused (D-S2 deferred). Stage-A D1 was decided 25 Nov 2026 (option a):
+// the run entry point (src/agent-run-entry.js) is the only path into
+// driver.run() and it accepts only scheduling-gate-originated requests.
 
 const test = require('node:test');
 const assert = require('node:assert');
@@ -303,7 +305,7 @@ test('persistence roundtrip keeps the agent-created schedule', async () => {
   assert.equal(book2.list()[0].title, ARGS.title);
 });
 
-test('wiring lock: the tool module never requires the scheduler and nothing else registers it', () => {
+test('wiring lock: the tool module never requires the scheduler, nothing else registers it, and only the D1 entry consumes its audit record', () => {
   const srcDir = path.join(__dirname, '..', 'src');
   const files = fs.readdirSync(srcDir).filter((f) => f.endsWith('.js'));
   const toolSrc = fs.readFileSync(path.join(srcDir, 'agent-tool-scheduling.js'), 'utf8');
@@ -312,6 +314,17 @@ test('wiring lock: the tool module never requires the scheduler and nothing else
   for (const f of files) {
     const text = fs.readFileSync(path.join(srcDir, f), 'utf8');
     if (f === 'agent-tool-scheduling.js') continue;
+    if (f === 'agent-run-entry.js') {
+      // Decision D1 (option a, 25 Nov 2026): the run entry point is the ONE
+      // lawful consumer of the scheduling gate's audit record. It proves a
+      // request's origin by matching the gate's own schedule.create entry
+      // and must never require, register or execute the tool.
+      assert.ok(text.includes("'schedule.create'"), 'the entry proves origin from the gate audit record');
+      assert.ok(text.includes("'schedule_create'"), 'the entry matches the gate tool name in the audit record');
+      assert.ok(!text.includes('require('), 'the entry stays dependency-injected');
+      assert.ok(!text.includes('.define('), 'the entry registers nothing');
+      continue;
+    }
     assert.ok(!text.includes('schedule_create'), f + ' must not reference the tool');
   }
   const contract = fs.readFileSync(path.join(srcDir, 'ipc-contract.js'), 'utf8');

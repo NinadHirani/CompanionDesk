@@ -173,3 +173,11 @@ read (duplicates an existing surface the user already sees directly).
   Registration alone cannot make anything execute: the driver has no
   caller and the ledger refuses unknown kinds. Stage B's "real read-only
   runs become possible" therefore lands only when D1 lands.
+
+  UPDATE 25 Nov 2026: D1 was decided (option a, the scheduling gate as
+  the run-request source) and IMPLEMENTED (blueprint 3j.12): the run
+  entry point exists and is the only caller of driver.run(), but
+  requestRun has NO caller in this build and the registry stays empty,
+  so nothing executes yet. Stage B review (D-B1/D-B2) remains a
+  separate, unapproved gate; if approved it supplies the first lawful
+  plan for the entry.
