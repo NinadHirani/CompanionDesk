@@ -189,6 +189,10 @@
       scrollToLatest();
     }) : null;
 
+    // The ask keeps the thread it was asked in: if the user switches
+    // conversations while the model is still thinking, completion must
+    // persist to that thread and must not yank the picker or header back.
+    const askThreadId = currentId;
     let res;
     try {
       res = await api.ai_ask({ prompt: question, conversation_id: currentId, request_id: requestId });
@@ -210,7 +214,10 @@
       if (!answerEl) { answerEl = el('p', res.answer, 'answer'); entry.appendChild(answerEl); }
       else answerEl.textContent = res.answer;
       scrollToLatest();
-      if (res.conversation_id) {
+      // Re-select the ask's thread only when the user never left it: a
+      // mid-ask switch to another conversation is a browsing choice, and
+      // the completed ask must not yank the picker (or header) back.
+      if (res.conversation_id && currentId === askThreadId) {
         currentId = res.conversation_id;
         await refreshList(currentId);
       }
@@ -260,7 +267,7 @@
         startThinkingClock(waitingText);
         let res2 = null;
         try {
-          res2 = await api.ai_ask({ prompt: question, conversation_id: currentId, cloud_consent: true, request_id: consentId });
+          res2 = await api.ai_ask({ prompt: question, conversation_id: askThreadId, cloud_consent: true, request_id: consentId });
         } catch (err) {
           // Same rule on the consented cloud path: the waiting hint and
           // its clock leave, and the failure is reported in place.
@@ -273,7 +280,7 @@
         if (res2.ok) {
           entry.appendChild(el('p', res2.answer, 'answer'));
           scrollToLatest(true);
-          if (res2.conversation_id) {
+          if (res2.conversation_id && currentId === askThreadId) {
             currentId = res2.conversation_id;
             await refreshList(currentId);
           }

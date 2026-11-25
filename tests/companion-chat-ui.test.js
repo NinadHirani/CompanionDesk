@@ -256,3 +256,11 @@ test('the ask Enter path respects the in-flight guard, one ask at a time', () =>
   const head = s.slice(i, i + 400);
   assert.ok(head.includes('if (btn.disabled) return;'), 'submit refuses a second ask while one is pending');
 });
+
+test('a pending ask keeps its own thread; completion never yanks the picker back', () => {
+  const s = read('renderer/ask.js');
+  assert.ok(s.includes('const askThreadId = currentId;'), 'the ask captures its thread at submit time');
+  assert.ok(s.includes('if (res.conversation_id && currentId === askThreadId)'), 'local completion re-selects the ask thread only when the user stayed on it');
+  assert.ok(s.includes('if (res2.conversation_id && currentId === askThreadId)'), 'cloud completion follows the same rule');
+  assert.ok(s.includes('conversation_id: askThreadId, cloud_consent: true'), 'the consented ask saves to the thread it was asked in, not the open one');
+});
