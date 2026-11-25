@@ -330,7 +330,9 @@
     }
   }
 
-  document.getElementById('course-add-btn').addEventListener('click', async () => {
+  // The add forms follow the same keyboard convention as the row editors:
+  // Enter in a text field adds, so the mouse is never required.
+  async function addCourse() {
     const name = document.getElementById('course-name');
     const code = document.getElementById('course-code');
     const msg = document.getElementById('course-msg');
@@ -341,7 +343,13 @@
     msg.textContent = 'Added.';
     msg.className = 'hint';
     await refresh();
-  });
+  }
+  document.getElementById('course-add-btn').addEventListener('click', addCourse);
+  for (const id of ['course-name', 'course-code']) {
+    document.getElementById(id).addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); addCourse(); }
+    });
+  }
 
   // ---- calendar ---------------------------------------------------------------
   function renderCalendar(res) {
@@ -420,7 +428,7 @@
     });
   }
 
-  document.getElementById('dl-add').addEventListener('click', async () => {
+  async function addDeadline() {
     const title = document.getElementById('dl-title');
     const date = document.getElementById('dl-date');
     const msg = document.getElementById('dl-msg');
@@ -433,7 +441,13 @@
     msg.textContent = 'Added.';
     msg.className = 'hint';
     await refresh();
-  });
+  }
+  document.getElementById('dl-add').addEventListener('click', addDeadline);
+  for (const id of ['dl-title', 'dl-date']) {
+    document.getElementById(id).addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); addDeadline(); }
+    });
+  }
 
   document.getElementById('import-btn').addEventListener('click', async () => {
     const box = document.getElementById('import-result');

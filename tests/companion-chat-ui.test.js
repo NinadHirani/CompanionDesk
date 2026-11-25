@@ -202,6 +202,16 @@ test('row editors take Enter to save and Escape to cancel', () => {
   assert.ok(escapes >= 2, 'both editors dismiss on Escape, got ' + escapes);
 });
 
+test('the add forms take Enter in a text field', () => {
+  const src = read('renderer/app.js');
+  assert.ok(src.includes('async function addCourse()'), 'the course add path is a function the button and Enter share');
+  assert.ok(src.includes('async function addDeadline()'), 'the deadline add path is a function the button and Enter share');
+  assert.ok(src.includes("document.getElementById('course-add-btn').addEventListener('click', addCourse)"), 'the course button uses the shared path');
+  assert.ok(src.includes("document.getElementById('dl-add').addEventListener('click', addDeadline)"), 'the deadline button uses the shared path');
+  const enters = src.split("e.key === 'Enter'").length - 1;
+  assert.ok(enters >= 4, 'Enter is wired on both add forms and both row editors, got ' + enters);
+});
+
 test('the AI status chip is a real button, keyboard-reachable', () => {
   for (const copy of ['renderer/index.html', 'web/index.html']) {
     const html = read(copy);
