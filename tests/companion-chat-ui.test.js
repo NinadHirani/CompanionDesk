@@ -621,3 +621,12 @@ test('every reading-aloud refusal reason carries friendly wording, including the
   const readChunk = ov.slice(readAt, readAt + 500);
   assert.ok(readChunk.includes('friendlyError(r.reason)'), 'the read button reports the refusal reason in place');
 });
+
+test('a fast second mic click cannot open a second mic stream while the first start is pending', () => {
+  const ov = read('renderer/overlay.js');
+  const micAt = ov.indexOf("micBtn.addEventListener('click'");
+  const chunk = ov.slice(micAt, micAt + 1400);
+  assert.ok(chunk.includes('if (busy || starting) return;'), 'the mic click is guarded against a start already in flight');
+  assert.ok(chunk.includes('starting = true;'), 'the start attempt raises the flag before its first await');
+  assert.ok(chunk.includes('finally {'), 'the flag releases on every path out of the start sequence');
+});

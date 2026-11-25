@@ -32,6 +32,7 @@
   let busy = false;
   let recording = null; // the active recorder, if any
   let processing = false; // a transcription is in flight in the main process
+  let starting = false; // a mic start attempt is in flight
 
   const IDLE_HINT = 'Enter to ask. Esc to close.';
 
@@ -224,33 +225,41 @@
   }
 
   micBtn.addEventListener('click', async () => {
-    if (busy) return;
+    if (busy || starting) return;
     if (recording) { await stopAndTranscribe(); return; }
-    let status;
+    // The start path awaits twice (the status check, then the recorder). A
+    // second click must not enter while the first is pending, or two mic
+    // streams open and the first one leaks its tracks.
+    starting = true;
     try {
-      status = await api.voice_status();
-    } catch (err) {
-      showError('voice_status_failed');
-      return;
+      let status;
+      try {
+        status = await api.voice_status();
+      } catch (err) {
+        showError('voice_status_failed');
+        return;
+      }
+      if (status.enabled === false) { showError('voice_disabled'); return; }
+      if (!status.available) {
+        answer.textContent = status.reason === 'no_model'
+          ? 'Voice needs a whisper model file. See the README for where to put it.'
+          : 'Voice needs whisper.cpp installed. See the README.';
+        answer.classList.add('error');
+        return;
+      }
+      try {
+        recording = await window.CompanionRecorder.startRecording({ onAutoStop: () => { if (recording) stopAndTranscribe(); } });
+      } catch (err) {
+        showError(err && err.name === 'NotFoundError' ? 'mic_missing' : 'mic_blocked');
+        return;
+      }
+      answer.textContent = '';
+      answer.classList.remove('error');
+      micBtn.textContent = 'Stop';
+      hint.textContent = 'Listening. Click Stop when you are done.';
+    } finally {
+      starting = false;
     }
-    if (status.enabled === false) { showError('voice_disabled'); return; }
-    if (!status.available) {
-      answer.textContent = status.reason === 'no_model'
-        ? 'Voice needs a whisper model file. See the README for where to put it.'
-        : 'Voice needs whisper.cpp installed. See the README.';
-      answer.classList.add('error');
-      return;
-    }
-    try {
-      recording = await window.CompanionRecorder.startRecording({ onAutoStop: () => { if (recording) stopAndTranscribe(); } });
-    } catch (err) {
-      showError(err && err.name === 'NotFoundError' ? 'mic_missing' : 'mic_blocked');
-      return;
-    }
-    answer.textContent = '';
-    answer.classList.remove('error');
-    micBtn.textContent = 'Stop';
-    hint.textContent = 'Listening. Click Stop when you are done.';
   });
 
   readBtn.addEventListener('click', () => {
