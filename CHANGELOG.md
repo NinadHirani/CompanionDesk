@@ -20,6 +20,12 @@ gated, disabled, or unmeasured; every line matches the roadmap evidence.
   roving focus, question changes are announced to screen readers, and
   "Skip the rest" needs a confirming second click (it ends the interview
   for good).
+- Proactive scheduler fixes: editing a schedule's due time now clears the
+  stale quiet-hours deferral (a moved due no longer fires at the old
+  deferred moment), and a failed audit append or save now rolls back
+  pause/resume/cancel and edits to the exact last durable state instead
+  of leaving a phantom in memory; the schedule book's update rollback
+  test shared the wrong clock and is fixed.
 - Release groundwork: this changelog, a first-run acceptance test
   pinning the standing privacy defaults on a fresh install, the first-run
   privacy explainer step, and a release-metadata preflight

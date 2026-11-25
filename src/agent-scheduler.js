@@ -144,7 +144,13 @@
         }
         if (title === undefined && dueAt === undefined) return { ok: false, reason: 'nothing_to_update' };
         if (title !== undefined) rec.title = title;
-        if (dueAt !== undefined) rec.dueAt = dueAt;
+        if (dueAt !== undefined) {
+          // A moved due time invalidates a quiet-hours deferral: deferredTo
+          // was computed for the OLD due, so keeping it would fire the
+          // schedule at the stale moment even after the user moved the due
+          // later. Clear it and let the next tick re-evaluate the new due.
+          if (rec.dueAt !== dueAt) { rec.dueAt = dueAt; rec.deferredTo = null; }
+        }
         return { ok: true, schedule: { ...rec } };
       },
 

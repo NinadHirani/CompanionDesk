@@ -142,12 +142,21 @@ function createSchedulerSurface({ schedules, persistence } = {}) {
     return { ok: true, schedule: projectRecord(schedules.list().find((s) => s.id === made.schedule.id)) };
   }
 
+  // Rollback takes a snapshot of the whole book and re-hydrates it, so a
+  // failed audit append or save leaves exactly the last durable state: no
+  // phantom pause, resume or cancel can survive in memory (the book has no
+  // un-cancel, so an inverse-op rollback cannot restore a cancel).
+  function snapshotRollback(schedules) {
+    const snapshot = schedules.exportAll();
+    return () => { schedules.hydrate(snapshot); };
+  }
+
   function scopeOp(f, op, action) {
     const dur = durableWrite(
       persistence,
       { actor: 'user', action, detail: { id: f.id } },
       () => op(f.id),
-      () => {}
+      snapshotRollback(schedules)
     );
     if (!dur.ok) return dur;
     return { ok: true, schedule: projectRecord(dur.schedule) };
@@ -202,7 +211,10 @@ function createSchedulerSurface({ schedules, persistence } = {}) {
           persistence,
           { actor: 'user', action: 'schedules.updated', detail: updateDetail(v.payload) },
           () => schedules.update(v.payload),
-          () => schedules.update({ id: v.payload.id, title: before.title, dueAt: before.dueAt })
+          // Snapshot rollback, not a re-update: a due-time edit clears the
+          // record's quiet-hours deferral, so re-updating the old due could
+          // not restore it. The snapshot restores the exact prior state.
+          snapshotRollback(schedules)
         );
         if (!dur.ok) return dur;
         return { ok: true, schedule: projectRecord(dur.schedule) };

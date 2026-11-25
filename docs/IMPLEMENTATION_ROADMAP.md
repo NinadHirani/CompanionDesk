@@ -72,7 +72,9 @@ assembler, M4 memory-v2 harness) remains harness only, NOT product
 memory-v2 wiring. No actual OnePlus device measurements exist). Supersedes `docs/COMPANIONDESK_ROADMAP.md` and
 `docs/FEATURE_GAP.md` once approved; those files stay until then. Phases
 are dependency-ordered with explicit gates. Phases M2-M8 below are planned
-unless stated as implemented; M0 and M1 are the only implemented phases.
+unless stated as implemented. IMPLEMENTED so far (see the status table): M0,
+M1 and M5; M4 wired slices 1-2; M6 slices 1-5; M7 slices 1-2; M8 slices 1-3.
+Every unlisted remainder is planned behind the gate its section states.
 
 ## Phase gates
 
@@ -577,7 +579,7 @@ the create path against the real audit log had been refused, hidden by the
 fake-persistence tests. The panel edit affordance prefills the creation form,
 disables the scope field while editing, and restores "Add schedule" after.
 Conservative defaults remain working defaults (delivery off, quiet hours
-23:30-08:00, nothing fires until the user enables it) until reviewed.
+22:00-08:00, nothing fires until the user enables it) until reviewed.
 
 **Slice 4 (landed 24 Nov 2026): quiet-hours visibility.** While delivery is
 on, the schedules panel states the configured quiet-hours window and its
@@ -664,9 +666,10 @@ situation changed on re-verification: the upstream shared feature-extractor
 ONNX artifacts have UNSETTLED licensing (open issues #338/#346/#348/#357,
 no maintainer answer), so we convert our own feature extractor from
 Google's Apache-2.0 speech_embedding module per the notebook, exactly the
-"run the training ourselves" path the user approved. Remaining: listener
-runtime integration (hidden page + onnxruntime-web + indicator + query
-flow), the actual model training run, and physical-device validation
+"run the training ourselves" path the user approved. The listener runtime
+integration LANDED as M6 slice 5 (hidden listener window, score/query
+flow, mic indicator contract, query-done cooldown, About controls).
+Remaining: the actual model training run and physical-device validation
 (synthetic-metric claims never substitute for measured on-device rates).
 
 Wake-word TRAINING verification memo, docs-only (24 Nov 2026,

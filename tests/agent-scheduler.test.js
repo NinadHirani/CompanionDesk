@@ -519,7 +519,10 @@ test('surface schedules:update: validated, durable, rolled back on failure', asy
     save: () => (saveOk ? { ok: true } : { ok: false, reason: 'persist_failure' }),
   };
   let saveOk = true;
-  const book2 = createScheduleBook({ clock: () => clock.n });
+  // The book shares the test's clock; the previous `() => clock.n` read an
+  // undefined property, so every record was created with an undefined
+  // createdAt that only the snapshot rollback now trips over.
+  const book2 = createScheduleBook({ clock });
   const s2 = createSchedulerSurface({ schedules: book2, persistence: fake });
   const made2 = await s2.handlers['schedules:create']({ title: 'orig', scope: 'reminder', dueAt: NOW + 1000 });
   assert.equal(made2.ok, true);
@@ -531,4 +534,78 @@ test('surface schedules:update: validated, durable, rolled back on failure', asy
   assert.equal(failed.ok, false);
   assert.equal(failed.reason, 'persist_failure');
   assert.equal(book2.list()[0].title, 'edited', 'a failed save leaves the last durable state, not the phantom');
+});
+
+test('book update: a moved due time clears a stale quiet-hours deferral', () => {
+  const b = book();
+  const at = (h, m, day = 24) => new Date(2026, 10, day, h, m, 0, 0).getTime();
+  const made = b.create({ title: 'late night', scope: 'reminder', dueAt: at(23, 0) });
+  assert.equal(made.ok, true);
+  const t1 = b.tick(at(23, 1), { quietHours: QH_NIGHT });
+  assert.equal(t1.deferred.length, 1);
+  const deferredTo = t1.deferred[0].deferredTo;
+  // A title-only edit keeps the deferral: it is still tied to the same due.
+  let upd = b.update({ id: made.schedule.id, title: 'late night moved' });
+  assert.equal(upd.ok, true);
+  assert.equal(b.list()[0].deferredTo, deferredTo);
+  // Re-sending the same due time keeps the deferral too.
+  upd = b.update({ id: made.schedule.id, dueAt: at(23, 0) });
+  assert.equal(upd.ok, true);
+  assert.equal(b.list()[0].deferredTo, deferredTo);
+  // A moved due time clears the stale deferral: it was computed for the OLD
+  // due, so keeping it would fire the schedule at a moment the user moved
+  // away from. The next tick re-evaluates the new due instead.
+  upd = b.update({ id: made.schedule.id, dueAt: at(10, 0, 25) });
+  assert.equal(upd.ok, true);
+  assert.equal(b.list()[0].deferredTo, null, 'the stale deferral is cleared');
+  // At the old deferred moment nothing fires any more.
+  const t2 = b.tick(at(8, 0, 25), { quietHours: QH_NIGHT });
+  assert.equal(t2.due.length, 0, 'the stale deferral no longer fires');
+  // At the new due the schedule fires exactly once.
+  const t3 = b.tick(at(10, 1, 25), { quietHours: QH_NIGHT });
+  assert.equal(t3.due.length, 1);
+});
+
+test('surface: failed writes roll back pause, resume, cancel and a deferred edit', async () => {
+  const schedules = book();
+  let auditOk = true;
+  let saveOk = true;
+  const persistence = {
+    appendAudit: (e) => (auditOk ? { ok: true, seq: 1, hash: 'h' } : { ok: false, reason: 'audit_refused' }),
+    save: () => (saveOk ? { ok: true } : { ok: false, reason: 'persist_failure' }),
+  };
+  const s = createSchedulerSurface({ schedules, persistence });
+  const made = await s.handlers['schedules:create']({ title: 'water plants', scope: 'reminder', dueAt: NOW + 1000 });
+  assert.equal(made.ok, true);
+
+  // A refused audit append must not leave the in-memory state changed.
+  auditOk = false;
+  const p = await s.handlers['schedules:pause']({ id: made.schedule.id });
+  assert.equal(p.ok, false);
+  assert.equal(schedules.list()[0].paused, false, 'a refused pause does not stay in memory');
+  const c = await s.handlers['schedules:cancel']({ id: made.schedule.id });
+  assert.equal(c.ok, false);
+  assert.equal(schedules.list()[0].cancelled, false, 'a refused cancel does not stay in memory');
+  auditOk = true;
+  saveOk = false;
+  const p2 = await s.handlers['schedules:pause']({ id: made.schedule.id });
+  assert.equal(p2.ok, false);
+  assert.equal(schedules.list()[0].paused, false, 'a failed save does not leave a phantom pause');
+  saveOk = true;
+
+  // A due-time edit on a deferred record restores the deferral exactly:
+  // the snapshot rollback, not a re-update, is what can restore it.
+  const at = (h, m, day = 24) => new Date(2026, 10, day, h, m, 0, 0).getTime();
+  const t = schedules.tick(at(23, 1), { quietHours: QH_NIGHT });
+  assert.equal(t.deferred.length, 1);
+  const deferredTo = t.deferred[0].deferredTo;
+  saveOk = false;
+  const failed = await s.handlers['schedules:update']({ id: made.schedule.id, title: 'lost', dueAt: at(10, 0, 25) });
+  assert.equal(failed.ok, false);
+  assert.equal(failed.reason, 'persist_failure');
+  const rec = schedules.list()[0];
+  assert.equal(rec.title, 'water plants', 'the edit rolled back');
+  assert.equal(rec.dueAt, NOW + 1000, 'the due rolled back');
+  assert.equal(rec.deferredTo, deferredTo, 'the deferral survived the rollback');
+  saveOk = true;
 });
