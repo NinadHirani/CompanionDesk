@@ -443,6 +443,6 @@ test('a completed exchange whose thread vanished is surfaced as a save failure, 
   const s = read('renderer/ask.js');
   assert.ok(s.includes('function appendSaveHint(entry, res)'), 'the save-failure hint exists');
   assert.ok(s.includes("res.save_error === 'not_found'"), 'the vanished-thread wording is explicit');
-  assert.equal((s.match(/appendSaveHint\(entry, res2? \);/g) || []).length, 2, 'both ask paths surface it');
+  assert.equal((s.match(/appendSaveHint\(entry, res2?\);/g) || []).length, 2, 'both ask paths surface it');
   assert.ok(s.includes('res.saved !== false'), 'normal saves render no hint');
 });
