@@ -86,13 +86,21 @@
     }
     cancelEdit.addEventListener('click', stopEditing);
 
+    // One create/update at a time: a double click must not enter while the
+    // first submission is still pending, or two identical schedules are
+    // created (the same rule the overlay mic button already enforces). The
+    // flag is released in finally, so a bridge crash cannot strand the
+    // button.
+    let submitting = false;
     create.addEventListener('click', async () => {
+      if (submitting) return;
       const a = api();
       if (!a) return;
       msg.textContent = '';
       const t = title.value.trim();
       const ms = when.value ? new Date(when.value).getTime() : NaN;
       if (!t || !Number.isSafeInteger(ms)) { msg.textContent = 'Add a title and a date.'; return; }
+      submitting = true;
       try {
         if (form.dataset.editing) {
           const res = await a.schedules_update({ id: form.dataset.editing, title: t, dueAt: ms });
@@ -104,6 +112,7 @@
           else msg.textContent = res && res.reason ? window.friendlyError(res.reason) : 'That did not go through. Try again.';
         }
       } catch (e) { /* stays quiet */ }
+      finally { submitting = false; }
     });
     form.startEditing = function (rec) {
       form.dataset.editing = rec.id;
