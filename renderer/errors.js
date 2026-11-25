@@ -93,6 +93,7 @@
     key_file_write_failed: 'The key file could not be written. Check the app folder permissions.',
     key_file_remove_failed: 'The key file could not be removed. Check the app folder permissions.',
     ask_failed: 'Something went wrong while answering. Your question is back in the box, so try again.',
+    grades_load_failed: 'Something went wrong while loading your grades. Try opening the Grades tab again.',
     gemini_network_error: 'Could not reach Google to check the key. Check your connection and try again.',
   };
 

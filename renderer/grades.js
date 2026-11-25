@@ -60,7 +60,14 @@
     const targetRow = el('div', null, 'field inline');
     targetRow.appendChild(el('label', 'My target (%)'));
     targetRow.appendChild(numberInput('Target percent', course.target, async (v, input) => {
-      const res = await api.grades_setTarget({ courseId: course.id, target: v });
+      let res;
+      try {
+        res = await api.grades_setTarget({ courseId: course.id, target: v });
+      } catch (e) {
+        // A bridge or transport crash reports in place; the entered value
+        // stays so the student can retry.
+        msg.textContent = UI.friendlyError('bad_request'); msg.className = 'hint error'; input.focus(); return;
+      }
       if (!res.ok) { msg.textContent = UI.friendlyError(res.error); msg.className = 'hint error'; input.focus(); return; }
       await refresh();
     }));
@@ -107,7 +114,12 @@
           sel.appendChild(opt);
         }
         sel.addEventListener('change', async () => {
-          const res = await api.assignment_setCategory({ id: a.id, category: sel.value || null });
+          let res;
+          try {
+            res = await api.assignment_setCategory({ id: a.id, category: sel.value || null });
+          } catch (e) {
+            msg.textContent = UI.friendlyError('bad_request'); msg.className = 'hint error'; return;
+          }
           if (!res.ok) { msg.textContent = UI.friendlyError(res.error); msg.className = 'hint error'; return; }
           await refresh();
         });
@@ -117,7 +129,12 @@
       }
       li.appendChild(what);
       li.appendChild(numberInput(`Score for ${a.title}, percent`, a.score, async (v, input) => {
-        const res = await api.grades_setScore({ id: a.id, score: v });
+        let res;
+        try {
+          res = await api.grades_setScore({ id: a.id, score: v });
+        } catch (e) {
+          msg.textContent = UI.friendlyError('bad_request'); msg.className = 'hint error'; input.focus(); return;
+        }
         if (!res.ok) { msg.textContent = UI.friendlyError(res.error); msg.className = 'hint error'; input.focus(); return; }
         await refresh();
       }));
@@ -129,7 +146,16 @@
   }
 
   async function refresh() {
-    const res = await api.grades_get();
+    let res;
+    try {
+      res = await api.grades_get();
+    } catch (e) {
+      // A bridge or transport crash must not leave the tab stale or blank
+      // with no word about it: the failure is reported in place.
+      body.replaceChildren();
+      body.appendChild(el('section', null, 'card')).appendChild(el('p', UI.friendlyError('grades_load_failed'), 'hint error'));
+      return;
+    }
     body.replaceChildren();
     if (!res.ok || !res.courses.length) {
       body.appendChild(el('section', null, 'card')).appendChild(el('p', 'No courses yet. Import a syllabus first.', 'empty'));
