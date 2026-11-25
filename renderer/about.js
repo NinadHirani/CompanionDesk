@@ -432,8 +432,9 @@
   }
   if (CK.save) CK.save.addEventListener('click', async () => {
     const res = await api.cloud_setKey({ key: CK.input.value });
-    CK.input.value = '';
-    if (res.ok) { await fillCloud(); showCloud('Key saved and encrypted on this computer.'); }
+    // Only a successful save clears the field: a failed one reports its
+    // error and keeps the typed key, so a typo costs a fix, not a retype.
+    if (res.ok) { CK.input.value = ''; await fillCloud(); showCloud('Key saved and encrypted on this computer.'); }
     else showCloud(window.friendlyError(res.error), true);
   });
   if (CK.test) CK.test.addEventListener('click', async () => {
