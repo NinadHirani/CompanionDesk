@@ -85,8 +85,20 @@
   }
 
   async function finish() {
-    await api.onboarding_complete();
-    await UI.today.refresh();
+    // A bridge or transport crash must not strand the interview: the
+    // failure is reported in place and the view stays until completing
+    // actually succeeded. Today's refresh is allowed to fail without
+    // blocking the handoff to the companion chat, since the interview is
+    // already done at that point.
+    try {
+      await api.onboarding_complete();
+    } catch (e) {
+      msg.textContent = UI.friendlyError('bad_request');
+      return;
+    }
+    try {
+      await UI.today.refresh();
+    } catch (e) { /* the handoff does not depend on it */ }
     UI.show('ask'); // companion-first: setup ends in the companion chat
   }
 
@@ -114,8 +126,21 @@
   async function submit(skip) {
     disarmFinish();
     const q = questions[index];
+    // Past the last question the only pending step is the completion
+    // itself: a crash there must be retried as a completion, never as a
+    // phantom answer to a question that no longer exists.
+    if (!q) { await finish(); return; }
     if (!skip) {
-      const res = await api.onboarding_answer({ id: q.id, answer: currentAnswer() });
+      let res;
+      try {
+        res = await api.onboarding_answer({ id: q.id, answer: currentAnswer() });
+      } catch (e) {
+        // A bridge or transport crash must not strand the interview: the
+        // failure is reported in place, the answer stays in the field and
+        // the question stays put for a retry.
+        msg.textContent = UI.friendlyError('bad_request');
+        return;
+      }
       if (!res.ok) { msg.textContent = UI.friendlyError(res.error); return; }
     }
     index += 1;
