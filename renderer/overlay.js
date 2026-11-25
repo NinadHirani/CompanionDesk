@@ -214,6 +214,9 @@
     micBtn.disabled = false;
     if (!res.ok) { showError(res.error); return; }
     input.value = res.text;
+    // Silence transcribes to nothing: report in place instead of leaving
+    // the hint stuck on Transcribing with an empty input.
+    if (!res.text.trim()) { showError('transcribe_empty'); return; }
     submit();
   }
 

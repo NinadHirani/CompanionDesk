@@ -484,6 +484,18 @@ test('a crashed recorder stop releases the mic like a failed transcription', () 
   assert.ok(chunk.includes("showError('transcribe_failed')"), 'a crashed stop reports in place');
 });
 
+test('an empty transcription reports in place instead of stranding the hint', () => {
+  const ov = read('renderer/overlay.js');
+  const stop = ov.indexOf('async function stopAndTranscribe');
+  const chunk = ov.slice(stop, stop + 1600);
+  const valueAt = chunk.indexOf('input.value = res.text;');
+  const submitAt = chunk.indexOf('submit();', valueAt);
+  const emptyAt = chunk.indexOf("showError('transcribe_empty')");
+  assert.ok(emptyAt > valueAt && emptyAt < submitAt, 'the empty check sits between the input fill and the submit');
+  const errs = read('renderer/errors.js');
+  assert.ok(errs.includes('transcribe_empty:'), 'the empty code carries wording');
+});
+
 test('an overlay rejection cannot strand the ask, the transcription, or the mic button', () => {
   const ov = read('renderer/overlay.js');
   const run = ov.indexOf('async function runAsk');

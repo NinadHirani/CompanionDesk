@@ -12,6 +12,7 @@
   voice_unavailable: 'Voice needs whisper.cpp set up. See the README.',
   no_speech: 'I did not catch that. Try again.',
   transcribe_failed: 'Voice transcription failed. Try again.',
+  transcribe_empty: 'Nothing came through. Try speaking again.',
   voice_disabled: 'Voice is off. Turn it on in About > Voice input.',
   wake_disabled: 'Wake word is off. Turn it on in About > Wake word.',
   no_companion_name: 'Set a companion name first. Wake listening needs one.',
