@@ -72,7 +72,7 @@
 
     const entry = el('section', null, 'card qa');
     entry.appendChild(el('p', question, 'q'));
-    const pending = el('p', 'Thinking', 'hint');
+    const pending = el('p', `${companionName()} is thinking`, 'hint');
     entry.appendChild(pending);
     log.appendChild(entry);
     scrollToLatest();
@@ -129,7 +129,7 @@
         sendBtn.disabled = true;
         stayBtn.disabled = true;
         row.remove();
-        const waiting = el('p', 'Thinking', 'hint');
+        const waiting = el('p', `${companionName()} is thinking`, 'hint');
         entry.appendChild(waiting);
         const consentId = (typeof crypto !== 'undefined' && crypto.randomUUID)
           ? crypto.randomUUID()

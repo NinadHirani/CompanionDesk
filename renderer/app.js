@@ -362,6 +362,8 @@
     document.body.dataset.companionName = name;
     const tab = document.querySelector('#tabs button[data-view="ask"]');
     if (tab) tab.textContent = name === 'CompanionDesk' ? 'Ask' : name;
+    const heading = document.getElementById('ask-heading');
+    if (heading) heading.textContent = name === 'CompanionDesk' ? 'Ask' : name;
   }
 
   async function refresh() {

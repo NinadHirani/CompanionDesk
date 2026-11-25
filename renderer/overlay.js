@@ -32,6 +32,17 @@
 
   const IDLE_HINT = 'Enter to ask. Esc to close.';
 
+  // The overlay carries the companion's name from Settings (the state read
+  // returns it); the app name is the fallback. Nothing here blocks on it.
+  let companionName = 'CompanionDesk';
+  (async () => {
+    try {
+      const st = await api.state_get();
+      const n = st && st.identity && st.identity.name ? String(st.identity.name).trim() : '';
+      if (n) companionName = n;
+    } catch (e) { /* keep the fallback */ }
+  })();
+
   function cancelRecording() {
     if (recording) { recording.cancel(); recording = null; }
     if (processing) { api.voice_cancel(); processing = false; }
@@ -71,7 +82,7 @@
     readBtn.hidden = true;
     answer.textContent = '';
     answer.classList.remove('error');
-    hint.textContent = thinking;
+    hint.textContent = typeof thinking === 'function' ? thinking() : thinking;
     const res = await call(prompt);
     busy = false;
     input.disabled = false;
@@ -93,7 +104,7 @@
     input.focus();
   }
 
-  const submit = () => runAsk((prompt) => api.overlay_ask({ prompt }), 'Thinking');
+  const submit = () => runAsk((prompt) => api.overlay_ask({ prompt }), () => `${companionName} is thinking`);
 
   // ---- screen: the user picks ONE window; the overlay shows what is sent -----------
   const picker = document.getElementById('ov-picker');

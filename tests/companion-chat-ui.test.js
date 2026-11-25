@@ -45,3 +45,17 @@ test('styles ship the chat bubbles and the small-screen layout', () => {
   assert.ok(media.includes('.tabs') && media.includes('overflow-x: auto'), 'tabs scroll on phones');
   assert.ok(media.includes('#ask-conv-bar'), 'conversation bar wraps on phones');
 });
+
+test('the thinking indicator and the Ask heading carry the companion name', () => {
+  const ask = read('renderer/ask.js');
+  assert.ok(ask.includes('is thinking`'), 'the pending hint names the companion');
+  assert.ok(!ask.includes("'Thinking'"), 'no bare Thinking label left');
+  const html = read('renderer/index.html');
+  assert.ok(html.includes('id="ask-heading"'), 'the Ask heading is addressable');
+  const app = read('renderer/app.js');
+  assert.ok(app.includes("getElementById('ask-heading')"), 'the heading follows the name');
+  const ov = read('renderer/overlay.js');
+  assert.ok(ov.includes('state_get()'), 'the overlay reads the companion name from state');
+  assert.ok(ov.includes("typeof thinking === 'function' ? thinking() : thinking"), 'thinking hints can be computed');
+  assert.ok(ov.includes('is thinking`'), 'the overlay thinking hint names the companion');
+});
