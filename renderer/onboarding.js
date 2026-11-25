@@ -20,27 +20,50 @@
     selected = null;
     msg.textContent = '';
     progress.textContent = `Question ${index + 1} of ${questions.length}. Every one can be skipped.`;
-    prompt.textContent = q.prompt;
-    inputBox.replaceChildren();
+    prompt.textContent = q.title || q.prompt;
+    if (q.title) {
+      const body = el('p', q.prompt, 'hint');
+      inputBox.replaceChildren(body);
+    } else {
+      inputBox.replaceChildren();
+    }
 
     if (q.kind === 'choice') {
       nextBtn.hidden = false;
       const group = el('div', null, 'choices');
       group.setAttribute('role', 'radiogroup');
+      group.setAttribute('aria-label', q.title || q.prompt);
+      const choose = (b) => {
+        selected = b.textContent;
+        for (const other of group.children) {
+          other.setAttribute('aria-checked', String(other === b));
+          other.classList.toggle('chosen', other === b);
+          other.tabIndex = other === b ? 0 : -1;
+        }
+        nextBtn.focus();
+      };
+      let i = 0;
       for (const opt of q.options) {
         const b = el('button', opt);
         b.setAttribute('role', 'radio');
         b.setAttribute('aria-checked', 'false');
-        b.addEventListener('click', () => {
-          selected = opt;
-          for (const other of group.children) {
-            other.setAttribute('aria-checked', String(other === b));
-            other.classList.toggle('chosen', other === b);
-          }
-        });
+        b.tabIndex = i === 0 ? 0 : -1; // roving focus, the radiogroup contract
+        b.addEventListener('click', () => choose(b));
+        i += 1;
         group.appendChild(b);
       }
+      group.addEventListener('keydown', (e) => {
+        if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+        e.preventDefault();
+        const opts = [...group.children];
+        const at = opts.indexOf(document.activeElement);
+        const next = e.key === 'ArrowDown' ? (at + 1) % opts.length : (at - 1 + opts.length) % opts.length;
+        for (const [j, o] of opts.entries()) o.tabIndex = j === next ? 0 : -1;
+        choose(opts[next]);
+        opts[next].focus();
+      });
       inputBox.appendChild(group);
+      group.children[0].focus();
     } else {
       nextBtn.hidden = false;
       const field = document.createElement('input');
@@ -67,7 +90,29 @@
     UI.show('today');
   }
 
+  // Skipping everything ends the interview for good (it never runs again),
+  // so a single accidental click must not do that: the first click asks,
+  // the second click confirms.
+  let finishArmed = false;
+  document.getElementById('ob-finish').addEventListener('click', () => {
+    if (!finishArmed) {
+      finishArmed = true;
+      document.getElementById('ob-finish').textContent = 'Really skip the rest?';
+      return;
+    }
+    finishArmed = false;
+    document.getElementById('ob-finish').textContent = 'Skip the rest';
+    finish();
+  });
+
+  function disarmFinish() {
+    if (!finishArmed) return;
+    finishArmed = false;
+    document.getElementById('ob-finish').textContent = 'Skip the rest';
+  }
+
   async function submit(skip) {
+    disarmFinish();
     const q = questions[index];
     if (!skip) {
       const res = await api.onboarding_answer({ id: q.id, answer: currentAnswer() });

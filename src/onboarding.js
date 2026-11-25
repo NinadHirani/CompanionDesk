@@ -35,8 +35,9 @@ const QUESTIONS = Object.freeze([
     id: 'privacy',
     kind: 'choice',
     options: ['Keep the private defaults (recommended)', 'Show me the settings later'],
+    title: 'Last one: your privacy defaults',
     prompt:
-      'Last one, and it changes nothing by itself. The defaults on a fresh install: everything runs on this computer; nothing is sent anywhere unless you turn the cloud fallback on yourself and approve each ask; voice input, the wake word, screen reading and proactive notifications are all off until you switch them on in About; nothing is recorded in the background; anything you mark sensitive in memory stays in the session and is never written to disk. Keep the private defaults, or look at the settings later?',
+      'It changes nothing by itself. The defaults on a fresh install: everything runs on this computer; nothing is sent anywhere unless you turn the cloud fallback on yourself and approve each ask; voice input, the wake word, screen reading and proactive notifications are all off until you switch them on in About; nothing is recorded in the background; anything you mark sensitive in memory stays in the session and is never written to disk. Keep the private defaults, or look at the settings later?',
   },
 ]);
 

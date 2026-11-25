@@ -15,6 +15,11 @@ gated, disabled, or unmeasured; every line matches the roadmap evidence.
 - D-S2 decision recorded: DEFER; the scheduled kind stays out of the
   driver allowlist and the decision brief stays on file for the Stage B
   review.
+- First-run polish: the privacy step shows a short heading with its
+  explanation below it; choice questions now honor arrow keys and their
+  roving focus, question changes are announced to screen readers, and
+  "Skip the rest" needs a confirming second click (it ends the interview
+  for good).
 - Release groundwork: this changelog, a first-run acceptance test
   pinning the standing privacy defaults on a fresh install, the first-run
   privacy explainer step, and a release-metadata preflight

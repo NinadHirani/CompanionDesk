@@ -51,6 +51,17 @@ test('bad answers are refused instead of coerced', () => {
   assert.deepEqual(interpretAnswer('privacy', 'Turn everything on'), { ok: false, error: 'invalid_answer' });
 });
 
+test('the privacy step is titled; every question still prompts and stays skippable', () => {
+  assert.equal(QUESTIONS.filter((q) => q.title).length, 1);
+  const privacy = QUESTIONS.find((q) => q.id === 'privacy');
+  assert.ok(privacy.title.length > 0 && privacy.title.length <= 60);
+  assert.match(privacy.prompt, /changes nothing by itself/);
+  for (const q of QUESTIONS) {
+    assert.ok(q.prompt && q.prompt.length > 10, `${q.id} needs a prompt`);
+    assert.deepEqual(interpretAnswer(q.id, ''), { ok: true, skipped: true });
+  }
+});
+
 test('the closing privacy question only acknowledges; it applies nothing', () => {
   const q = QUESTIONS.find((x) => x.id === 'privacy');
   for (const opt of q.options) {
