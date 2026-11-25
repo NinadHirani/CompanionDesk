@@ -249,3 +249,10 @@ test('the overlay open button reports a refused overlay instead of doing nothing
   assert.ok(!s.includes('() => api.overlay_show());'), 'the result of overlay_show is not dropped');
   assert.ok(s.includes('ovMsg.textContent = UI.friendlyError(res.error)'), 'a refused overlay shows the shared friendly wording');
 });
+
+test('the ask Enter path respects the in-flight guard, one ask at a time', () => {
+  const s = read('renderer/ask.js');
+  const i = s.indexOf('async function submit()');
+  const head = s.slice(i, i + 400);
+  assert.ok(head.includes('if (btn.disabled) return;'), 'submit refuses a second ask while one is pending');
+});

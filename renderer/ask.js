@@ -126,6 +126,11 @@
   }
 
   async function submit() {
+    // One ask at a time: the send button is the in-flight guard, and
+    // the Enter key respects it too, so a second ask cannot start while
+    // the first is still running (the button click cannot fire while
+    // disabled, but Enter bypasses the button and goes straight here).
+    if (btn.disabled) return;
     const question = input.value.trim();
     if (!question) { input.focus(); return; }
     btn.disabled = true;
