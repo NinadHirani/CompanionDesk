@@ -15,12 +15,25 @@
   let currentId = null;
   const titles = new Map();
 
-  // Newest at the top, matching the log's existing prepend order.
+  // Chat order: messages append oldest-first so the thread reads like a
+  // conversation, and the view scrolls to the newest one. The user's part
+  // renders as their bubble; the companion answers underneath its name,
+  // taken from the assistant_name setting (set by app.js applyIdentity).
+  function companionName() {
+    return String(document.body.dataset.companionName || '').trim() || 'CompanionDesk';
+  }
+
   function addCard(text, cls) {
     const entry = el('section', null, 'card qa');
+    if (cls === 'answer') entry.appendChild(el('p', companionName(), 'who'));
     entry.appendChild(el('p', text, cls));
-    log.prepend(entry);
+    log.appendChild(entry);
     return entry;
+  }
+
+  function scrollToLatest() {
+    const last = log.lastElementChild;
+    if (last) last.scrollIntoView({ block: 'nearest' });
   }
 
   async function refreshList(keepId) {
@@ -48,7 +61,8 @@
     if (!currentId) return;
     const res = await api.chat_messages({ id: currentId });
     if (!res.ok) { currentId = null; convSel.value = ''; return; }
-    for (const m of [...res.messages].reverse()) addCard(m.content, m.role === 'user' ? 'q' : 'answer');
+    for (const m of res.messages) addCard(m.content, m.role === 'user' ? 'q' : 'answer');
+    scrollToLatest();
   }
 
   async function submit() {
@@ -60,7 +74,8 @@
     entry.appendChild(el('p', question, 'q'));
     const pending = el('p', 'Thinking', 'hint');
     entry.appendChild(pending);
-    log.prepend(entry);
+    log.appendChild(entry);
+    scrollToLatest();
     input.value = '';
 
     const requestId = (typeof crypto !== 'undefined' && crypto.randomUUID)
@@ -78,6 +93,7 @@
     pending.remove();
     if (res.ok) {
       entry.appendChild(el('p', res.answer, 'answer'));
+      scrollToLatest();
       if (res.conversation_id) {
         currentId = res.conversation_id;
         await refreshList(currentId);
@@ -127,6 +143,7 @@
         waiting.remove();
         if (res2.ok) {
           entry.appendChild(el('p', res2.answer, 'answer'));
+          scrollToLatest();
           if (res2.conversation_id) {
             currentId = res2.conversation_id;
             await refreshList(currentId);
@@ -180,8 +197,11 @@
 
   convSel.addEventListener('change', loadSelected);
   btn.addEventListener('click', submit);
+  // Enter sends, like a chat; Shift+Enter makes a new line.
   input.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); submit(); }
+    if (e.key !== 'Enter' || e.shiftKey || e.isComposing) return;
+    e.preventDefault();
+    submit();
   });
   UI.onShow('ask', async () => {
     input.focus();

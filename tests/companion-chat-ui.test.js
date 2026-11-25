@@ -1,0 +1,47 @@
+'use strict';
+
+const test = require('node:test');
+const assert = require('node:assert');
+const fs = require('node:fs');
+
+const read = (f) => fs.readFileSync(f, 'utf8');
+
+test('the ask log renders in chat order, newest last, and scrolls to it', () => {
+  const s = read('renderer/ask.js');
+  assert.ok(!s.includes('log.prepend'), 'no prepending: the thread must stay in chat order');
+  assert.ok(s.includes('log.appendChild(entry)'), 'messages append');
+  assert.ok(!s.includes('.reverse()'), 'history is rendered oldest-first, no reversal');
+  assert.ok(s.includes('scrollToLatest()'), 'the view scrolls to the newest message');
+  assert.ok(s.includes("m.role === 'user' ? 'q' : 'answer'"), 'roles map to bubbles');
+});
+
+test('answers carry the companion name label from the assistant_name setting', () => {
+  const s = read('renderer/ask.js');
+  assert.ok(s.includes("document.body.dataset.companionName"), 'label reads the live companion name');
+  assert.ok(s.includes("cls === 'answer'"), 'only answers get the label, questions do not');
+});
+
+test('Enter sends and Shift+Enter makes a new line', () => {
+  const s = read('renderer/ask.js');
+  const i = s.indexOf("input.addEventListener('keydown'");
+  assert.ok(i > 0);
+  const chunk = s.slice(i, i + 300);
+  assert.ok(chunk.includes("e.key !== 'Enter' || e.shiftKey"), 'plain Enter sends, Shift+Enter newlines');
+});
+
+test('app.js applyIdentity feeds the companion name to the thread and the tab', () => {
+  const s = read('renderer/app.js');
+  assert.ok(s.includes('document.body.dataset.companionName = name'), 'dataset set for ask.js');
+  assert.ok(s.includes("button[data-view=\"ask\"]"), 'the Ask tab is updated');
+  assert.ok(s.includes("? 'Ask' : name"), 'the tab falls back to Ask for the default name');
+});
+
+test('styles ship the chat bubbles and the small-screen layout', () => {
+  const css = read('renderer/styles.css');
+  assert.ok(css.includes('.qa .q') && css.includes('align-self: flex-end'), 'question bubble on the right');
+  assert.ok(css.includes('.qa .who'), 'companion name label style');
+  assert.ok(css.includes('@media (max-width: 640px)'), 'responsive block exists');
+  const media = css.slice(css.indexOf('@media (max-width: 640px)'));
+  assert.ok(media.includes('.tabs') && media.includes('overflow-x: auto'), 'tabs scroll on phones');
+  assert.ok(media.includes('#ask-conv-bar'), 'conversation bar wraps on phones');
+});

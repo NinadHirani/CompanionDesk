@@ -359,6 +359,9 @@
     if (title) title.textContent = name;
     const greet = document.getElementById('ask-greet');
     if (greet) greet.textContent = id.greeting || '';
+    document.body.dataset.companionName = name;
+    const tab = document.querySelector('#tabs button[data-view="ask"]');
+    if (tab) tab.textContent = name === 'CompanionDesk' ? 'Ask' : name;
   }
 
   async function refresh() {

@@ -174,6 +174,11 @@
         const s = CompanionSettings.normalizeSettings(db.allSettings());
         return { enabled: CompanionSkills.studentEnabled(s), active: CompanionSkills.studentActive(db, s) };
       })(),
+      settings: (() => CompanionSettings.normalizeSettings(db.allSettings()))(),
+      identity: (() => {
+        const s = CompanionSettings.normalizeSettings(db.allSettings());
+        return { name: CompanionSettings.companionName(s), greeting: CompanionSettings.companionGreeting(s) };
+      })(),
       ai: await ai.status(),
     };
   }
