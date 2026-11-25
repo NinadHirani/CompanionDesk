@@ -114,6 +114,18 @@
     else { sub.textContent = ''; sub.hidden = true; }
   }
 
+  // Screen-reader announcement for state changes a node insertion cannot
+  // carry: a streamed answer mutates an existing element, and role="log"
+  // (like every live region) announces insertions only, so the final
+  // answer would stay silent on streaming transports. Cleared first so a
+  // repeated identical message re-announces.
+  function announce(text) {
+    const live = document.getElementById('ask-live');
+    if (!live) return;
+    live.textContent = '';
+    live.textContent = text;
+  }
+
   async function loadSelected() {
     currentId = convSel.value ? Number(convSel.value) : null;
     log.innerHTML = '';
@@ -184,7 +196,7 @@
     let answerEl = null;
     const stopTokens = (typeof api.on === 'function') ? api.on('ai:token', (t) => {
       if (!t || t.request_id !== requestId || !pending.isConnected) return;
-      if (!answerEl) { pending.remove(); answerEl = el('p', '', 'answer'); entry.appendChild(answerEl); }
+      if (!answerEl) { pending.remove(); answerEl = el('p', '', 'answer'); entry.appendChild(answerEl); announce(companionName() + "'s answer is arriving"); }
       answerEl.textContent += String(t.piece || '');
       scrollToLatest();
     }) : null;
@@ -229,7 +241,11 @@
     pending.remove();
     if (res.ok) {
       if (!answerEl) { answerEl = el('p', res.answer, 'answer'); entry.appendChild(answerEl); }
-      else answerEl.textContent = res.answer;
+      // A streamed answer landed by mutation, which no live region
+      // announces: hand the authoritative text to the live region here.
+      // A mid-ask switch leaves the entry detached, so nothing is
+      // announced for a thread the user is no longer looking at.
+      else { answerEl.textContent = res.answer; if (entry.isConnected) announce(res.answer); }
       scrollToLatest();
       // Re-select the ask's thread only when the user never left it: a
       // mid-ask switch to another conversation is a browsing choice, and

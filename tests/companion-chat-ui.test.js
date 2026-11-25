@@ -273,3 +273,25 @@ test('a pending ask keeps its own thread; completion never yanks the picker back
   assert.ok(s.includes('if (res2.conversation_id && currentId === askThreadId)'), 'cloud completion follows the same rule');
   assert.ok(s.includes('conversation_id: askThreadId, cloud_consent: true'), 'the consented ask saves to the thread it was asked in, not the open one');
 });
+
+test('streamed answers are announced to screen readers via a live region', () => {
+  for (const f of ['renderer/index.html', 'web/index.html']) {
+    const html = read(f);
+    const i = html.indexOf('id="ask-live"');
+    assert.ok(i > 0, `${f}: the ask live region exists`);
+    const tag = html.slice(Math.max(0, i - 120), i + 80);
+    assert.ok(tag.includes('role="status"') && tag.includes('aria-live="polite"'), `${f}: the live region is a polite status`);
+    assert.ok(tag.includes('class="sr-only"'), `${f}: the live region is visually hidden`);
+  }
+  const css = read('renderer/styles.css');
+  assert.ok(css.includes('.sr-only'), 'the sr-only hiding class ships');
+  assert.ok(css.includes('clip: rect(0 0 0 0)'), 'sr-only hides visually without display:none');
+  const s = read('renderer/ask.js');
+  assert.ok(s.includes('function announce('), 'the announce helper exists');
+  assert.ok(s.includes("announce(companionName() + \"'s answer is arriving\")"), 'the first streamed token is announced');
+  const ok = s.indexOf('if (res.ok) {');
+  const chunk = s.slice(ok, ok + 500);
+  assert.ok(chunk.includes('announce(res.answer)'), 'the streamed final answer is announced');
+  assert.ok(chunk.includes('entry.isConnected'), 'a mid-ask switch announces nothing for the abandoned view');
+  assert.ok(!s.includes('announce(res2.answer)'), 'the consented cloud answer inserts as a node; no double announcement');
+});
