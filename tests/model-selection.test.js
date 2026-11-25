@@ -141,6 +141,23 @@ test('resolveModelSelection with Ollama down keeps both defaults and flags it', 
   assert.equal(res.installed, null);
 });
 
+test('the capability probe cap is a ceiling: invalid maxProbes never zeroes it', async () => {
+  const models = ['m1', 'm2', 'm3'];
+  for (const bad of [0, -1, NaN, '2', null]) {
+    const res = await MS.resolveModelSelection({ settings: {}, ai: fakeAi(models, {}), maxProbes: bad });
+    assert.equal(Object.keys(res.caps).length, models.length, `maxProbes=${String(bad)} probes every model`);
+  }
+  const probed = [];
+  const spyAi = {
+    localModel: MS.DEFAULT_CHAT_MODEL,
+    listModels: async () => models.map((name) => ({ name })),
+    modelCapabilities: async (n) => { probed.push(n); return null; },
+  };
+  const res = await MS.resolveModelSelection({ settings: {}, ai: spyAi, maxProbes: 1 });
+  assert.equal(probed.length, 1, 'a caller may only lower the cap');
+  assert.equal(Object.keys(res.caps).length, 1);
+});
+
 test('the defaults in this module agree with screen.js', () => {
   assert.equal(MS.DEFAULT_VISION_MODEL, screen.DEFAULT_VISION_MODEL);
   assert.equal(MS.DEFAULT_CHAT_MODEL, 'llama3.2:latest');

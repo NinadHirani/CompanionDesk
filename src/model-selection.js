@@ -75,8 +75,16 @@
   // One resolution for a whole ask/status cycle. ai must provide
   // listModels() (array of {name} or null when Ollama is unreachable) and
   // modelCapabilities(name) (array or null).
+  // maxProbes is a ceiling the caller may only lower: any value that is not
+  // a positive integer (0 or negative, which names.slice(0, 0) would
+  // silently turn into ZERO capability probes, leaving every model
+  // "unverified") falls back to the default cap, and a larger value is
+  // clamped to it.
   async function resolveModelSelection({ settings = {}, ai, chatFallback = DEFAULT_CHAT_MODEL, visionFallback = DEFAULT_VISION_MODEL, maxProbes = MAX_PROBES } = {}) {
     const F = faultsMod();
+    const probeCap = Number.isInteger(maxProbes) && maxProbes > 0
+      ? Math.min(maxProbes, MAX_PROBES)
+      : MAX_PROBES;
     // Typed probe faults (slice 6) when the ai layer offers them; the plain
     // listModels/modelCapabilities contract keeps working for older stubs.
     const list = ai.listModelsDetailed
@@ -96,7 +104,7 @@
     const names = list.models.map((m) => String((m && m.name) || '')).filter(Boolean);
     const caps = {};
     const capsFaults = {};
-    await Promise.all(names.slice(0, maxProbes).map(async (n) => {
+    await Promise.all(names.slice(0, probeCap).map(async (n) => {
       const det = ai.modelCapabilitiesDetailed
         ? await ai.modelCapabilitiesDetailed(n)
         : { capabilities: await ai.modelCapabilities(n), fault: null };
