@@ -432,6 +432,19 @@ test('a reload mid-ask leaves an empty thread that the boot sweep removes once',
   assert.ok(s.includes('let bootSwept = false;'), 'the boot guard is separate from the boot-landing flag');
 });
 
+test('a failed thread creation at ask start is surfaced, not mislabeled as single-shot', () => {
+  const s = read('renderer/ask.js');
+  assert.ok(s.includes('let createFailed = false;'), 'creation failure is tracked separately');
+  assert.ok(s.includes('createFailed = true;'), 'a failed chat_new marks the ask, not a single-shot one');
+  assert.ok(s.includes('function appendCreateFailedHint(entry)'), 'the creation-failure hint exists');
+  assert.ok(s.includes('could not be created'), 'the wording names the failed creation, not a vanished thread');
+  assert.equal((s.match(/if \(createFailed\) appendCreateFailedHint\(entry\);/g) || []).length, 2, 'both ask paths surface it');
+  const bridge = read('src/web/bridge.js');
+  assert.ok(bridge.includes('return { ok: true, answer };'), 'the bridge single-shot return is unchanged');
+  const personal = read('src/personal.js');
+  assert.ok(personal.includes('return { ok: true, answer };'), 'the desktop single-shot return is unchanged');
+});
+
 test('a completed exchange whose thread vanished is surfaced as a save failure, not success', () => {
   const bridge = read('src/web/bridge.js');
   assert.ok(bridge.includes("const first = CompanionChatHistory.addMessage(db, conversationId, 'user', prompt, now);"), 'the bridge checks the first save');

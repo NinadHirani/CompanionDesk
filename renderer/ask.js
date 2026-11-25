@@ -147,6 +147,16 @@
   // Companion-first: a completed answer must never be reported as saved
   // when its thread vanished mid-flight. The ask result says so, and the
   // hint names what happened in place.
+  // Companion-first: when the thread for a fresh ask cannot be created,
+  // the ask still answers (single-shot fallback), but history has no home
+  // for the exchange. Say so in place instead of reporting a normal
+  // saved exchange.
+  function appendCreateFailedHint(entry) {
+    const why = 'Answered, but not saved: the conversation could not be created, so history does not keep it.';
+    entry.appendChild(el('p', why, 'hint'));
+    if (entry.isConnected) announce(why);
+  }
+
   function appendSaveHint(entry, res) {
     if (!res || res.saved !== false) return;
     const why = res.save_error === 'not_found'
@@ -215,6 +225,7 @@
     // the model call, so the question and the answer are saved together.
     // The overlay stays single-shot; only the ask view creates threads.
     let createdId = null;
+    let createFailed = false;
     if (!currentId) {
       let made = null;
       try {
@@ -228,6 +239,13 @@
         createdId = made.conversation.id;
         currentId = createdId;
         await refreshList(currentId);
+      } else {
+        // The ask view is never single-shot by intent: reaching the model
+        // with no thread here is a storage failure, not a deliberate
+        // single-shot ask (that contract belongs to the overlay and is
+        // tested at the bridge). The ask still answers, but the exchange
+        // has no home, and the completed card must say so.
+        createFailed = true;
       }
     }
 
@@ -317,6 +335,7 @@
       // announced for a thread the user is no longer looking at.
       else { answerEl.textContent = res.answer; if (entry.isConnected) announce(res.answer); }
       appendSaveHint(entry, res);
+      if (createFailed) appendCreateFailedHint(entry);
       scrollToLatest();
       // Re-select the ask's thread only when the user never left it: a
       // mid-ask switch to another conversation is a browsing choice, and
@@ -414,6 +433,7 @@
         if (res2.ok) {
           entry.appendChild(el('p', res2.answer, 'answer'));
           appendSaveHint(entry, res2);
+          if (createFailed) appendCreateFailedHint(entry);
           scrollToLatest(true);
           if (res2.conversation_id && currentId === askThreadId) {
             currentId = res2.conversation_id;
