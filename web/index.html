@@ -35,6 +35,11 @@
         <div id="brief-body"></div>
       </section>
 
+      <section id="oll-setup" class="card" hidden aria-labelledby="oll-h">
+        <h2 id="oll-h">Local AI setup</h2>
+        <div id="oll-body"></div>
+      </section>
+
       <section id="due-section" class="card" aria-labelledby="due-h">
         <div class="card-head">
           <h2 id="due-h">All upcoming</h2>
@@ -104,6 +109,13 @@
       <p class="hint">Answers come from your schedule and the notes you have shared. If it does not know, it says so.</p>
     </section>
     <div id="ask-proposals"></div>
+    <div class="field" id="ask-conv-bar">
+      <label for="ask-conv">Conversation</label>
+      <select id="ask-conv"><option value="">New chat</option></select>
+      <button id="ask-rename" type="button">Rename</button>
+      <button id="ask-delete" type="button">Delete</button>
+      <p class="hint">History stays on this device. The cloud fallback never sees past messages.</p>
+    </div>
     <div id="ask-log"></div>
   </main>
 
@@ -119,6 +131,7 @@
       <p id="health-summary"></p>
       <div id="health-body"></div>
       <button id="health-refresh">Check again</button>
+      <p id="about-version" class="meta"></p>
     </section>
 
     <div id="about-proposals"></div>
@@ -190,7 +203,45 @@
         <p id="cloud-status" class="hint" role="status"></p>
         <p class="hint">Off by default. Saving a key enables the cloud fallback: the current prompt, plus only the context you explicitly allowed, is sent to Google. Conversation history is never sent. Your Google plan may charge for usage or limit how often the key may be used.</p>
       </div>
-      <button id="settings-save" class="primary">Save</button>
+<h2>Proactive reminders</h2>
+      <p class="hint">Off by default. Nothing is monitored and nothing fires until you both add a schedule and turn delivery on. Quiet hours defer a due reminder to the end of the window; they never drop it. Everything stays on this computer.</p>
+      <label class="check"><input id="s-proactive" type="checkbox" /> Show OS notifications for schedules I set</label>
+      <label class="check"><input id="s-proactive-rem" type="checkbox" /> Reminder scope</label>
+      <label class="check"><input id="s-proactive-deadline" type="checkbox" /> Deadline scope</label>
+      <label class="check"><input id="s-proactive-quiet" type="checkbox" /> Quiet hours</label>
+      <div class="field"><label for="s-quiet-start">Quiet from</label><input id="s-quiet-start" type="time" /></div>
+      <div class="field"><label for="s-quiet-end">Quiet until</label><input id="s-quiet-end" type="time" /></div>
+      <h2>Voice input</h2>
+      <p class="hint">Off by default. Voice runs entirely on this computer: audio exists only while you are recording, goes to the local whisper program, and is then discarded; nothing is stored and nothing is uploaded. The microphone is used only during an explicit Speak press, never at startup.</p>
+      <label class="check"><input id="s-voice" type="checkbox" /> Enable push-to-talk voice input</label>
+      <label class="check"><input id="s-voice-output" type="checkbox" /> Read answers aloud (this computer's built-in voice)</label>
+      <h2>Wake word</h2>
+      <p class="hint">Off by default. When you start it, CompanionDesk listens on this computer only for &quot;Hey &lt;your companion's name&gt;&quot; and opens a hands-free question without any button press. Nothing leaves this computer: audio is analyzed frame by frame in memory and discarded, nothing is recorded, stored or uploaded, and no network is involved. The microphone is used only while listening, the wake card below shows the live state (including when the microphone is open), and Stop closes the microphone immediately. The wake model is trained for your companion's exact name; changing the name stops wake listening until the model is retrained.</p>
+      <label class="check"><input id="s-wake" type="checkbox" /> Enable wake word listening</label>
+      <div class="field">
+        <label for="s-wake-threshold">Wake sensitivity threshold (higher = fewer false triggers; 0.1&ndash;0.9)</label>
+        <input id="s-wake-threshold" type="number" min="0.1" max="0.9" step="0.05" />
+      </div>
+      <div class="row">
+        <button id="wake-start">Start listening</button>
+        <button id="wake-pause">Pause</button>
+        <button id="wake-resume">Resume</button>
+        <button id="wake-stop">Stop</button>
+      </div>
+      <p id="wake-status" class="hint" role="status"></p>
+      <h2>Screen observation</h2>
+      <p class="hint">Off by default. Nothing looks at your screen until you pick a mode below and explicitly start it. Everything is processed on this computer only: nothing is stored and nothing is uploaded. The screen-capture permission is requested only when you act, never at startup. Background assist exists only on laptops and desktops; it never runs on Android.</p>
+      <div class="field">
+        <label for="s-screen-mode">Mode</label>
+        <select id="s-screen-mode">
+          <option value="manual">Manual look (only when you ask)</option>
+          <option value="session">Active session (you start and stop a visible session)</option>
+          <option value="background">Background assist (laptops and desktops only)</option>
+        </select>
+      </div>
+      <label class="check"><input id="s-screen-consent" type="checkbox" /> I understand background assist watches continuously while on, shows a persistent indicator, can be paused or stopped at any time, and requires at least one app exclusion</label>
+      <p id="screen-mode-note" class="hint" role="status"></p>
+            <button id="settings-save" class="primary">Save</button>
       <p id="settings-msg" class="hint" role="status"></p>
     </section>
 

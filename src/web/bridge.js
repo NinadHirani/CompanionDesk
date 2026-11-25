@@ -597,7 +597,10 @@
     ollama_setupPlan: desktopOnly, ollama_openInstall: desktopOnly,
     ollama_diskCheck: desktopOnly, ollama_pullStart: desktopOnly, ollama_pullCancel: desktopOnly,
     app_docs: desktopOnly,
-    overlay_status: desktopOnly, overlay_show: desktopOnly, overlay_hide: desktopOnly,
+    // The desktop preload resolves this API as a Promise, and about.js reads
+    // it with .then; answer the same contract with a resolved disabled
+    // status so the About view opens without a page error in the browser.
+    overlay_status: () => Promise.resolve(desktopOnly()), overlay_show: desktopOnly, overlay_hide: desktopOnly,
     overlay_setHotkey: desktopOnly, overlay_ask: desktopOnly,
     voice_status: desktopOnly, voice_transcribe: desktopOnly,
     screen_status: desktopOnly, screen_windows: desktopOnly, screen_ask: desktopOnly,
