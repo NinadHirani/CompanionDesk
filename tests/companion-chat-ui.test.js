@@ -376,3 +376,20 @@ test('a long unbroken thread title or status note wraps instead of pushing the p
     assert.ok(s.includes(rule), `error rule wraps long runs: ${rule}`);
   }
 });
+
+test('the ask inputs accept exactly what conversation history accepts', () => {
+  const hist = read('src/chat-history.js');
+  const m = hist.match(/const MAX_MESSAGE_CHARS = (\d+);/);
+  assert.ok(m, 'the store constant is readable');
+  const cap = m[1];
+  for (const f of ['renderer/index.html', 'web/index.html']) {
+    const html = read(f);
+    const t = html.match(/<textarea id="ask-input" rows="3" maxlength="(\d+)"/);
+    assert.ok(t, `${f}: the ask textarea declares its cap`);
+    assert.equal(t[1], cap, `${f}: the ask input cap matches the history store cap, so a paste is never silently shortened`);
+  }
+  const ov = read('renderer/overlay.html');
+  const o = ov.match(/<input id="ov-input" type="text" maxlength="(\d+)"/);
+  assert.ok(o, 'the overlay input declares its cap');
+  assert.equal(o[1], cap, 'the overlay input cap matches the history store cap');
+});
