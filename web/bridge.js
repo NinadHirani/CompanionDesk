@@ -576,7 +576,7 @@
     readyResolve();
   }
 
-  window.companiondesk = {
+  const bridgeApi = {
     bridgeMode: 'web',
     state_get, syllabus_import, ai_ask, ai_cancel, ai_models,
     chat_new, chat_list, chat_messages, chat_rename, chat_delete,
@@ -614,5 +614,21 @@
     // push channel, so listening is a no-op that returns its own unlistener.
     on: () => () => {},
   };
+  // Boot gate: a cached page can reload faster than init() opens the saved
+  // database (the reload first reads the stored bytes out of IndexedDB), and
+  // any call that touches the database in that window runs against a null db
+  // and breaks the boot (renderer/app.js fires state_get, brief_today and
+  // calendar_upcoming together in one refresh). state_get already awaited
+  // readyPromise internally; the wrapper makes that guarantee uniform for
+  // every entry point. `on` stays unwrapped: it only registers a push
+  // listener and touches no data.
+  window.companiondesk = Object.fromEntries(
+    Object.entries(bridgeApi).map(([key, value]) => [
+      key,
+      typeof value === 'function' && key !== 'on'
+        ? (...args) => Promise.resolve(readyPromise).then(() => value(...args))
+        : value,
+    ])
+  );
   init().catch((err) => readyReject(err));
 })();
