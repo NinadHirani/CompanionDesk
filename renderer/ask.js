@@ -18,6 +18,9 @@
   const newChatBtn = document.getElementById('ask-newchat');
   const renameInput = document.getElementById('ask-rename-input');
   let currentId = null;
+  // An unresolved cloud-consent prompt: its card and the ask's own
+  // thread, so a switch that detaches the card can clean the thread up.
+  let consentPending = null;
   const titles = new Map();
 
   // Chat order: messages append oldest-first so the thread reads like a
@@ -129,6 +132,21 @@
   async function loadSelected() {
     currentId = convSel.value ? Number(convSel.value) : null;
     log.innerHTML = '';
+    // A consent prompt left behind by a switch is dead: clearing the log
+    // detaches its card and it can no longer be answered. The same
+    // checked rule as the failed ask applies: only a thread with no
+    // messages is removed, and only the ask's own thread.
+    if (consentPending && !consentPending.entry.isConnected) {
+      const dead = consentPending;
+      consentPending = null;
+      if (dead.threadId) {
+        const msgs = await api.chat_messages({ id: dead.threadId });
+        if (msgs.ok && Array.isArray(msgs.messages) && msgs.messages.length === 0) {
+          const del = await api.chat_delete({ id: dead.threadId });
+          if (del.ok) await refreshList(currentId);
+        }
+      }
+    }
     if (!currentId) { updateSub(null); return; }
     const res = await api.chat_messages({ id: currentId });
     if (!res.ok) { currentId = null; convSel.value = ''; updateSub(null); return; }
@@ -281,7 +299,12 @@
       row.appendChild(sendBtn);
       row.appendChild(stayBtn);
       entry.appendChild(row);
+      // The prompt survives only while its card is on screen: switching
+      // conversations detaches the row with no way back, so the ask's
+      // own thread must not linger empty behind it.
+      consentPending = { entry, threadId: createdId || null };
       sendBtn.addEventListener('click', async () => {
+        consentPending = null;
         sendBtn.disabled = true;
         stayBtn.disabled = true;
         row.remove();
@@ -325,6 +348,7 @@
         }
       });
       stayBtn.addEventListener('click', async () => {
+        consentPending = null;
         // Decline: the question stays on this device and the local failure
         // is what gets reported. No cloud request is ever made for it.
         row.remove();

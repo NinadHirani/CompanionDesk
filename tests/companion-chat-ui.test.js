@@ -295,3 +295,18 @@ test('streamed answers are announced to screen readers via a live region', () =>
   assert.ok(chunk.includes('entry.isConnected'), 'a mid-ask switch announces nothing for the abandoned view');
   assert.ok(!s.includes('announce(res2.answer)'), 'the consented cloud answer inserts as a node; no double announcement');
 });
+
+test('an abandoned cloud-consent prompt cleans up its empty thread on switch', () => {
+  const s = read('renderer/ask.js');
+  assert.ok(s.includes('let consentPending = null;'), 'the unresolved consent is tracked');
+  assert.ok(s.includes('consentPending = { entry, threadId: createdId || null };'), 'the consent row registers its card and the ask thread');
+  const ls = s.indexOf('async function loadSelected()');
+  const chunk = s.slice(ls, ls + 1000);
+  assert.ok(chunk.includes('!consentPending.entry.isConnected'), 'the switch is detected by the card leaving the page');
+  assert.ok(chunk.includes('msgs.messages.length === 0'), 'the thread is checked empty, never assumed');
+  assert.ok(chunk.includes('api.chat_delete({ id: dead.threadId })'), 'only the ask own thread is removed');
+  assert.equal((s.match(/consentPending = null;/g) || []).length, 4, 'declaration plus clears on switch, send and stay');
+  const send = s.indexOf("sendBtn.addEventListener('click'");
+  const stay = s.indexOf("stayBtn.addEventListener('click'");
+  assert.ok(send > 0 && stay > send, 'both consent buttons clear the tracker');
+});
