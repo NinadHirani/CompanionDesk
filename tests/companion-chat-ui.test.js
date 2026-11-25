@@ -336,3 +336,10 @@ test('every abandoned consent prompt is tracked, not just the latest', () => {
   const splices = (s.match(/pendingConsents\.indexOf\(consentItem\)/g) || []).length;
   assert.equal(splices, 2, 'send and stay each retire their own consent');
 });
+
+test('a failed ask cleans the picker even when the user switched away', () => {
+  const s = read('renderer/ask.js');
+  assert.equal((s.match(/if \(del\.ok\) \{/g) || []).length, 3, 'both m21 sites and the consented helper refresh unconditionally after a delete');
+  assert.equal((s.match(/const wasCurrent = currentId === emptyId;/g) || []).length, 3, 'both cleanup sites and the consented helper branch on the selection');
+  assert.equal((s.match(/await refreshList\(currentId\);/g) || []).length >= 2, true, 'the refresh keeps the user where they are');
+});

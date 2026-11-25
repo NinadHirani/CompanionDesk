@@ -247,10 +247,14 @@
         const msgs = await api.chat_messages({ id: emptyId });
         if (msgs.ok && Array.isArray(msgs.messages) && msgs.messages.length === 0) {
           const del = await api.chat_delete({ id: emptyId });
-          if (del.ok && currentId === emptyId) {
-            currentId = null;
-            await refreshList(null);
-            log.appendChild(entry);
+          if (del.ok) {
+            // The picker must lose the deleted thread whether or not the
+            // user is still on it: a mid-flight switch leaves currentId
+            // elsewhere, and the list refresh keeps that selection.
+            const wasCurrent = currentId === emptyId;
+            if (wasCurrent) currentId = null;
+            await refreshList(currentId);
+            if (wasCurrent) log.appendChild(entry);
           }
         }
       }
@@ -404,11 +408,14 @@
         const msgs = await api.chat_messages({ id: emptyId });
         if (msgs.ok && Array.isArray(msgs.messages) && msgs.messages.length === 0) {
           const del = await api.chat_delete({ id: emptyId });
-          if (del.ok && currentId === emptyId) {
-            currentId = null;
-            await refreshList(null);
-            log.appendChild(entry);
-            scrollToLatest(true);
+          if (del.ok) {
+            // The picker must lose the deleted thread whether or not the
+            // user is still on it: a mid-flight switch leaves currentId
+            // elsewhere, and the list refresh keeps that selection.
+            const wasCurrent = currentId === emptyId;
+            if (wasCurrent) currentId = null;
+            await refreshList(currentId);
+            if (wasCurrent) { log.appendChild(entry); scrollToLatest(true); }
           }
         }
       }
