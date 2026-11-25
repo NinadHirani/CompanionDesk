@@ -75,3 +75,22 @@ test("the Today brief opens in the companion's voice", () => {
   const css = read('renderer/styles.css');
   assert.ok(css.includes('.companion-lead'), 'the lead line has a style');
 });
+
+test('the open conversation title is visible in the chat header', () => {
+  const ask = read('renderer/ask.js');
+  assert.ok(ask.includes('function updateSub'), 'ask.js keeps the title line in step');
+  assert.ok(ask.includes("getElementById('ask-sub')"), 'the title targets ask-sub');
+  for (const p of ['renderer/index.html', 'web/index.html']) {
+    assert.ok(read(p).includes('id="ask-sub"'), p + ' carries the ask-sub element');
+  }
+  const css = read('renderer/styles.css');
+  assert.ok(css.includes('.ask-sub'), 'the title line has a style');
+});
+
+test('a fresh ask opts into persistence, and a declined consent cleans up', () => {
+  const ask = read('renderer/ask.js');
+  assert.ok(ask.includes('api.chat_new()'), 'a fresh ask creates its thread first');
+  assert.ok(ask.includes('conversation_id: currentId'), 'the ask runs inside that thread');
+  assert.ok(ask.includes('api.chat_delete({ id: emptyId })'), 'a declined cloud consent removes the empty thread');
+  assert.ok(ask.includes('input.value = question'), 'the declined question returns to the input');
+});

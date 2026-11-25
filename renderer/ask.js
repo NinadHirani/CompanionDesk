@@ -52,7 +52,16 @@
     const keep = wanted && titles.has(String(wanted)) ? String(wanted) : '';
     convSel.value = keep;
     currentId = keep ? Number(keep) : null;
+    updateSub(keep ? titles.get(String(keep)) : null);
     if (!keep) log.innerHTML = '';
+  }
+
+  // Companion-first: the open thread's title is visible in the header.
+  function updateSub(title) {
+    const sub = document.getElementById('ask-sub');
+    if (!sub) return;
+    if (title) { sub.textContent = title; sub.hidden = false; }
+    else { sub.textContent = ''; sub.hidden = true; }
   }
 
   async function loadSelected() {
@@ -60,7 +69,8 @@
     log.innerHTML = '';
     if (!currentId) return;
     const res = await api.chat_messages({ id: currentId });
-    if (!res.ok) { currentId = null; convSel.value = ''; return; }
+    if (!res.ok) { currentId = null; convSel.value = ''; updateSub(null); return; }
+    updateSub(titles.get(String(currentId)) || `Chat ${currentId}`);
     for (const m of res.messages) addCard(m.content, m.role === 'user' ? 'q' : 'answer');
     scrollToLatest();
   }
@@ -69,6 +79,19 @@
     const question = input.value.trim();
     if (!question) { input.focus(); return; }
     btn.disabled = true;
+
+    // A fresh ask opts into persistence: it starts its own thread before
+    // the model call, so the question and the answer are saved together.
+    // The overlay stays single-shot; only the ask view creates threads.
+    let createdId = null;
+    if (!currentId) {
+      const made = await api.chat_new();
+      if (made && made.ok && made.conversation && made.conversation.id) {
+        createdId = made.conversation.id;
+        currentId = createdId;
+        await refreshList(currentId);
+      }
+    }
 
     const entry = el('section', null, 'card qa');
     entry.appendChild(el('p', question, 'q'));
@@ -155,11 +178,20 @@
           entry.appendChild(el('p', UI.friendlyError(res2.error), 'error'));
         }
       });
-      stayBtn.addEventListener('click', () => {
+      stayBtn.addEventListener('click', async () => {
         // Decline: the question stays on this device and the local failure
         // is what gets reported. No cloud request is ever made for it.
         row.remove();
         entry.appendChild(el('p', UI.friendlyError(res.local_error || 'local_model_failed'), 'error'));
+        // A thread created for this declined ask is still empty (nothing
+        // was saved), so it goes away instead of littering the list.
+        if (createdId) {
+          const emptyId = createdId;
+          createdId = null;
+          const del = await api.chat_delete({ id: emptyId });
+          if (del.ok && currentId === emptyId) { currentId = null; await refreshList(null); }
+          input.value = question;
+        }
       });
     } else {
       entry.appendChild(el('p', UI.friendlyError(res.error), 'error'));
@@ -178,6 +210,8 @@
     const name = prompt('Rename this conversation', titles.get(String(currentId)) || '');
     if (name === null) return;
     const res = await api.chat_rename({ id: currentId, title: name });
+    titles.set(String(currentId), name);
+    updateSub(name);
     if (!res.ok) { alert(res.error === 'invalid_title' ? 'A name needs at least one character.' : 'Rename failed.'); return; }
     await refreshList(currentId);
   });
