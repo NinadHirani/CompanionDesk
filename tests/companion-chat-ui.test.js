@@ -299,7 +299,7 @@ test('streamed answers are announced to screen readers via a live region', () =>
 test('an abandoned cloud-consent prompt cleans up its empty thread on switch', () => {
   const s = read('renderer/ask.js');
   assert.ok(s.includes('const pendingConsents = [];'), 'unresolved consents are tracked');
-  assert.ok(s.includes('const consentItem = { entry, threadId: askThreadId || null };'), 'the consent row registers its card and the ask thread');
+  assert.ok(s.includes('const consentItem = { entry, threadId: askThreadId || null, question }'), 'the consent row registers its card and the ask thread');
   assert.ok(s.includes('pendingConsents.push(consentItem);'), 'the registration lands in the tracked list');
   const ls = s.indexOf('async function loadSelected()');
   const chunk = s.slice(ls, ls + 1000);
@@ -326,7 +326,7 @@ test('a failed consented cloud ask cleans up its empty thread in place', () => {
 test('every abandoned consent prompt is tracked, not just the latest', () => {
   const s = read('renderer/ask.js');
   assert.ok(s.includes('const pendingConsents = [];'), 'consents are tracked as a list');
-  assert.ok(s.includes('const consentItem = { entry, threadId: askThreadId || null };') && s.includes('pendingConsents.push(consentItem);'), 'each consent registers its card and its ask thread');
+  assert.ok(s.includes('const consentItem = { entry, threadId: askThreadId || null, question }') && s.includes('pendingConsents.push(consentItem);'), 'each consent registers its card and its ask thread');
   const ls = s.indexOf('async function loadSelected()');
   const chunk = s.slice(ls, ls + 1400);
   assert.ok(chunk.includes('[...pendingConsents]'), 'a switch sweeps every tracked consent');
