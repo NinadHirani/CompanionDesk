@@ -432,6 +432,17 @@ test('a reload mid-ask leaves an empty thread that the boot sweep removes once',
   assert.ok(s.includes('let bootSwept = false;'), 'the boot guard is separate from the boot-landing flag');
 });
 
+test('a cancelled or failed consented ask hands the question back like the other paths', () => {
+  const s = read('renderer/ask.js');
+  const send = s.indexOf("sendBtn.addEventListener('click'");
+  const stay = s.indexOf("stayBtn.addEventListener('click'");
+  assert.ok(send > 0 && stay > send, 'both consent handlers exist in order');
+  const chunk = s.slice(send, stay);
+  const restores = (chunk.match(/if \(!input\.value\.trim\(\)\) input\.value = question;/g) || []).length;
+  assert.equal(restores, 3, 'all three consented failure outcomes restore the question');
+  assert.ok(chunk.includes('catch (err)'), 'the consented throw path is covered');
+});
+
 test('an abandoned consent prompt hands its question back, not silent loss', () => {
   const s = read('renderer/ask.js');
   assert.ok(s.includes('const consentItem = { entry, threadId: askThreadId || null, question };'), 'the consent item carries its question');

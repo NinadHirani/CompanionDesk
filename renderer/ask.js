@@ -430,6 +430,9 @@
           waiting.remove();
           const cancelled = isAskCancel(err);
           entry.appendChild(el('p', cancelled ? 'Ask cancelled.' : UI.friendlyError('ask_failed'), cancelled ? 'hint' : 'error'));
+          // Every failure path hands the question back for a retry: the
+          // consented ask's own outcomes are no exception.
+          if (!input.value.trim()) input.value = question;
           scrollToLatest(true);
           await cleanupEmptyAsk();
           return;
@@ -447,10 +450,12 @@
         } else if (res2.needs_cloud_consent) {
           // Should not happen after consent; treat as the local failure it is.
           entry.appendChild(el('p', UI.friendlyError(res2.local_error || res2.error), 'error'));
+          if (!input.value.trim()) input.value = question;
           await cleanupEmptyAsk();
         } else {
           const cancelled = isAskCancel(res2.error);
           entry.appendChild(el('p', cancelled ? 'Ask cancelled.' : UI.friendlyError(res2.error), cancelled ? 'hint' : 'error'));
+          if (!input.value.trim()) input.value = question;
           await cleanupEmptyAsk();
         }
       });
