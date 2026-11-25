@@ -96,6 +96,12 @@ function createSpeechOutput({ engine, enabled, now, maxText, onSettled } = {}) {
     const t = typeof now === 'function' ? now : () => 0;
     const cap = Number.isInteger(maxText) && maxText > 0 && maxText <= MAX_TEXT ? maxText : MAX_TEXT;
     let phase = 'idle';
+    // Session token: every start mints a new one, so a callback delivered
+    // late by the engine (for example onend for an utterance cancel()
+    // interrupted) can be told apart from the session that is live now.
+    // Guards bind to the session that registered them, not just to
+    // "something is speaking".
+    let sessionSeq = 0;
     let startedAt = null;
     let endedAt = null;
     let failure = null;
@@ -129,9 +135,14 @@ function createSpeechOutput({ engine, enabled, now, maxText, onSettled } = {}) {
       startedAt = t();
       endedAt = null;
       phase = 'speaking';
+      const session = ++sessionSeq;
+      // Alive means: still the speaking session this callback belongs to.
+      // A newer start moves the token, so this utterance's late callbacks
+      // (end or error) are ignored instead of settling the wrong session.
+      const alive = () => phase === 'speaking' && session === sessionSeq;
       engine.speak(text, {
-        onEnd: () => { if (phase === 'speaking') { phase = 'done'; endedAt = t(); if (settled) settled(state()); } },
-        onError: (raw) => { if (phase === 'speaking') { phase = 'failed'; failure = mapError(raw); endedAt = t(); if (settled) settled(state()); } },
+        onEnd: () => { if (alive()) { phase = 'done'; endedAt = t(); if (settled) settled(state()); } },
+        onError: (raw) => { if (alive()) { phase = 'failed'; failure = mapError(raw); endedAt = t(); if (settled) settled(state()); } },
       });
       return { ok: true, state: state() };
     }

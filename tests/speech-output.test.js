@@ -225,3 +225,37 @@ test('onSettled fires exactly once per terminal transition, never on refusal', (
   h.calls.speak[0].onerror({ error: 'audio-hardware' });
   assert.deepStrictEqual(seen3, ['failed']);
 });
+
+// m59 regression: a callback arriving from an ALREADY-STOPPED utterance
+// (the engine can deliver it late, after a stop-then-start) must never
+// settle the newer session. Guards have to bind to the session that
+// started them, not just to "something is speaking".
+test('a stale callback from a stopped utterance cannot settle a later session', () => {
+  let tick = 0;
+  const handlers = [];
+  const engine = {
+    speak: (t, h) => { handlers.push(h); return {}; },
+    cancel: () => {},
+  };
+  const sp = createSpeechOutput({ engine, enabled: () => true, now: () => ++tick });
+
+  const first = sp.start('first answer', { userInitiated: true });
+  assert.strictEqual(first.ok, true);
+  assert.strictEqual(sp.stop().ok, true);
+
+  const second = sp.start('second answer', { userInitiated: true });
+  assert.strictEqual(second.ok, true);
+  assert.strictEqual(sp.isSpeaking(), true);
+
+  // Late callback from the cancelled first utterance.
+  handlers[0].onEnd();
+  assert.strictEqual(sp.isSpeaking(), true, 'stale onEnd must not settle the newer session');
+  assert.strictEqual(sp.state().phase, 'speaking');
+
+  handlers[0].onError('canceled');
+  assert.strictEqual(sp.state().failure, null, 'stale onError must not fail the newer session');
+
+  // The second session is still genuinely stoppable.
+  assert.strictEqual(sp.stop().ok, true);
+  assert.strictEqual(sp.isSpeaking(), false);
+});
