@@ -393,3 +393,16 @@ test('the ask inputs accept exactly what conversation history accepts', () => {
   assert.ok(o, 'the overlay input declares its cap');
   assert.equal(o[1], cap, 'the overlay input cap matches the history store cap');
 });
+
+test('the rename input accepts exactly what conversation history keeps', () => {
+  const hist = read('src/chat-history.js');
+  const m = hist.match(/const MAX_TITLE_CHARS = (\d+);/);
+  assert.ok(m, 'the title cap is readable');
+  const cap = m[1];
+  for (const f of ['renderer/index.html', 'web/index.html']) {
+    const html = read(f);
+    const t = html.match(/<input id="ask-rename-input" class="ask-sub" hidden maxlength="(\d+)"/);
+    assert.ok(t, `${f}: the rename input declares its cap`);
+    assert.equal(t[1], cap, `${f}: the rename input cap matches the history store cap, so a chosen title is never silently shortened`);
+  }
+});
