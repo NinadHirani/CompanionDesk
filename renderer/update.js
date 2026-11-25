@@ -27,10 +27,27 @@
   }
 
   function run(kind) {
-    if (kind === 'install') api.update_install();
-    else if (kind === 'download') api.update_download();
-    else if (kind === 'open-download-page') api.update_openReleases();
-    else if (kind === 'check') api.update_check();
+    const map = {
+      install: api.update_install,
+      download: api.update_download,
+      'open-download-page': api.update_openReleases,
+      check: api.update_check,
+    };
+    const call = map[kind];
+    if (!call) return;
+    // A bridge or transport crash on a click must not be a silent no-op:
+    // the main process reports its own failures as error states, but a
+    // crashed renderer-side call never reaches it. The banner reports the
+    // failure in place, the same rule as every other ask path.
+    Promise.resolve().then(call.bind(api)).catch(() => {
+      if (window.friendlyError) text.textContent = window.friendlyError('bad_request');
+      else text.textContent = 'That did not go through. Try again.';
+      bar.hidden = false;
+      bar.className = 'update-bar error';
+      // The failed action stays offered as a retry: reporting the crash
+      // without a way to try again would strand the banner.
+      actions.replaceChildren(button({ kind, label: 'Try again' }));
+    });
   }
 
   function render(state) {
