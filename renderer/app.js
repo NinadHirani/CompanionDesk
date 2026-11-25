@@ -211,14 +211,106 @@
     for (const item of items) list.appendChild(itemRow(item));
   }
 
+  // Course management, by hand: add a course you have no syllabus for, fix a
+  // name or code, or remove one you dropped. Removing deletes the course's
+  // assignments, scores and grades with it, so the row asks before it does.
+  function courseForm(c) {
+    const form = el('div', null, 'course-form');
+    const name = document.createElement('input');
+    name.type = 'text';
+    name.maxLength = 120;
+    name.value = c ? c.name : '';
+    name.placeholder = 'Course name';
+    name.setAttribute('aria-label', 'Course name');
+    const code = document.createElement('input');
+    code.type = 'text';
+    code.maxLength = 40;
+    code.value = c && c.code ? c.code : '';
+    code.placeholder = 'Code (optional)';
+    code.setAttribute('aria-label', 'Course code');
+    const term = document.createElement('input');
+    term.type = 'text';
+    term.maxLength = 60;
+    term.value = c && c.term ? c.term : '';
+    term.placeholder = 'Term (optional)';
+    term.setAttribute('aria-label', 'Course term');
+    form.append(name, code, term);
+    return { form, name, code, term };
+  }
+
+  function editCourse(li, c) {
+    const { form, name, code, term } = courseForm(c);
+    const msg = el('p', null, 'hint');
+    msg.setAttribute('role', 'status');
+    const actions = el('div', null, 'actions');
+    const save = el('button', 'Save', 'primary');
+    save.addEventListener('click', async () => {
+      const res = await api.course_rename({ id: c.id, name: name.value, code: code.value, term: term.value });
+      if (!res.ok) { msg.textContent = UI.friendlyError(res.error); msg.className = 'hint error'; return; }
+      await refresh();
+    });
+    const cancel = el('button', 'Cancel');
+    cancel.addEventListener('click', () => refresh());
+    actions.append(save, cancel);
+    form.append(actions, msg);
+    li.replaceChildren(form);
+    name.focus();
+  }
+
+  function confirmRemoveCourse(li, c) {
+    const box = el('div', null, 'course-confirm');
+    box.appendChild(el('p', `Remove ${c.name}? Its assignments, scores and grades go too. This cannot be undone.`));
+    const msg = el('p', null, 'hint');
+    msg.setAttribute('role', 'status');
+    const actions = el('div', null, 'actions');
+    const yes = el('button', 'Remove', 'primary');
+    yes.addEventListener('click', async () => {
+      const res = await api.course_remove({ id: c.id });
+      if (!res.ok) { msg.textContent = UI.friendlyError(res.error); msg.className = 'hint error'; return; }
+      await refresh();
+    });
+    const no = el('button', 'Cancel');
+    no.addEventListener('click', () => refresh());
+    actions.append(yes, no);
+    box.append(actions, msg);
+    li.replaceChildren(box);
+  }
+
   function renderCourses(courses) {
     const ul = document.getElementById('course-list');
     ul.replaceChildren();
     if (!courses.length) ul.appendChild(el('li', 'None yet.', 'empty'));
     for (const c of courses) {
-      ul.appendChild(el('li', `${c.name}${c.code ? ' (' + c.code + ')' : ''}${c.term ? ', ' + c.term : ''}`));
+      const li = el('li', null, 'course-row');
+      const what = el('div', null, 'what');
+      what.appendChild(el('b', `${c.name}${c.code ? ' (' + c.code + ')' : ''}${c.term ? ', ' + c.term : ''}`));
+      li.appendChild(what);
+      const actions = el('div', null, 'actions');
+      const edit = el('button', 'Edit');
+      edit.setAttribute('aria-label', `Edit ${c.name}`);
+      edit.addEventListener('click', () => editCourse(li, c));
+      actions.appendChild(edit);
+      const rm = el('button', 'Remove');
+      rm.setAttribute('aria-label', `Remove ${c.name}`);
+      rm.addEventListener('click', () => confirmRemoveCourse(li, c));
+      actions.appendChild(rm);
+      li.appendChild(actions);
+      ul.appendChild(li);
     }
   }
+
+  document.getElementById('course-add-btn').addEventListener('click', async () => {
+    const name = document.getElementById('course-name');
+    const code = document.getElementById('course-code');
+    const msg = document.getElementById('course-msg');
+    const res = await api.course_add({ name: name.value, code: code.value });
+    if (!res.ok) { msg.textContent = UI.friendlyError(res.error); msg.className = 'hint error'; return; }
+    name.value = '';
+    code.value = '';
+    msg.textContent = 'Added.';
+    msg.className = 'hint';
+    await refresh();
+  });
 
   // ---- calendar ---------------------------------------------------------------
   function renderCalendar(res) {

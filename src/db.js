@@ -369,6 +369,39 @@ CREATE TABLE IF NOT EXISTS agent_schema (
       return id;
     }
 
+    // Rename or re-code a course. Returns the updated row, or null when the
+    // id does not exist. The source_file is left alone: it records where the
+    // course came from, not what it is called now.
+    updateCourse(id, { name, code, credit_hours, term }) {
+      if (!this.all('SELECT id FROM courses WHERE id = ?', [id]).length) return null;
+      this.run(
+        'UPDATE courses SET name = ?, code = ?, credit_hours = ?, term = ? WHERE id = ?',
+        [name, code || null, credit_hours === undefined ? null : credit_hours, term || null, id]
+      );
+      this.persist();
+      return this.all('SELECT * FROM courses WHERE id = ?', [id])[0];
+    }
+
+    // Remove a course and everything that belongs to it: its assignments,
+    // the scores on those assignments, grade weights, tasks, activity events
+    // and the saved grade target. Nothing else in the store references a
+    // course, so the removal is complete. Returns the counts of what was
+    // removed so the UI can say what happened, or null when the id does not
+    // exist. This is deliberate, user-asked deletion; the caller confirms.
+    removeCourse(id) {
+      if (!this.all('SELECT id FROM courses WHERE id = ?', [id]).length) return null;
+      const removed = { assignments: this.all('SELECT COUNT(*) AS n FROM assignments WHERE course_id = ?', [id])[0].n };
+      this.run('DELETE FROM scores WHERE assignment_id IN (SELECT id FROM assignments WHERE course_id = ?)', [id]);
+      this.run('DELETE FROM tasks WHERE course_id = ?', [id]);
+      this.run('DELETE FROM events WHERE course_id = ? OR assignment_id IN (SELECT id FROM assignments WHERE course_id = ?)', [id, id]);
+      this.run('DELETE FROM assignments WHERE course_id = ?', [id]);
+      this.run('DELETE FROM grade_weights WHERE course_id = ?', [id]);
+      this.run('DELETE FROM settings WHERE key = ?', ['target_' + id]);
+      this.run('DELETE FROM courses WHERE id = ?', [id]);
+      this.persist();
+      return removed;
+    }
+
     setGradeWeights(courseId, weights) {
       this.run('DELETE FROM grade_weights WHERE course_id = ?', [courseId]);
       for (const w of weights) {

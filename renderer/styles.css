@@ -220,3 +220,16 @@ details summary { cursor: pointer; margin: 6px 0; }
 .edit-form .check { display: flex; align-items: center; gap: .35rem; }
 .edit-form .actions { flex: 0 0 auto; }
 .edit-form .hint { flex: 1 1 100%; margin: 0; }
+
+/* Course management: an add row at the top of the Courses card, and inline
+   edit / confirm forms on each course row. */
+.add-course { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; margin-bottom: .5rem; }
+.add-course input[type="text"] { flex: 1 1 10rem; min-width: 8rem; }
+.add-course .hint { flex: 1 1 100%; margin: 0; }
+.course-row { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; }
+.course-row .what { flex: 1 1 auto; }
+.course-form { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; flex: 1 1 100%; }
+.course-form input[type="text"] { flex: 1 1 9rem; min-width: 7rem; }
+.course-form .actions, .course-row .actions { flex: 0 0 auto; }
+.course-form .hint, .course-confirm .hint { flex: 1 1 100%; margin: 0; }
+.course-confirm { flex: 1 1 100%; }

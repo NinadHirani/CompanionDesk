@@ -81,6 +81,12 @@
       </section>
       <section id="courses-card" class="card" aria-labelledby="courses-h">
         <h2 id="courses-h">Courses</h2>
+        <div class="add-course">
+          <input id="course-name" type="text" maxlength="120" placeholder="Course name" aria-label="Course name" />
+          <input id="course-code" type="text" maxlength="40" placeholder="Code (optional)" aria-label="Course code" />
+          <button id="course-add-btn" class="primary">Add course</button>
+          <p id="course-msg" class="hint" role="status"></p>
+        </div>
         <ul id="course-list" class="plain"></ul>
       </section>
       <section id="import-result" aria-live="polite"></section>

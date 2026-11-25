@@ -30,7 +30,7 @@ const chatHistory = require('./chat-history');
 const OllamaSetup = require('./ollama-setup');
 const { ingestSyllabus } = require('./ingest');
 const { humanizeImportError } = require('./import-errors');
-const { getBrief, setDone, editDeadline } = require('./services');
+const { getBrief, setDone, editDeadline, addCourse, renameCourse, removeCourse } = require('./services');
 const P = require('./personal');
 const G = require('./gradebook');
 const CAL = require('./calendar');
@@ -846,6 +846,9 @@ function registerIpc() {
 
   ipcMain.handle('deadline:remove', async (_e, payload) => P.removeDeadline(ctx(), payload));
   ipcMain.handle('deadline:edit', async (_e, payload) => editDeadline(db, payload, todayIso()));
+  ipcMain.handle('course:add', async (_e, payload) => addCourse(db, payload));
+  ipcMain.handle('course:rename', async (_e, payload) => renameCourse(db, payload));
+  ipcMain.handle('course:remove', async (_e, payload) => removeCourse(db, payload));
 
   // Ollama onboarding. The main process detects, reports the official install
   // route, opens ONLY the allowlisted official URLs, checks disk space, and

@@ -495,6 +495,14 @@
     });
   }
 
+  // Course management, by hand: add a course you have no syllabus for,
+  // rename or re-code one, or remove one you dropped. The removal deletes
+  // the course's assignments, scores and grades with it, so the UI asks
+  // before calling it. Same shared handlers as the desktop app.
+  function course_add(payload) { return CompanionServices.addCourse(db, payload); }
+  function course_rename(payload) { return CompanionServices.renameCourse(db, payload); }
+  function course_remove(payload) { return CompanionServices.removeCourse(db, payload); }
+
   // Edit a deadline you added by hand: the same shared handler the desktop
   // app uses, so the phone build cannot drift from it.
   function deadline_edit(payload) {
@@ -577,6 +585,7 @@
     grades_get, grades_setScore, grades_setTarget,
     patterns_get, activity_clear,
     deadline_add, deadline_remove, deadline_edit,
+    course_add, course_rename, course_remove,
     calendar_import, calendar_upcoming, calendar_remove,
     health_check,
     onboarding_get: desktopOnly, onboarding_answer: desktopOnly, onboarding_complete: desktopOnly,
