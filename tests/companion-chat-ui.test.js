@@ -180,7 +180,7 @@ test('the chat log is a live region: new messages are announced', () => {
 test('the AI status chip is a real button, keyboard-reachable', () => {
   for (const copy of ['renderer/index.html', 'web/index.html']) {
     const html = read(copy);
-    assert.ok(html.includes('<button id="ai-status" class="status" type="button">'), copy + ' makes the status chip a real button');
+    assert.ok(html.includes('<button id="ai-status" class="status" type="button" aria-live="polite">'), copy + ' makes the status chip a real button whose status changes announce');
     assert.ok(!html.includes('<span id="ai-status"'), copy + ' no longer ships the click-only span');
   }
   // styles.css is a build output in web/ (regenerated before CI's smoke step), so only the renderer copy is asserted here
