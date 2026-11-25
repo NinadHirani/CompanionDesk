@@ -41,7 +41,7 @@ async function listWindows({ desktopCapturer, systemPreferences, platform = proc
 }
 
 // -> { ok: true, jpegBase64, title }
-//  | { ok: false, error: 'bad_request' | 'screen_permission' | 'window_gone' | 'screen_blocked' | 'capture_failed', detail? }
+//  | { ok: false, error: 'bad_request' | 'screen_permission' | 'window_gone' | 'screen_blocked' | 'title_unavailable' | 'capture_failed', detail? }
 async function captureWindow({ desktopCapturer, systemPreferences, windowId, platform = process.platform }) {
   if (typeof windowId !== 'string' || !windowId || windowId.length > 200) return { ok: false, error: 'bad_request' };
   if (needsPermission({ platform, systemPreferences })) return { ok: false, error: 'screen_permission' };
@@ -51,6 +51,10 @@ async function captureWindow({ desktopCapturer, systemPreferences, windowId, pla
     const names = await desktopCapturer.getSources({ types: ['window'], thumbnailSize: { width: 0, height: 0 } });
     const target = names.find((s) => s.id === windowId);
     if (!target) return { ok: false, error: 'window_gone' };
+    // A window whose title is missing or blank cannot be checked against the
+    // private-title rules, so it is refused, the same rule that keeps untitled
+    // windows out of the picker list.
+    if (!target.name || !String(target.name).trim()) return { ok: false, error: 'title_unavailable' };
     if (isOwnWindow(target.name)) return { ok: false, error: 'bad_request' };
     if (sensitiveWindow([target.name])) return { ok: false, error: 'screen_blocked', detail: target.name };
 
@@ -59,6 +63,7 @@ async function captureWindow({ desktopCapturer, systemPreferences, windowId, pla
     const src = shots.find((s) => s.id === windowId);
     if (!src) return { ok: false, error: 'window_gone' };
     // The title can change between the two calls (a tab navigating to a login page).
+    if (!src.name || !String(src.name).trim()) return { ok: false, error: 'title_unavailable' };
     if (sensitiveWindow([src.name])) return { ok: false, error: 'screen_blocked', detail: src.name };
     if (!src.thumbnail || src.thumbnail.isEmpty()) return { ok: false, error: 'capture_failed' };
     return { ok: true, jpegBase64: src.thumbnail.toJPEG(80).toString('base64'), title: src.name };

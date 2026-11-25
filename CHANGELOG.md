@@ -20,6 +20,13 @@ gated, disabled, or unmeasured; every line matches the roadmap evidence.
   roving focus, question changes are announced to screen readers, and
   "Skip the rest" needs a confirming second click (it ends the interview
   for good).
+- Screen capture hardening: a window whose title is missing or blank can
+  no longer be captured (error title_unavailable). The picker already
+  refused to list untitled windows; the capture path now refuses them
+  too, before any pixels are requested and again if the title goes
+  blank between the title check and the pixel step, since an
+  unverifiable title cannot be checked against the private-title
+  rules.
 - Screen-mode policy fixes: background cadence config is now defined only
   for background mode (it previously answered session-mode callers with
   the 30 s background floor), and its exclusions are validated like the

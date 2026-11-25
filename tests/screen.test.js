@@ -228,3 +228,13 @@ test('ai: images ride on the user message in Ollama format, and hasModel matches
   await ai.chat({ system: 'S', prompt: 'P' });
   assert.deepEqual(bodies[1].messages[1], { role: 'user', content: 'P' }, 'no images key when none are given');
 });
+
+test('a window with no readable title is refused, not captured', async () => {
+  const f = fakeElectron();
+  const r = await captureWindow({ ...f, windowId: 'window:5', platform: 'linux' });
+  assert.equal(r.error, 'title_unavailable');
+  assert.equal(f.fullSizeRequests(), 0, 'no pixels were requested for an unverifiable title');
+  const f2 = fakeElectron({ retitle: { id: 'window:1', to: '   ' } });
+  const r2 = await captureWindow({ ...f2, windowId: 'window:1', platform: 'linux' });
+  assert.equal(r2.error, 'title_unavailable');
+});
