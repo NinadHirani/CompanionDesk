@@ -125,7 +125,8 @@
 
   nextBtn.addEventListener('click', () => submit(false));
   document.getElementById('ob-skip').addEventListener('click', () => submit(true));
-  document.getElementById('ob-finish').addEventListener('click', finish);
+  // ob-finish is wired inside the confirm guard above; a second direct
+  // listener here would finish on the first click and defeat the guard.
 
   async function start() {
     const res = await api.onboarding_get();
