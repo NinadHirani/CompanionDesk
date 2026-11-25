@@ -33,6 +33,7 @@
   let recording = null; // the active recorder, if any
   let processing = false; // a transcription is in flight in the main process
   let starting = false; // a mic start attempt is in flight
+  let startCancelled = false; // Escape pressed while a mic start is pending
 
   const IDLE_HINT = 'Enter to ask. Esc to close.';
 
@@ -48,6 +49,7 @@
   })();
 
   function cancelRecording() {
+    if (starting) startCancelled = true;
     if (recording) { recording.cancel(); recording = null; }
     if (processing) { api.voice_cancel(); processing = false; }
     if (speech.isSpeaking()) speech.stop();
@@ -231,6 +233,7 @@
     // second click must not enter while the first is pending, or two mic
     // streams open and the first one leaks its tracks.
     starting = true;
+    startCancelled = false;
     try {
       let status;
       try {
@@ -247,12 +250,16 @@
         answer.classList.add('error');
         return;
       }
+      // Escape pressed while the status check ran: the mic must not open.
+      if (startCancelled) return;
       try {
         recording = await window.CompanionRecorder.startRecording({ onAutoStop: () => { if (recording) stopAndTranscribe(); } });
       } catch (err) {
         showError(err && err.name === 'NotFoundError' ? 'mic_missing' : 'mic_blocked');
         return;
       }
+      // Escape pressed while the recorder opened: release its tracks.
+      if (startCancelled) { recording.cancel(); recording = null; return; }
       answer.textContent = '';
       answer.classList.remove('error');
       micBtn.textContent = 'Stop';

@@ -625,7 +625,7 @@ test('every reading-aloud refusal reason carries friendly wording, including the
 test('a fast second mic click cannot open a second mic stream while the first start is pending', () => {
   const ov = read('renderer/overlay.js');
   const micAt = ov.indexOf("micBtn.addEventListener('click'");
-  const chunk = ov.slice(micAt, micAt + 1400);
+  const chunk = ov.slice(micAt, micAt + 1700);
   assert.ok(chunk.includes('if (busy || starting) return;'), 'the mic click is guarded against a start already in flight');
   assert.ok(chunk.includes('starting = true;'), 'the start attempt raises the flag before its first await');
   assert.ok(chunk.includes('finally {'), 'the flag releases on every path out of the start sequence');
@@ -639,4 +639,17 @@ test('a recorder setup failure after getUserMedia releases the mic tracks', () =
   const stopAt = guardAt > 0 ? rec.indexOf('for (const t of stream.getTracks()) t.stop();', guardAt) : -1;
   assert.ok(gumAt > 0 && setupAt > gumAt, 'setup runs after getUserMedia');
   assert.ok(guardAt > 0 && stopAt > guardAt, 'the setup failure guard releases the tracks before rethrowing');
+});
+
+test('Escape during a pending mic start aborts the start, not just the settled recording', () => {
+  const src = read('renderer/overlay.js');
+  assert.ok(src.includes('let startCancelled = false;'), 'the start-cancel flag is declared');
+  const cancelAt = src.indexOf('function cancelRecording');
+  const cancelChunk = src.slice(cancelAt, cancelAt + 600);
+  assert.ok(cancelChunk.includes('if (starting) startCancelled = true;'), 'Escape during the start window marks the start cancelled');
+  const micAt = src.indexOf('starting = true;');
+  const micChunk = src.slice(micAt, micAt + 1600);
+  assert.ok(micChunk.includes('startCancelled = false;'), 'each new start clears the flag');
+  assert.ok(micChunk.includes('if (startCancelled) return;'), 'Escape during the status await stops the start before the recorder opens');
+  assert.ok(micChunk.includes('if (startCancelled) { recording.cancel(); recording = null; return; }'), 'Escape after the recorder opened releases its tracks');
 });
