@@ -197,3 +197,26 @@ test('the product service layer returns the legacy shapes through the session', 
   assert.equal(P.forgetMemory(c, { section: 'Goals', text: 'Aim for a 9' }).ok, true);
   assert.deepEqual(P.listMemory(c).items, []);
 });
+
+test('a failed file write leaves no phantom in the session view', () => {
+  sessionMod._resetForTests();
+  const file = tmpFile();
+  seed(file, { Facts: ['First fact'] });
+  const s = sessionMod.get(file);
+
+  const realWrite = fs.writeFileSync;
+  fs.writeFileSync = () => {
+    throw Object.assign(new Error('persist_failed_write'), { code: 'EACCES' });
+  };
+  let threw = false;
+  try { s.add('Facts', 'Second fact'); } catch (err) { threw = true; }
+  fs.writeFileSync = realWrite;
+  assert.equal(threw, true, 'the failed write must surface to the caller');
+
+  // The canonical file never gained the bullet; the session view must agree.
+  assert.deepEqual(s.list().map((b) => b.text), ['First fact']);
+
+  // The view is still live: a retry after the environment heals lands once.
+  assert.deepEqual(s.add('Facts', 'Second fact'), { ok: true, text: 'Second fact' });
+  assert.deepEqual(s.list().map((b) => b.text), ['First fact', 'Second fact']);
+});

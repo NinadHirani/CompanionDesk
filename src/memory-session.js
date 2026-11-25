@@ -98,7 +98,15 @@ function createSession(file) {
       if (sensitive) return r; // session-only; never written to the file
       const res = memory.addBullet(memory.readText(file), section, r.text);
       if (!res.added) { sync(); return { ok: false, error: 'duplicate' }; }
-      memory.writeText(file, res.text);
+      try {
+        memory.writeText(file, res.text);
+      } catch (err) {
+        // The file never changed, so the stat cache would keep serving the
+        // view that already gained the bullet: invalidate it so the next
+        // sync rebuilds from the canonical file and the phantom never shows.
+        fileKey = null;
+        throw err;
+      }
       sync();
       return { ok: true, text: r.text };
     },
