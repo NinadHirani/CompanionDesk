@@ -177,6 +177,12 @@ test('the chat log is a live region: new messages are announced', () => {
   assert.ok(web.includes('<h2 id="ob-prompt" aria-live="polite">'), 'the web onboarding question announces');
 });
 
+test('the section tabs announce the open section with aria-current', () => {
+  const src = read('renderer/dom.js');
+  assert.ok(src.includes("b.dataset.view === name) b.setAttribute('aria-current', 'true')"), 'dom.js sets aria-current on the open tab');
+  assert.ok(src.includes("else b.removeAttribute('aria-current')"), 'dom.js clears aria-current on the rest');
+});
+
 test('the overlay submit path has no dangling calls: speech stops inline', () => {
   const ov = read('renderer/overlay.js');
   assert.ok(!ov.includes('stopSpeaking('), 'no dangling stopSpeaking call: it was defined nowhere and crashed every typed overlay ask');
