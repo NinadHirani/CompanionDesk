@@ -310,3 +310,15 @@ test('an abandoned cloud-consent prompt cleans up its empty thread on switch', (
   const stay = s.indexOf("stayBtn.addEventListener('click'");
   assert.ok(send > 0 && stay > send, 'both consent buttons clear the tracker');
 });
+
+test('a failed consented cloud ask cleans up its empty thread in place', () => {
+  const s = read('renderer/ask.js');
+  const send = s.indexOf("sendBtn.addEventListener('click'");
+  const stay = s.indexOf("stayBtn.addEventListener('click'");
+  assert.ok(send > 0 && stay > send, 'the consent handlers exist');
+  const chunk = s.slice(send, stay);
+  assert.ok(chunk.includes('const cleanupEmptyAsk'), 'the consented path owns an empty-thread cleanup');
+  assert.equal((chunk.match(/await cleanupEmptyAsk\(\)/g) || []).length, 3, 'the throw and both failure branches clean up');
+  assert.ok(chunk.includes('msgs.messages.length === 0'), 'the thread is checked empty, never assumed');
+  assert.ok(chunk.includes('api.chat_delete({ id: emptyId })'), 'only the ask own thread is removed');
+});

@@ -308,6 +308,26 @@
         sendBtn.disabled = true;
         stayBtn.disabled = true;
         row.remove();
+        // The consented cloud ask can fail like any ask: the thread it
+        // was created for is still empty (nothing was saved), so the
+        // same checked rule as the failed ask and the declined ask
+        // applies: only a thread with no messages is removed, and only
+        // the ask's own.
+        const cleanupEmptyAsk = async () => {
+          if (!createdId) return;
+          const emptyId = createdId;
+          createdId = null;
+          const msgs = await api.chat_messages({ id: emptyId });
+          if (msgs.ok && Array.isArray(msgs.messages) && msgs.messages.length === 0) {
+            const del = await api.chat_delete({ id: emptyId });
+            if (del.ok) {
+              const wasCurrent = currentId === emptyId;
+              if (wasCurrent) currentId = null;
+              await refreshList(currentId);
+              if (wasCurrent) { log.appendChild(entry); scrollToLatest(true); }
+            }
+          }
+        };
         const waiting = el('p', null, 'hint');
         const waitingText = document.createTextNode(`${companionName()} is thinking`);
         waiting.appendChild(waitingText);
@@ -330,6 +350,7 @@
           waiting.remove();
           entry.appendChild(el('p', UI.friendlyError('ask_failed'), 'error'));
           scrollToLatest(true);
+          await cleanupEmptyAsk();
           return;
         }
         waiting.remove();
@@ -343,8 +364,10 @@
         } else if (res2.needs_cloud_consent) {
           // Should not happen after consent; treat as the local failure it is.
           entry.appendChild(el('p', UI.friendlyError(res2.local_error || res2.error), 'error'));
+          await cleanupEmptyAsk();
         } else {
           entry.appendChild(el('p', UI.friendlyError(res2.error), 'error'));
+          await cleanupEmptyAsk();
         }
       });
       stayBtn.addEventListener('click', async () => {
