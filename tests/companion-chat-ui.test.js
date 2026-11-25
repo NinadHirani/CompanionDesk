@@ -352,3 +352,15 @@ test('a cancelled ask reads as cancelled, not as a failure', () => {
   assert.ok(s.includes("UI.friendlyError('ask_failed')"), 'real crashes keep their wording');
   assert.ok(s.includes('if (cancelled && !input.value.trim()) input.value = question;'), 'a cancelled ask hands the question back');
 });
+
+test('the desktop HTML carries every element the ask script needs', () => {
+  const s = read('renderer/ask.js');
+  const ids = [...s.matchAll(/getElementById\('([^']+)'\)/g)].map((m) => m[1]);
+  assert.ok(ids.length > 5, 'the scan found the ask view ids');
+  for (const f of ['renderer/index.html', 'web/index.html']) {
+    const html = read(f);
+    for (const id of ids) {
+      assert.ok(html.includes(`id="${id}"`), `${f}: ask.js needs #${id}`);
+    }
+  }
+});
