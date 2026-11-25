@@ -302,7 +302,7 @@ test('an abandoned cloud-consent prompt cleans up its empty thread on switch', (
   assert.ok(s.includes('const consentItem = { entry, threadId: askThreadId || null, question }'), 'the consent row registers its card and the ask thread');
   assert.ok(s.includes('pendingConsents.push(consentItem);'), 'the registration lands in the tracked list');
   const ls = s.indexOf('async function loadSelected()');
-  const chunk = s.slice(ls, ls + 1400);
+  const chunk = s.slice(ls, ls + 1800);
   assert.ok(s.includes('if (dead.entry.isConnected) continue;'), 'the switch is detected by the card leaving the page');
   assert.ok(chunk.includes('msgs.messages.length === 0'), 'the thread is checked empty, never assumed');
   assert.ok(chunk.includes('api.chat_delete({ id: dead.threadId })'), 'only the ask own thread is removed');
@@ -328,13 +328,21 @@ test('every abandoned consent prompt is tracked, not just the latest', () => {
   assert.ok(s.includes('const pendingConsents = [];'), 'consents are tracked as a list');
   assert.ok(s.includes('const consentItem = { entry, threadId: askThreadId || null, question }') && s.includes('pendingConsents.push(consentItem);'), 'each consent registers its card and its ask thread');
   const ls = s.indexOf('async function loadSelected()');
-  const chunk = s.slice(ls, ls + 1400);
+  const chunk = s.slice(ls, ls + 1800);
   assert.ok(chunk.includes('[...pendingConsents]'), 'a switch sweeps every tracked consent');
   assert.ok(chunk.includes('pendingConsents.splice(pendingConsents.indexOf(dead), 1);'), 'swept consents leave the list');
   const send = s.indexOf("sendBtn.addEventListener('click'");
   const stay = s.indexOf("stayBtn.addEventListener('click'");
   const splices = (s.match(/pendingConsents\.indexOf\(consentItem\)/g) || []).length;
   assert.equal(splices, 2, 'send and stay each retire their own consent');
+});
+
+test('a slow thread load cannot render into a switch that already moved on', () => {
+  const s = read('renderer/ask.js');
+  const ls = s.indexOf('async function loadSelected()');
+  const chunk = s.slice(ls, s.indexOf('async function submit', ls));
+  assert.ok(chunk.includes('const wanted = convSel.value ? Number(convSel.value) : null;'), 'loadSelected captures the wanted thread up front');
+  assert.ok(chunk.includes('if (currentId !== wanted) return;'), 'a stale load aborts instead of rendering into the newer selection');
 });
 
 test('a failed ask cleans the picker even when the user switched away', () => {

@@ -193,7 +193,12 @@
   }
 
   async function loadSelected() {
-    currentId = convSel.value ? Number(convSel.value) : null;
+    // A switch can outrun the load before it: a slow read must never
+    // render a thread the user already left, into a newer selection's
+    // log and header. The wanted id is captured up front and checked
+    // again after every await.
+    const wanted = convSel.value ? Number(convSel.value) : null;
+    currentId = wanted;
     log.innerHTML = '';
     // Consent prompts left behind by a switch are dead: clearing the
     // log detaches their cards and they can no longer be answered. The
@@ -216,6 +221,7 @@
     }
     if (!currentId) { updateSub(null); return; }
     const res = await api.chat_messages({ id: currentId });
+    if (currentId !== wanted) return; // a newer switch owns the log now
     if (!res.ok) { currentId = null; convSel.value = ''; updateSub(null); return; }
     updateSub(titles.get(String(currentId)) || `Chat ${currentId}`);
     for (const m of res.messages) addCard(m.content, m.role === 'user' ? 'q' : 'answer');
