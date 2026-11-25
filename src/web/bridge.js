@@ -196,6 +196,13 @@
         input.remove();
         resolve(files);
       });
+      // A dismissed picker fires 'cancel', not 'change'; resolving here keeps
+      // the import from hanging at "Importing" (the caller answers
+      // { ok: false, canceled: true }, the same shape the desktop dialog has).
+      input.addEventListener('cancel', () => {
+        input.remove();
+        resolve([]);
+      });
       input.click();
     });
   }
@@ -503,6 +510,11 @@
         const files = Array.from(input.files || []);
         input.remove();
         resolve(files[0] || null);
+      });
+      // Same settle-on-cancel contract as pickFiles above.
+      input.addEventListener('cancel', () => {
+        input.remove();
+        resolve(null);
       });
       input.click();
     });
