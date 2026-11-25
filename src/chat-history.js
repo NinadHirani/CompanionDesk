@@ -7,7 +7,10 @@
 // nothing here is sent to the cloud: the ask flow only pastes the most
 // recent turns into the LOCAL model call, and the cloud fallback never
 // receives them. Only prompt/answer text is stored; never screenshots,
-// raw audio, or credentials.
+// raw audio, or credentials. Empty or non-string content is refused
+// (bad_request), so history never holds blank turns, and the context cap
+// is a ceiling: a caller may only lower it, never raise it, so a bad
+// maxTurns can never widen what the local model receives.
 
 (function (root, factory) {
   if (typeof module === 'object' && module.exports) module.exports = factory();
@@ -69,6 +72,7 @@
     const conv = getConversation(db, id);
     if (!conv) return { ok: false, error: 'not_found' };
     if (!ROLES.includes(role) || !String(now || '')) return { ok: false, error: 'bad_request' };
+    if (typeof content !== 'string' || content.trim().length === 0) return { ok: false, error: 'bad_request' };
     const text = truncate(content);
     db.run('INSERT INTO chat_messages (conversation_id, role, content, created_at) VALUES (?, ?, ?, ?)', [id, role, text, now]);
     // First user message names the conversation when it has no title yet.
@@ -98,9 +102,16 @@
   }
 
   // The most recent turns, in order, shaped for the model. Local model only.
+  // maxTurns is a ceiling the caller may only lower: any value that is not a
+  // positive integer (including 0 and NaN, which slice(-0) and slice(NaN)
+  // would both silently turn into "everything") falls back to the default
+  // cap, and a larger value is clamped to it.
   function contextTurns(messages, maxTurns = MAX_CONTEXT_TURNS) {
+    const cap = Number.isInteger(maxTurns) && maxTurns > 0
+      ? Math.min(maxTurns, MAX_CONTEXT_TURNS)
+      : MAX_CONTEXT_TURNS;
     return (messages || [])
-      .slice(-maxTurns)
+      .slice(-cap)
       .filter((m) => ROLES.includes(m.role) && typeof m.content === 'string' && m.content.trim())
       .map((m) => ({ role: m.role, content: m.content }));
   }

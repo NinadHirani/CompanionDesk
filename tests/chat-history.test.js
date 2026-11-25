@@ -155,6 +155,31 @@ test('contextTurns keeps the most recent turns, user/assistant only, in order', 
   assert.deepEqual(CH.contextTurns([]), []);
 });
 
+test('contextTurns cap is a ceiling: invalid maxTurns never widens it', async () => {
+  const db = await LocalDb.open();
+  const c = CH.createConversation(db, { now: NOW }).conversation;
+  for (let i = 0; i < 14; i++) CH.addMessage(db, c.id, i % 2 ? 'assistant' : 'user', `turn ${i}`, NOW);
+  const msgs = CH.getMessages(db, c.id).messages;
+  // slice(-0) and slice(NaN) both mean "everything"; the cap must catch them.
+  for (const bad of [0, -3, NaN, undefined === 0 ? 0 : '5', null]) {
+    const got = CH.contextTurns(msgs, bad);
+    assert.equal(got.length, CH.MAX_CONTEXT_TURNS, `maxTurns=${String(bad)} falls back to the default cap`);
+  }
+  assert.equal(CH.contextTurns(msgs, 99).length, CH.MAX_CONTEXT_TURNS, 'a larger value is clamped');
+  assert.deepEqual(CH.contextTurns(msgs, 2).map((m) => m.content), ['turn 12', 'turn 13'], 'a caller may only lower the cap');
+});
+
+test('blank or non-string content is refused, nothing stored', async () => {
+  const db = await LocalDb.open();
+  const c = CH.createConversation(db, { now: NOW }).conversation;
+  for (const bad of ['', '   ', '\n\t', 42, null, {}, ['hi']]) {
+    assert.deepEqual(CH.addMessage(db, c.id, 'user', bad, NOW), { ok: false, error: 'bad_request' });
+  }
+  assert.equal(CH.getMessages(db, c.id).messages.length, 0, 'no blank turn was stored');
+  assert.equal(CH.addMessage(db, c.id, 'user', '  real question  ', NOW).ok, true, 'padded real content is kept');
+  assert.equal(CH.getMessages(db, c.id).messages[0].content, '  real question  ');
+});
+
 // ---- ask-flow integration: history goes local, never to the cloud ------------
 
 function mockFetch(routes) {
