@@ -2,9 +2,11 @@
 
 STATUS: PROPOSAL ONLY. The governing roadmap (`docs/IMPLEMENTATION_ROADMAP.md`)
 defines no M9; per its numbering note, a coordinated-release phase becomes M9
-only when Ninad explicitly defines it. This brief is a docs-only proposal of
-what that phase would need. Nothing here is implemented, scheduled, wired, or
-promised; no code, no settings, no artifact changes product behavior.
+only when Ninad explicitly defines it. GROUNDWORK 25 Nov 2026: proposed items
+1 and 5 are landed without defining the phase - a CHANGELOG.md and
+`tests/first-run-defaults.test.js` (the first-run privacy-defaults acceptance
+pin). Nothing else here is implemented, scheduled, wired, or promised; no
+signing, no distribution, no update feed.
 
 ## What the phase would be
 

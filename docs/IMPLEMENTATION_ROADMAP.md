@@ -38,7 +38,10 @@ carries the "M2" name; its phase here is M4) and no M9 definition exists
 in this file. Neither is invented here: if a coordinated-release phase
 is wanted as M9, that needs Ninad's explicit definition first. A
 docs-only proposal brief now exists (`docs/M9_RELEASE_BRIEF.md`); it is
-not a definition and implements nothing.
+not a definition and implements nothing. Release groundwork the phase would
+need is landing independently of it: a CHANGELOG and a first-run
+privacy-defaults acceptance test landed 25 Nov 2026; M9 itself stays
+undefined.
 
 Traceability addendum (24 Nov 2026): Ninad's confirmed Areas 1-10
 requirements are integrated as ADDITIONS via
