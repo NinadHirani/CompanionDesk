@@ -443,6 +443,32 @@ test('a cancelled or failed consented ask hands the question back like the other
   assert.ok(chunk.includes('catch (err)'), 'the consented throw path is covered');
 });
 
+test('an overlay rejection cannot strand the ask, the transcription, or the mic button', () => {
+  const ov = read('renderer/overlay.js');
+  const run = ov.indexOf('async function runAsk');
+  const submit = ov.indexOf("const submit = () => runAsk");
+  assert.ok(run > 0 && submit > run, 'runAsk is read in order');
+  const runChunk = ov.slice(run, submit);
+  assert.ok(runChunk.includes('try {'), 'the ask call is guarded');
+  const runCatchStart = runChunk.indexOf('catch (err)');
+  const runCatch = runChunk.slice(runCatchStart, runCatchStart + 300);
+  assert.ok(runCatch.includes('busy = false;') && runCatch.includes('input.disabled = false;') && runCatch.includes("showError('ask_failed')"), 'a thrown ask unlocks and reports in place');
+  assert.ok(runChunk.includes('return res;'), 'the ask outcome reaches the caller');
+  const stop = ov.indexOf('async function stopAndTranscribe');
+  assert.ok(stop > run, 'stopAndTranscribe is read in order');
+  const stopChunk = ov.slice(stop, stop + 900);
+  assert.ok(stopChunk.includes('try {'), 'the transcription call is guarded');
+  const stopCatch = stopChunk.slice(stopChunk.indexOf('catch (err)'));
+  assert.ok(stopCatch.includes('processing = false;') && stopCatch.includes('micBtn.disabled = false;') && stopCatch.includes("showError('transcribe_failed')"), 'a thrown transcription releases the flags and reports');
+  const cancel = ov.indexOf('function cancelRecording');
+  const cancelChunk = ov.slice(cancel, ov.indexOf('function reset', cancel));
+  assert.ok(cancelChunk.includes('micBtn.disabled = false;'), 'Escape clears the mic button lock');
+  const choose = ov.indexOf('function choose(win)');
+  const chooseChunk = ov.slice(choose, ov.indexOf("document.getElementById('ov-screen')", choose));
+  assert.ok(chooseChunk.includes('if (res && res.ok)'), 'the sent claim is success-guarded');
+  assert.ok(chooseChunk.indexOf('if (res && res.ok)') < chooseChunk.indexOf('Sent to the local model'), 'the claim sits behind the guard');
+});
+
 test('an abandoned consent prompt hands its question back, not silent loss', () => {
   const s = read('renderer/ask.js');
   assert.ok(s.includes('const consentItem = { entry, threadId: askThreadId || null, question };'), 'the consent item carries its question');

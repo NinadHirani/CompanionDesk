@@ -48,6 +48,8 @@
     if (processing) { api.voice_cancel(); processing = false; }
     if (speech.isSpeaking()) speech.stop();
     micBtn.textContent = 'Speak';
+    // Escape must leave the mic clickable even if a flag above was stuck.
+    micBtn.disabled = false;
   }
 
   function reset() {
@@ -84,7 +86,17 @@
     answer.textContent = '';
     answer.classList.remove('error');
     hint.textContent = typeof thinking === 'function' ? thinking() : thinking;
-    const res = await call(prompt);
+    // A bridge or transport crash must not strand the overlay: the ask is
+    // reported in place and the input unlocks, like the chat ask path.
+    let res;
+    try {
+      res = await call(prompt);
+    } catch (err) {
+      busy = false;
+      input.disabled = false;
+      showError('ask_failed');
+      return { ok: false };
+    }
     busy = false;
     input.disabled = false;
     // The final text replaces whatever streamed, in case a fallback answered.
@@ -103,6 +115,7 @@
     else showError(res.error, res.detail);
     input.select();
     input.focus();
+    return res;
   }
 
   const submit = () => runAsk((prompt) => api.overlay_ask({ prompt }), () => `${companionName} is thinking`);
@@ -124,8 +137,10 @@
   function choose(win) {
     hidePicker();
     showPreview(win, `Sending only this window to the local model: ${win.name}. Nothing is saved.`);
-    runAsk((prompt) => api.screen_ask({ prompt, windowId: win.id }), 'Looking at that window').then(() => {
-      preview.querySelector('span').textContent = `Sent to the local model: ${win.name}. Not saved.`;
+    runAsk((prompt) => api.screen_ask({ prompt, windowId: win.id }), 'Looking at that window').then((res) => {
+      // Only a succeeded ask may claim the window was sent: a failure
+      // reports its error in place and the preview keeps its honest text.
+      if (res && res.ok) preview.querySelector('span').textContent = `Sent to the local model: ${win.name}. Not saved.`;
     });
   }
 
@@ -166,7 +181,17 @@
     hint.textContent = 'Transcribing';
     const pcm = await rec.stop();
     processing = true;
-    const res = await api.voice_transcribe({ pcm });
+    // A transport crash must not strand the mic button: the failure is
+    // reported in place and both flags release.
+    let res;
+    try {
+      res = await api.voice_transcribe({ pcm });
+    } catch (err) {
+      processing = false;
+      micBtn.disabled = false;
+      showError('transcribe_failed');
+      return;
+    }
     processing = false;
     micBtn.disabled = false;
     if (!res.ok) { showError(res.error); return; }
