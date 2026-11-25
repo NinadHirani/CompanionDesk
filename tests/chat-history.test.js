@@ -208,7 +208,7 @@ test('P.ask persists the exchange and sends prior turns to the local model', asy
   CH.addMessage(db, c.id, 'assistant', 'earlier answer', NOW);
 
   const out = await P.ask({ db, ai, meFile: '/nonexistent' }, { prompt: 'new question', conversation_id: c.id }, '2026-11-23', { model: 'llama3.2:latest' });
-  assert.deepEqual(out, { ok: true, answer: 'the answer', conversation_id: c.id });
+  assert.deepEqual(out, { ok: true, answer: 'the answer', conversation_id: c.id, saved: true });
   assert.equal(seen.history.length, 2);
   assert.deepEqual(seen.history[0], { role: 'user', content: 'earlier question' });
   assert.deepEqual(seen.history[1], { role: 'assistant', content: 'earlier answer' });
@@ -221,6 +221,23 @@ test('P.ask without a conversation id keeps the single-shot behavior', async () 
   const ai = { completeRouted: async () => 'ok' };
   const out = await P.ask({ db, ai, meFile: '/nonexistent' }, { prompt: 'hello' }, '2026-11-23');
   assert.deepEqual(out, { ok: true, answer: 'ok' });
+  assert.equal(CH.listConversations(db).conversations.length, 0);
+});
+
+test('P.ask surfaces a save failure when the thread vanishes mid-ask', async () => {
+  const db = await fakeAskDb();
+  const c = CH.createConversation(db, { now: NOW }).conversation;
+  const ai = {
+    completeRouted: async () => { CH.deleteConversation(db, c.id); return 'the answer'; },
+    listModels: async () => null,
+    modelCapabilities: async () => null,
+    localModel: 'llama3.2:latest',
+  };
+  const out = await P.ask({ db, ai, meFile: '/nonexistent' }, { prompt: 'hello', conversation_id: c.id }, '2026-11-23', { model: 'llama3.2:latest' });
+  assert.equal(out.ok, true);
+  assert.equal(out.saved, false);
+  assert.equal(out.save_error, 'not_found');
+  assert.equal(CH.getMessages(db, c.id).ok, false, 'nothing was saved and nothing resurrected');
   assert.equal(CH.listConversations(db).conversations.length, 0);
 });
 

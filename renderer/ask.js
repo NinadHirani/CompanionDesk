@@ -144,6 +144,18 @@
     }
   }
 
+  // Companion-first: a completed answer must never be reported as saved
+  // when its thread vanished mid-flight. The ask result says so, and the
+  // hint names what happened in place.
+  function appendSaveHint(entry, res) {
+    if (!res || res.saved !== false) return;
+    const why = res.save_error === 'not_found'
+      ? 'Answered, but not saved: the conversation was deleted while the ask ran, so history does not keep it.'
+      : 'Answered, but it could not be saved to history.';
+    entry.appendChild(el('p', why, 'hint'));
+    if (entry.isConnected) announce(why);
+  }
+
   // Companion-first: the open thread's title is visible in the header.
   function updateSub(title) {
     const sub = document.getElementById('ask-sub');
@@ -304,6 +316,7 @@
       // A mid-ask switch leaves the entry detached, so nothing is
       // announced for a thread the user is no longer looking at.
       else { answerEl.textContent = res.answer; if (entry.isConnected) announce(res.answer); }
+      appendSaveHint(entry, res);
       scrollToLatest();
       // Re-select the ask's thread only when the user never left it: a
       // mid-ask switch to another conversation is a browsing choice, and
@@ -400,6 +413,7 @@
         waiting.remove();
         if (res2.ok) {
           entry.appendChild(el('p', res2.answer, 'answer'));
+          appendSaveHint(entry, res2);
           scrollToLatest(true);
           if (res2.conversation_id && currentId === askThreadId) {
             currentId = res2.conversation_id;

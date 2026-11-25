@@ -284,10 +284,17 @@
       }
       if (conversationId) {
         const now = localNowIso();
-        CompanionChatHistory.addMessage(db, conversationId, 'user', prompt, now);
-        CompanionChatHistory.addMessage(db, conversationId, 'assistant', answer, now);
+        const first = CompanionChatHistory.addMessage(db, conversationId, 'user', prompt, now);
+        const second = first.ok ? CompanionChatHistory.addMessage(db, conversationId, 'assistant', answer, now) : null;
+        if (!first.ok || !second || !second.ok) {
+          // A completed exchange must never be reported as saved when its
+          // thread vanished mid-flight (a delete or a boot sweep elsewhere):
+          // surface the save failure instead of pretending success.
+          return { ok: true, answer, conversation_id: conversationId, saved: false, save_error: first.error || (second && second.error) };
+        }
+        return { ok: true, answer, conversation_id: conversationId, saved: true };
       }
-      return conversationId ? { ok: true, answer, conversation_id: conversationId } : { ok: true, answer };
+      return { ok: true, answer };
     } catch (err) {
       if (err && (err.name === 'AbortError' || err.name === 'TimeoutError' || err.code === 'ABORT_ERR')) {
         return { ok: false, error: 'canceled' };

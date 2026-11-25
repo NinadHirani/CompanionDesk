@@ -431,3 +431,18 @@ test('a reload mid-ask leaves an empty thread that the boot sweep removes once',
   assert.ok(guard > -1 && guard > show && guard < ref, 'the sweep runs once at boot, before the picker first lists threads');
   assert.ok(s.includes('let bootSwept = false;'), 'the boot guard is separate from the boot-landing flag');
 });
+
+test('a completed exchange whose thread vanished is surfaced as a save failure, not success', () => {
+  const bridge = read('src/web/bridge.js');
+  assert.ok(bridge.includes("const first = CompanionChatHistory.addMessage(db, conversationId, 'user', prompt, now);"), 'the bridge checks the first save');
+  assert.ok(bridge.includes('saved: false, save_error: first.error || (second && second.error)'), 'the bridge surfaces the save failure');
+  assert.ok(bridge.includes('saved: true'), 'a saved exchange reports saved');
+  const personal = read('src/personal.js');
+  assert.ok(personal.includes("const first = chatHistory.addMessage(db, conversationId, 'user', question, now);"), 'the desktop checks the first save');
+  assert.ok(personal.includes('saved: false, save_error: first.error || (second && second.error)'), 'the desktop surfaces the save failure');
+  const s = read('renderer/ask.js');
+  assert.ok(s.includes('function appendSaveHint(entry, res)'), 'the save-failure hint exists');
+  assert.ok(s.includes("res.save_error === 'not_found'"), 'the vanished-thread wording is explicit');
+  assert.equal((s.match(/appendSaveHint\(entry, res2? \);/g) || []).length, 2, 'both ask paths surface it');
+  assert.ok(s.includes('res.saved !== false'), 'normal saves render no hint');
+});

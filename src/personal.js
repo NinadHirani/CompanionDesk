@@ -233,10 +233,17 @@ async function ask({ db, ai, meFile }, payload, todayIso, { onToken, model, sign
     }
     if (conversationId) {
       const now = new Date().toISOString();
-      chatHistory.addMessage(db, conversationId, 'user', question, now);
-      chatHistory.addMessage(db, conversationId, 'assistant', answer, now);
+      const first = chatHistory.addMessage(db, conversationId, 'user', question, now);
+      const second = first.ok ? chatHistory.addMessage(db, conversationId, 'assistant', answer, now) : null;
+      if (!first.ok || !second || !second.ok) {
+        // Same rule as the web bridge: a completed exchange must never be
+        // reported as saved when its thread vanished mid-flight. Surface
+        // the save failure instead of pretending success.
+        return { ok: true, answer, conversation_id: conversationId, saved: false, save_error: first.error || (second && second.error) };
+      }
+      return { ok: true, answer, conversation_id: conversationId, saved: true };
     }
-    return conversationId ? { ok: true, answer, conversation_id: conversationId } : { ok: true, answer };
+    return { ok: true, answer };
   } catch (err) {
     if (conversationId) chatHistory.addMessage(db, conversationId, 'user', question, new Date().toISOString());
     if (err && (err.name === 'AbortError' || err.name === 'TimeoutError' || err.code === 'ABORT_ERR')) {
