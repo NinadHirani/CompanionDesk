@@ -211,3 +211,12 @@ details summary { cursor: pointer; margin: 6px 0; }
 .setup-progress > div { height: 100%; width: 0; background: var(--accent); transition: width .3s ease; }
 .oll-cmd { font-family: ui-monospace, Menlo, monospace; background: var(--tag-bg); padding: 6px 8px; border-radius: 6px; word-break: break-all; display: block; }
 .setup-note { color: var(--muted); }
+
+/* Inline edit form for a hand-added deadline: the row becomes inputs so the
+   date and description stay in view while you change them. */
+.edit-form { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; flex: 1 1 100%; }
+.edit-form input[type="text"] { flex: 1 1 14rem; min-width: 8rem; }
+.edit-form input[type="date"] { flex: 0 0 auto; }
+.edit-form .check { display: flex; align-items: center; gap: .35rem; }
+.edit-form .actions { flex: 0 0 auto; }
+.edit-form .hint { flex: 1 1 100%; margin: 0; }

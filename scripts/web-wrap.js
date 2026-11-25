@@ -20,7 +20,7 @@ const MODULES = [
   { src: 'src/grades.js', global: 'CompanionGrades', requires: {} },
   { src: 'src/gradebook.js', global: 'CompanionGradebook', requires: { './grades': 'CompanionGrades' } },
   { src: 'src/brief.js', global: 'CompanionBrief', requires: { './extraction-core': 'CompanionCore' } },
-  { src: 'src/services.js', global: 'CompanionServices', requires: { './brief': 'CompanionBrief' } },
+  { src: 'src/services.js', global: 'CompanionServices', requires: { './brief': 'CompanionBrief', './settings': 'CompanionSettings', './extraction-core': 'CompanionCore' } },
   { src: 'src/ics.js', global: 'CompanionIcs', requires: {} },
   { src: 'src/calendar.js', global: 'CompanionCalendar', requires: { './ics': 'CompanionIcs', './settings': 'CompanionSettings', './dates': 'CompanionDates', path: '__WEB_PATH_SHIM__' } },
 ];

@@ -408,6 +408,22 @@ CREATE TABLE IF NOT EXISTS agent_schema (
       return true;
     }
 
+    // Edit a deadline the user added by hand: title, date and the exam tag
+    // can change. The same manual-only boundary removeManualAssignment
+    // enforces applies here, so an assignment extracted from a syllabus is
+    // never touched by this path. Returns the updated row, or null when the
+    // id is not a hand-added deadline.
+    updateManualAssignment(id, { title, due_date, category }) {
+      const rows = this.all("SELECT id FROM assignments WHERE id = ? AND date_confidence = 'manual'", [id]);
+      if (!rows.length) return null;
+      this.run(
+        'UPDATE assignments SET title = ?, due_date = ?, category = ? WHERE id = ?',
+        [title, due_date || null, category || null, id]
+      );
+      this.persist();
+      return this.getAssignment(id);
+    }
+
     listAssignments(courseId) {
       return this.all(
         'SELECT * FROM assignments WHERE course_id = ? ORDER BY CASE WHEN due_date IS NULL THEN 1 ELSE 0 END, due_date, title',

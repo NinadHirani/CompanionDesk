@@ -495,6 +495,12 @@
     });
   }
 
+  // Edit a deadline you added by hand: the same shared handler the desktop
+  // app uses, so the phone build cannot drift from it.
+  function deadline_edit(payload) {
+    return CompanionServices.editDeadline(db, payload, todayIso());
+  }
+
   async function calendar_import() {
     await readyPromise;
     const file = await pickIcsFile();
@@ -570,7 +576,7 @@
     settings_get, settings_save, hardware_report, provider_status,
     grades_get, grades_setScore, grades_setTarget,
     patterns_get, activity_clear,
-    deadline_add, deadline_remove,
+    deadline_add, deadline_remove, deadline_edit,
     calendar_import, calendar_upcoming, calendar_remove,
     health_check,
     onboarding_get: desktopOnly, onboarding_answer: desktopOnly, onboarding_complete: desktopOnly,

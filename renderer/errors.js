@@ -69,6 +69,7 @@
     invalid_date: 'That is not a real date.',
     date_in_past: 'That date has already passed.',
     duplicate: 'You already have that one.',
+    not_manual: 'Only deadlines you added by hand can be edited here. Change the rest by importing an updated syllabus.',
     invalid_answer: 'That does not look right. Try again, or skip.',
     invalid_settings: 'Some of those settings were not valid.',
     bad_request: 'That did not go through. Try again.',

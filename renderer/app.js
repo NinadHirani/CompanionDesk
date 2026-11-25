@@ -53,13 +53,58 @@
     undoTimer = setTimeout(() => { bar.hidden = true; }, 8000);
   }
 
-  function actionButtons(item) {
+  // Editing a deadline you added by hand. The row turns into a small form
+  // instead of a modal, so the date and what is due stay in view. Only
+  // hand-added rows get the button: a syllabus owns the rest, and the database
+  // refuses the edit either way.
+  function editRow(li, item) {
+    const form = el('div', null, 'edit-form');
+    const title = document.createElement('input');
+    title.type = 'text';
+    title.maxLength = 120;
+    title.value = item.title;
+    title.setAttribute('aria-label', 'Deadline description');
+    const date = document.createElement('input');
+    date.type = 'date';
+    date.value = item.due_date || '';
+    date.setAttribute('aria-label', 'Deadline date');
+    const examLabel = el('label', null, 'check');
+    const exam = document.createElement('input');
+    exam.type = 'checkbox';
+    exam.checked = item.kind === 'exam';
+    examLabel.append(exam, document.createTextNode(' This is an exam'));
+    const msg = el('p', null, 'hint');
+    msg.setAttribute('role', 'status');
+    const actions = el('div', null, 'actions');
+    const save = el('button', 'Save', 'primary');
+    save.addEventListener('click', async () => {
+      const res = await api.deadline_edit({ id: item.id, title: title.value, date: date.value, isExam: exam.checked });
+      if (!res.ok) {
+        msg.textContent = UI.friendlyError(res.error);
+        msg.className = 'hint error';
+        return;
+      }
+      await refresh();
+    });
+    const cancel = el('button', 'Cancel');
+    cancel.addEventListener('click', () => refresh());
+    actions.append(save, cancel);
+    form.append(title, date, examLabel, actions, msg);
+    li.replaceChildren(form);
+    title.focus();
+  }
+
+  function actionButtons(item, li) {
     const box = el('div', null, 'actions');
     const done = el('button', 'Done');
     done.setAttribute('aria-label', `Mark ${item.title} done`);
     done.addEventListener('click', () => markDone(item));
     box.appendChild(done);
     if (item.manual) {
+      const edit = el('button', 'Edit');
+      edit.setAttribute('aria-label', `Edit ${item.title}`);
+      edit.addEventListener('click', () => editRow(li, item));
+      box.appendChild(edit);
       const rm = el('button', 'Remove');
       rm.setAttribute('aria-label', `Remove ${item.title}`);
       rm.addEventListener('click', async () => {
@@ -83,7 +128,7 @@
     what.appendChild(title);
     const meta = [item.course, item.weight_pct !== null && item.weight_pct !== undefined ? `worth ${item.weight_pct}% of the course` : null].filter(Boolean).join(', ');
     if (meta) what.appendChild(el('div', meta, 'meta'));
-    li.append(when, what, actionButtons(item));
+    li.append(when, what, actionButtons(item, li));
     return li;
   }
 

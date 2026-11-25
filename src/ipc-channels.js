@@ -38,6 +38,7 @@ const IPC_CHANNELS = Object.freeze([
   'onboarding:complete',
   'deadline:add',
   'deadline:remove',
+  'deadline:edit',
   'grades:get',
   'grades:setScore',
   'grades:setTarget',
