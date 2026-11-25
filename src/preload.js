@@ -108,7 +108,7 @@ const IPC_CHANNELS = [
 ];
 
 // Messages main may push to this window. Mirrors IPC_EVENTS in ipc-channels.js.
-const IPC_EVENTS = ['overlay:token', 'overlay:reset', 'update:state', 'ollama:pullProgress'];
+const IPC_EVENTS = ['overlay:token', 'overlay:reset', 'update:state', 'ollama:pullProgress', 'ai:token'];
 
 const api = {};
 for (const channel of IPC_CHANNELS) {

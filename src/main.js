@@ -558,9 +558,15 @@ function registerIpc() {
     const controller = new AbortController();
     askControllers.set(requestId, controller);
     try {
+      const sender = _e && _e.sender;
       return await P.ask(ctx(), payload, todayIso(), {
         model: sel.chat.model,
         signal: controller.signal,
+        // Streaming: model tokens ride a push channel tagged with the
+        // request id, so a window only ever sees its own ask's tokens.
+        onToken: (piece) => {
+          if (sender && !sender.isDestroyed()) sender.send('ai:token', { request_id: requestId, piece: String(piece) });
+        },
       });
     } finally {
       askControllers.delete(requestId);

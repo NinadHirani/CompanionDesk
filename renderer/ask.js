@@ -117,10 +117,24 @@
     pending.appendChild(document.createTextNode(' '));
     pending.appendChild(cancelBtn);
 
+    // Streaming: model tokens arrive on the push channel while the ask
+    // runs; the answer from the ask's own result stays authoritative and
+    // replaces the streamed text. Transports without push events simply
+    // never fire this, and the whole answer renders as before.
+    let answerEl = null;
+    const stopTokens = (typeof api.on === 'function') ? api.on('ai:token', (t) => {
+      if (!t || t.request_id !== requestId || !pending.isConnected) return;
+      if (!answerEl) { pending.remove(); answerEl = el('p', '', 'answer'); entry.appendChild(answerEl); }
+      answerEl.textContent += String(t.piece || '');
+      scrollToLatest();
+    }) : null;
+
     const res = await api.ai_ask({ prompt: question, conversation_id: currentId, request_id: requestId });
+    if (stopTokens) stopTokens();
     pending.remove();
     if (res.ok) {
-      entry.appendChild(el('p', res.answer, 'answer'));
+      if (!answerEl) { answerEl = el('p', res.answer, 'answer'); entry.appendChild(answerEl); }
+      else answerEl.textContent = res.answer;
       scrollToLatest();
       if (res.conversation_id) {
         currentId = res.conversation_id;

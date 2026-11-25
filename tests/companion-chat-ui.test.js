@@ -94,3 +94,24 @@ test('a fresh ask opts into persistence, and a declined consent cleans up', () =
   assert.ok(ask.includes('api.chat_delete({ id: emptyId })'), 'a declined cloud consent removes the empty thread');
   assert.ok(ask.includes('input.value = question'), 'the declined question returns to the input');
 });
+
+test('the ask streams model tokens and keeps the final answer authoritative', () => {
+  const s = read('renderer/ask.js');
+  assert.ok(s.includes("typeof api.on === 'function'"), 'streaming subscribes only where a push channel exists');
+  assert.ok(s.includes("api.on('ai:token'"), 'tokens arrive on the ai:token push channel');
+  assert.ok(s.includes('t.request_id !== requestId'), 'a window only renders its own ask tokens');
+  assert.ok(s.includes('!pending.isConnected'), 'tokens stop rendering once the ask row is gone');
+  assert.ok(s.includes('answerEl.textContent = res.answer'), 'the final result replaces the streamed text');
+  assert.ok(s.includes('if (stopTokens) stopTokens()'), 'the subscription is released when the ask ends');
+});
+
+test('ai:token is allowlisted on both sides of the IPC boundary and tagged per request', () => {
+  const ch = read('src/ipc-channels.js');
+  const pre = read('src/preload.js');
+  for (const s of [ch, pre]) {
+    assert.ok(s.includes("'ai:token'"), 'ai:token is in the push-event allowlist');
+  }
+  const main = read('src/main.js');
+  assert.ok(main.includes("sender.send('ai:token', { request_id: requestId, piece: String(piece) })"), 'tokens are tagged with the request id');
+  assert.ok(main.includes('onToken: (piece)'), 'the ask pipeline forwards model tokens');
+});

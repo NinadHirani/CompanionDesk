@@ -113,7 +113,7 @@ const IPC_CHANNELS = Object.freeze([
 
 // Messages main may PUSH to a window (streaming tokens and the like). The
 // renderer can only listen to these; the preload mirrors this list inline.
-const IPC_EVENTS = Object.freeze(['overlay:token', 'overlay:reset', 'update:state', 'ollama:pullProgress']);
+const IPC_EVENTS = Object.freeze(['overlay:token', 'overlay:reset', 'update:state', 'ollama:pullProgress', 'ai:token']);
 
 function isAllowed(channel) {
   return IPC_CHANNELS.includes(channel);
