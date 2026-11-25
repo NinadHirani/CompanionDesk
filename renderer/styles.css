@@ -162,12 +162,16 @@ input:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); 
   align-self: flex-end; max-width: 85%; margin: 0;
   padding: 7px 11px; border-radius: 12px 12px 2px 12px;
   background: var(--tag-bg); font-weight: 600;
+  /* A pasted URL or any unbroken run must wrap inside the bubble, not push
+     the whole page sideways on phone, tablet or desktop. */
+  overflow-wrap: anywhere;
 }
 .qa .answer {
   align-self: flex-start; max-width: 96%; margin: 0;
   padding: 7px 11px; border: 1px solid var(--line);
   border-radius: 12px 12px 12px 2px;
   background: var(--bg); white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 .qa .who { align-self: flex-start; margin: 0; font-size: 11px; color: var(--muted); }
 .qa .row { align-self: flex-start; }
@@ -191,7 +195,7 @@ input:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); 
 body.overlay { display: flex; flex-direction: column; height: 100vh; padding: 12px 14px; gap: 8px; overflow: hidden; }
 .ov-top { display: flex; gap: 8px; }
 .ov-top input { font-size: 15px; padding: 9px 10px; }
-.ov-answer { flex: 1; overflow-y: auto; white-space: pre-wrap; line-height: 1.5; }
+.ov-answer { flex: 1; overflow-y: auto; white-space: pre-wrap; line-height: 1.5; overflow-wrap: anywhere; }
 .ov-answer.error { color: var(--bad); }
 body.overlay .hint { margin: 0; }
 

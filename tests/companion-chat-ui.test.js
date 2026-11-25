@@ -165,3 +165,12 @@ test('ask_failed maps to a plain retry message', () => {
   assert.ok(s.includes('ask_failed:'), 'the code is mapped in errors.js');
   assert.ok(s.includes('try again.'), 'the message invites a retry');
 });
+
+test('chat bubbles wrap long unbroken tokens at every viewport width', () => {
+  const css = read('renderer/styles.css');
+  const q = css.slice(css.indexOf('.qa .q {'), css.indexOf('.qa .answer'));
+  const a = css.slice(css.indexOf('.qa .answer {'), css.indexOf('.qa .who'));
+  assert.ok(q.includes('overflow-wrap: anywhere'), 'the question bubble breaks long tokens');
+  assert.ok(a.includes('overflow-wrap: anywhere'), 'the answer bubble breaks long tokens');
+  assert.ok(css.slice(css.indexOf('.ov-answer {')).includes('overflow-wrap: anywhere'), 'the overlay answer breaks long tokens too');
+});
