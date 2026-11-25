@@ -29,6 +29,22 @@
       if (Object.getOwnPropertySymbols(r).length) {
         return { ok: false, reason: 'symbol_key', index: i };
       }
+      // Polluting keys are refused BEFORE any descriptor or value is read:
+      // a record with an OWN '__proto__' data property passes every other
+      // check (its actual prototype is untouched), but the most common
+      // downstream pattern, an assignment-style copy
+      // (target[key] = record[key]), would run the '__proto__' setter on the
+      // copy target and make it inherit from attacker-chosen data. The
+      // sibling IPC contract refuses the same three keys (POLLUTING_KEYS
+      // there); a strict plain-data validator must not accept them either.
+      // 'constructor' and 'prototype' are refused with it, matching that
+      // contract's stance exactly.
+      const POLLUTING_KEYS = ['__proto__', 'constructor', 'prototype'];
+      for (const pk of POLLUTING_KEYS) {
+        if (Object.prototype.hasOwnProperty.call(r, pk)) {
+          return { ok: false, reason: 'polluting_key:' + pk, index: i };
+        }
+      }
       const descs = Object.getOwnPropertyDescriptors(r);
       for (const name of Object.getOwnPropertyNames(r)) {
         const d = descs[name];
