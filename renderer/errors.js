@@ -34,6 +34,7 @@
   user_action_required: 'Press Read aloud to hear the answer.',
   already_speaking: 'Already reading aloud.',
   empty_text: 'Nothing to read aloud.',
+  text_too_long: 'That answer is too long to read aloud in one go.',
   speech_interrupted: 'Reading aloud was interrupted. Press Read aloud to try again.',
   synthesis_failed: 'The built-in voice could not read that. Try again.',
   synthesis_unavailable: 'The built-in voice is unavailable right now.',

@@ -606,3 +606,18 @@ test('a completed exchange whose thread vanished is surfaced as a save failure, 
   assert.equal((s.match(/appendSaveHint\(entry, res2?\);/g) || []).length, 2, 'both ask paths surface it');
   assert.ok(s.includes('res.saved !== false'), 'normal saves render no hint');
 });
+
+test('every reading-aloud refusal reason carries friendly wording, including the length cap', () => {
+  const sp = read('renderer/speech-output.js');
+  const startAt = sp.indexOf('function start(text');
+  const chunk = sp.slice(startAt, startAt + 800);
+  assert.ok(chunk.includes("'text_too_long'"), 'the length cap refuses with text_too_long');
+  const errs = read('renderer/errors.js');
+  const reasons = ['voice_output_disabled', 'user_action_required', 'already_speaking', 'no_synthesis_api', 'empty_text', 'text_too_long', 'speech_interrupted', 'synthesis_failed', 'synthesis_unavailable', 'audio_busy', 'audio_hardware', 'synthesis_not_allowed', 'voice_unavailable', 'bad_request'];
+  const missing = reasons.filter((r) => !errs.includes(`${r}:`));
+  assert.deepEqual(missing, [], 'every refusal reason has wording');
+  const ov = read('renderer/overlay.js');
+  const readAt = ov.indexOf("readBtn.addEventListener('click'");
+  const readChunk = ov.slice(readAt, readAt + 500);
+  assert.ok(readChunk.includes('friendlyError(r.reason)'), 'the read button reports the refusal reason in place');
+});
