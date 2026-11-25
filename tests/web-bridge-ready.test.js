@@ -17,6 +17,17 @@ const vm = require('node:vm');
 
 const WEB = path.join(__dirname, '..', 'web');
 
+// The web bundle is generated (scripts/build-web.sh) and its pieces are
+// gitignored, so a fresh checkout has no web/core/ to load. Assemble it
+// once here, before the scripts below are read, so this test runs wherever
+// npm test runs (the CI job installs dependencies first; the build only
+// needs node and node_modules).
+const BUNDLE_MARKER = path.join(WEB, 'core', 'extraction-core.js');
+if (!fs.existsSync(BUNDLE_MARKER)) {
+  const { execFileSync } = require('node:child_process');
+  execFileSync('bash', [path.join(__dirname, '..', 'scripts', 'build-web.sh')], { stdio: 'inherit' });
+}
+
 // Same script order web/index.html loads, minus the sql.js WASM vendor file
 // (the sandbox injects its own initSqlJs stand-in) and the renderer files.
 const SCRIPTS = [
