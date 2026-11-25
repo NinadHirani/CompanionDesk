@@ -419,3 +419,15 @@ test('deleting the thread that holds an in-flight ask cancels it first', () => {
   assert.ok(before.includes('activeAsk && activeAsk.threadId === currentId'), 'the delete consults the in-flight ask state first');
   assert.ok(before.includes('await api.ai_cancel({ request_id: activeAsk.requestId })'), 'the delete cancels the stranded call before clearing the log');
 });
+
+test('a reload mid-ask leaves an empty thread that the boot sweep removes once', () => {
+  const s = read('renderer/ask.js');
+  assert.ok(s.includes('async function sweepEmptyThreads()'), 'the sweep exists');
+  assert.ok(s.includes('if (msgs.ok && msgs.messages.length === 0)'), 'it deletes only zero-message threads');
+  assert.ok(s.includes('await api.chat_delete({ id: c.id })'), 'it uses the same delete path as the failure cleanup');
+  const guard = s.indexOf('if (!bootSwept) { bootSwept = true; await sweepEmptyThreads(); }');
+  const show = s.indexOf("UI.onShow('ask'");
+  const ref = s.indexOf('await refreshList();', show);
+  assert.ok(guard > -1 && guard > show && guard < ref, 'the sweep runs once at boot, before the picker first lists threads');
+  assert.ok(s.includes('let bootSwept = false;'), 'the boot guard is separate from the boot-landing flag');
+});

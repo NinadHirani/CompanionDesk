@@ -13,6 +13,7 @@
   // Set once the first show of the view has finished, so the boot-time
   // reopen below runs exactly once.
   let restoredOnBoot = false;
+  let bootSwept = false;
   const renameBtn = document.getElementById('ask-rename');
   const deleteBtn = document.getElementById('ask-delete');
   const newChatBtn = document.getElementById('ask-newchat');
@@ -124,6 +125,23 @@
     currentId = keep ? Number(keep) : null;
     updateSub(keep ? titles.get(String(keep)) : null);
     if (!keep) log.innerHTML = '';
+  }
+
+  // Companion-first: threads are only created by asks, and an ask saves its
+  // exchange only on completion. An ask interrupted by a reload or a closed
+  // window therefore leaves a zero-message thread behind, and the failure
+  // paths' cleanup never runs after that. Sweep those once at boot, before
+  // the picker first lists them, exactly like the failure cleanup does: a
+  // real thread always has messages.
+  async function sweepEmptyThreads() {
+    const res = await api.chat_list();
+    if (!res.ok) return;
+    for (const c of res.conversations) {
+      const msgs = await api.chat_messages({ id: c.id });
+      if (msgs.ok && msgs.messages.length === 0) {
+        await api.chat_delete({ id: c.id });
+      }
+    }
   }
 
   // Companion-first: the open thread's title is visible in the header.
@@ -523,6 +541,9 @@
   UI.onShow('ask', async () => {
     input.focus();
     UI.about.refreshProposals();
+    // Once at boot: an ask in flight on a later show also owns a
+    // zero-message thread until it completes, and must never be swept.
+    if (!bootSwept) { bootSwept = true; await sweepEmptyThreads(); }
     await refreshList();
     // Companion-first: on the boot landing, reopen the most recent thread so
     // a returning user lands back inside their conversation. The list is
