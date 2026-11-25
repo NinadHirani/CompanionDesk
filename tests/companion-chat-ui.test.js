@@ -66,3 +66,12 @@ test('the app opens on the companion chat once setup is done', () => {
   const ob = read('renderer/onboarding.js');
   assert.ok(ob.includes("UI.show('ask')"), 'finishing setup ends in the chat');
 });
+
+test("the Today brief opens in the companion's voice", () => {
+  const app = read('renderer/app.js');
+  assert.ok(app.includes("'companion-lead'"), 'brief renders a companion lead line');
+  assert.ok(app.includes("dataset.companionName"), 'the lead uses the companion name');
+  assert.ok(app.includes("${cname} here."), 'the lead names the companion');
+  const css = read('renderer/styles.css');
+  assert.ok(css.includes('.companion-lead'), 'the lead line has a style');
+});

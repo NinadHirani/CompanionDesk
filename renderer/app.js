@@ -143,6 +143,9 @@
   function renderBrief(brief, student) {
     const body = document.getElementById('brief-body');
     body.replaceChildren();
+    // Companion-first: the brief opens in the companion's voice.
+    const cname = document.body.dataset.companionName || 'CompanionDesk';
+    body.appendChild(el('p', `${cname} here.`, 'companion-lead'));
 
     if (!brief.top.length) {
       body.appendChild(el('p', student.active

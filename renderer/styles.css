@@ -103,6 +103,7 @@ select { padding: 4px 8px; }
 .tag { display: inline-block; font-size: 11px; padding: 1px 6px; border-radius: 3px; background: var(--tag-bg); color: var(--muted); margin-left: 6px; }
 .plain li { padding: 4px 0; }
 .empty { color: var(--muted); margin: 4px 0; }
+.companion-lead { color: var(--ink); font-weight: 600; margin: 0 0 6px; }
 
 .crunch {
   margin-top: 12px; padding: 10px 12px;
