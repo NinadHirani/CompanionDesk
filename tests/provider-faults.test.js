@@ -343,3 +343,18 @@ test('classifyFailure carries only real errno names (strict allowlist, 24 Nov 20
   const raw = F.classifyFailure({ err: { code: 'E_URL http://x SECRET' } });
   assert.equal(raw.detail, null);
 });
+
+// REGRESSION (26 Nov 2026): the strict errno allowlist omitted the two DNS
+// failure codes Node itself reports for an unresolvable or temporarily
+// unresolvable host (getaddrinfo). They are real Node system-error names,
+// which is exactly what the allowlist says it carries, so an unreachable
+// host named by hostname showed "Not reachable" with no detail while the
+// same failure by IP showed "Not reachable (ECONNREFUSED)".
+test('classifyFailure carries the real DNS failure codes ENOTFOUND and EAI_AGAIN', () => {
+  assert.deepEqual(F.classifyFailure({ err: { code: 'ENOTFOUND' } }), { code: 'unreachable', detail: 'ENOTFOUND' });
+  assert.deepEqual(F.classifyFailure({ err: { code: 'EAI_AGAIN' } }), { code: 'unreachable', detail: 'EAI_AGAIN' });
+  // Second layer: the direct fault() path must carry them too.
+  assert.deepEqual(F.fault({ code: 'unreachable', detail: 'ENOTFOUND' }), { code: 'unreachable', detail: 'ENOTFOUND' });
+  // And fabricated DNS-lookalike tokens stay refused.
+  assert.deepEqual(F.fault({ code: 'unreachable', detail: 'ENOTFOUNDX' }), { code: 'unreachable', detail: null });
+});

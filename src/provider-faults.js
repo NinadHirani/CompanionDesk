@@ -40,8 +40,13 @@
   // real libuv/Node system-error names are ever carried now; anything else
   // still classifies as unreachable but drops its detail. The grammar stays
   // as the second layer inside fault().
+  // ENOTFOUND and EAI_AGAIN (26 Nov 2026): the getaddrinfo/DNS failure codes Node
+  // itself reports on err.code for an unresolvable host. They are real
+  // Node system-error names the allowlist was missing; without them a
+  // hostname-based unreachable host showed no detail while the same
+  // failure by IP showed (ECONNREFUSED).
   const KNOWN_ERRNOS = Object.freeze(new Set([
-    'E2BIG', 'EACCES', 'EADDRINUSE', 'EADDRNOTAVAIL', 'EAFNOSUPPORT', 'EAGAIN',
+    'E2BIG', 'EACCES', 'EADDRINUSE', 'EADDRNOTAVAIL', 'EAFNOSUPPORT', 'EAGAIN', 'EAI_AGAIN',
     'EALREADY', 'EBADE', 'EBADF', 'EBAFD', 'EBADFMSG', 'EBADR', 'EBADRQC',
     'EBADSLT', 'EBUSY', 'ECANCELED', 'ECHILD', 'ECONNABORTED', 'ECONNREFUSED',
     'ECONNRESET', 'EDEADLK', 'EDEADLOCK', 'EDESTADDRREQ', 'EDOM', 'EDQUOT',
@@ -51,7 +56,7 @@
     'ENETRESET', 'ENETUNREACH', 'ENFILE', 'ENOBUFS', 'ENODEV', 'ENOENT',
     'ENOEXEC', 'ENOLCK', 'ENOLINK', 'ENOMEM', 'ENOMSG', 'ENOPROTOOPT',
     'ENOSPC', 'ENOSR', 'ENOSTR', 'ENOSYS', 'ENOTBLK', 'ENOTCONN', 'ENOTDIR',
-    'ENOTEMPTY', 'ENOTRECOVERABLE', 'ENOTSOCK', 'ENOTSUP', 'ENOTTY', 'ENXIO',
+    'ENOTEMPTY', 'ENOTFOUND', 'ENOTRECOVERABLE', 'ENOTSOCK', 'ENOTSUP', 'ENOTTY', 'ENXIO',
     'EOPNOTSUPP', 'EOVERFLOW', 'EOWNERDEAD', 'EPERM', 'EPIPE', 'EPROTO',
     'EPROTONOSUPPORT', 'EPROTOTYPE', 'ERANGE', 'EREMCHG', 'EREMOTE', 'EROFS',
     'ERPCMISMATCH', 'ESHUTDOWN', 'ESOCKTNOSUPPORT', 'ESPIPE', 'ESRCH',
