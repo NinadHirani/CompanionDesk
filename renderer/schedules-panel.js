@@ -97,11 +97,11 @@
         if (form.dataset.editing) {
           const res = await a.schedules_update({ id: form.dataset.editing, title: t, dueAt: ms });
           if (res && res.ok) { stopEditing(); msg.textContent = 'Saved.'; refresh(); }
-          else msg.textContent = 'Refused: ' + ((res && res.reason) || 'unknown');
+          else msg.textContent = res && res.reason ? window.friendlyError(res.reason) : 'That did not go through. Try again.';
         } else {
           const res = await a.schedules_create({ title: t, scope: scope.value, dueAt: ms });
           if (res && res.ok) { title.value = ''; when.value = ''; msg.textContent = 'Added.'; refresh(); }
-          else msg.textContent = 'Refused: ' + ((res && res.reason) || 'unknown');
+          else msg.textContent = res && res.reason ? window.friendlyError(res.reason) : 'That did not go through. Try again.';
         }
       } catch (e) { /* stays quiet */ }
     });

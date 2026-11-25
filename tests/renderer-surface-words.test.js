@@ -33,7 +33,29 @@ test('refusal codes from the newly landed surfaces have friendly wording', () =>
   for (const [code, re] of Object.entries(cases)) {
     assert.match(fe(code), re, `${code} maps to its own wording`);
   }
+  // agent-scheduler refusals shown in the schedules panel
+  const sched = {
+    title_invalid: /120 characters or fewer/,
+    scope_invalid: /valid scope/,
+    due_at_invalid: /Pick a date and time/,
+    due_at_past: /already past/,
+    book_full: /book is full/,
+    notes_invalid: /500 characters/,
+    schedule_unknown: /no longer exists/,
+    schedule_cancelled: /already cancelled/,
+    already_fired: /already ran/,
+    nothing_to_update: /Nothing to change/,
+  };
+  for (const [code, re] of Object.entries(sched)) {
+    assert.match(fe(code), re, `${code} maps to its own wording`);
+  }
   // the generic fallback stays the fallback for genuinely unknown codes
   assert.match(fe('no_such_code_xyz'), /Something went wrong/);
   delete global.window;
+});
+
+test('the schedules panel shows friendly refusals, not raw codes', () => {
+  const src = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'schedules-panel.js'), 'utf8');
+  assert.doesNotMatch(src, /'Refused: '/, 'no raw Refused: prefix remains');
+  assert.match(src, /window\.friendlyError\(res\.reason\)/, 'refusals route through friendlyError');
 });
