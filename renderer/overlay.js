@@ -23,7 +23,10 @@
     enabled: () => outputEnabled,
     onSettled: (st) => {
       readBtn.textContent = 'Read aloud';
-      if (st.phase === 'failed') hint.textContent = window.friendlyError(st.failure);
+      if (st.phase === 'failed') { hint.textContent = window.friendlyError(st.failure); return; }
+      // A reading that finishes on its own must not leave the reading
+      // line up; only a live ask keeps its own hint here.
+      if (!busy) hint.textContent = 'Enter to ask again. Esc to close.';
     },
   });
   let busy = false;

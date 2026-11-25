@@ -496,6 +496,14 @@ test('an empty transcription reports in place instead of stranding the hint', ()
   assert.ok(errs.includes('transcribe_empty:'), 'the empty code carries wording');
 });
 
+test('a reading that finishes on its own resets the hint like a manual stop', () => {
+  const ov = read('renderer/overlay.js');
+  const settleAt = ov.indexOf('onSettled: (st) =>');
+  const chunk = ov.slice(settleAt, settleAt + 520);
+  assert.ok(chunk.includes("st.phase === 'failed'"), 'a failed reading reports its error');
+  assert.ok(chunk.includes("if (!busy) hint.textContent = 'Enter to ask again. Esc to close.'"), 'a finished reading resets the hint unless an ask is live');
+});
+
 test('an overlay rejection cannot strand the ask, the transcription, or the mic button', () => {
   const ov = read('renderer/overlay.js');
   const run = ov.indexOf('async function runAsk');
