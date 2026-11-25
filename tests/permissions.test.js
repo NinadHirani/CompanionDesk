@@ -41,3 +41,21 @@ test('permission checks follow the same rules', () => {
   assert.equal(checkAllowed({ permission: 'media', mediaType: 'unknown', url: OVERLAY }), false);
   assert.equal(checkAllowed({ permission: 'media', mediaType: 'audio', url: DASH }), false);
 });
+
+// REGRESSION (26 Nov 2026): isOverlayUrl accepted a file: URL with a
+// non-empty authority (file://host/renderer/overlay.html). The app's own
+// overlay loads from file:// with an empty host, and the module's contract
+// is that only the overlay page may use the microphone; a file URL carrying
+// a foreign host is a different document (on Windows a file://host/path can
+// resolve to a network share), so it must never pass this gate.
+test('a file URL with a foreign host is not the overlay', () => {
+  assert.equal(isOverlayUrl('file://host/renderer/overlay.html'), false);
+  assert.equal(isOverlayUrl('file://evil.example.com/renderer/overlay.html'), false);
+  // localhost is treated as local by the URL parser and stays allowed;
+  // the empty-host bundled path and its query-string variant stay allowed.
+  assert.equal(isOverlayUrl('file://localhost/renderer/overlay.html'), true);
+  assert.equal(isOverlayUrl('file:///app/renderer/overlay.html'), true);
+  assert.equal(isOverlayUrl('file:///app/renderer/overlay.html?x=1'), true);
+  // And the request path inherits the same refusal.
+  assert.equal(requestAllowed({ permission: 'media', mediaTypes: ['audio'], url: 'file://evil.example.com/renderer/overlay.html' }), false);
+});
