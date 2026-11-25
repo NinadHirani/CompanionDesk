@@ -57,6 +57,18 @@
   // instead of a modal, so the date and what is due stay in view. Only
   // hand-added rows get the button: a syllabus owns the rest, and the database
   // refuses the edit either way.
+  // After a row editor closes, the list re-renders and the browser drops
+  // focus to the page. Put it back on the row the user was working in; when
+  // that row no longer exists (a successful removal, or the edit filtered the
+  // row out), land on the first control of the same list instead.
+  function refocusRow(id, listId) {
+    const list = document.getElementById(listId);
+    if (!list) return;
+    const li = Array.from(list.children).find((n) => n.dataset && n.dataset.id === String(id));
+    const btn = (li && li.querySelector('button')) || list.querySelector('li button');
+    if (btn) btn.focus();
+  }
+
   function editRow(li, item) {
     const form = el('div', null, 'edit-form');
     const title = document.createElement('input');
@@ -85,9 +97,10 @@
         return;
       }
       await refresh();
+      refocusRow(item.id, 'due-list');
     });
     const cancel = el('button', 'Cancel');
-    cancel.addEventListener('click', () => refresh());
+    cancel.addEventListener('click', async () => { await refresh(); refocusRow(item.id, 'due-list'); });
     actions.append(save, cancel);
     form.append(title, date, examLabel, actions, msg);
     li.replaceChildren(form);
@@ -118,6 +131,7 @@
 
   function itemRow(item) {
     const li = document.createElement('li');
+    li.dataset.id = item.id;
     const when = el('div', null, 'when');
     when.appendChild(el('b', fmtDay(item.due_date)));
     when.appendChild(el('span', relDays(item.daysUntil)));
@@ -251,9 +265,10 @@
       const res = await api.course_rename({ id: c.id, name: name.value, code: code.value, term: term.value });
       if (!res.ok) { msg.textContent = UI.friendlyError(res.error); msg.className = 'hint error'; return; }
       await refresh();
+      refocusRow(c.id, 'course-list');
     });
     const cancel = el('button', 'Cancel');
-    cancel.addEventListener('click', () => refresh());
+    cancel.addEventListener('click', async () => { await refresh(); refocusRow(c.id, 'course-list'); });
     actions.append(save, cancel);
     form.append(actions, msg);
     li.replaceChildren(form);
@@ -271,9 +286,10 @@
       const res = await api.course_remove({ id: c.id });
       if (!res.ok) { msg.textContent = UI.friendlyError(res.error); msg.className = 'hint error'; return; }
       await refresh();
+      refocusRow(c.id, 'course-list');
     });
     const no = el('button', 'Cancel');
-    no.addEventListener('click', () => refresh());
+    no.addEventListener('click', async () => { await refresh(); refocusRow(c.id, 'course-list'); });
     actions.append(yes, no);
     box.append(actions, msg);
     li.replaceChildren(box);
@@ -285,6 +301,7 @@
     if (!courses.length) ul.appendChild(el('li', 'None yet.', 'empty'));
     for (const c of courses) {
       const li = el('li', null, 'course-row');
+      li.dataset.id = c.id;
       const what = el('div', null, 'what');
       what.appendChild(el('b', `${c.name}${c.code ? ' (' + c.code + ')' : ''}${c.term ? ', ' + c.term : ''}`));
       li.appendChild(what);

@@ -177,6 +177,22 @@ test('the chat log is a live region: new messages are announced', () => {
   assert.ok(web.includes('<h2 id="ob-prompt" aria-live="polite">'), 'the web onboarding question announces');
 });
 
+test('row editors return focus to the row after the list re-renders', () => {
+  const src = read('renderer/app.js');
+  assert.ok(src.includes('function refocusRow('), 'a refocusRow helper exists');
+  assert.ok(src.includes('li.dataset.id = item.id;'), 'due rows carry their item id');
+  assert.ok(src.includes('li.dataset.id = c.id;'), 'course rows carry their course id');
+  // deadline editor: save and cancel both land back on the row
+  assert.ok(src.includes("await refresh();\n      refocusRow(item.id, 'due-list');"), 'deadline save refocuses');
+  assert.ok(src.includes("cancel.addEventListener('click', async () => { await refresh(); refocusRow(item.id, 'due-list'); });"), 'deadline cancel refocuses');
+  // course editor and its remove confirm
+  assert.ok(src.includes("await refresh();\n      refocusRow(c.id, 'course-list');"), 'course save refocuses');
+  assert.ok(src.includes("cancel.addEventListener('click', async () => { await refresh(); refocusRow(c.id, 'course-list'); });"), 'course cancel refocuses');
+  assert.ok(src.includes("no.addEventListener('click', async () => { await refresh(); refocusRow(c.id, 'course-list'); });"), 'remove-cancel refocuses');
+  const used = src.split('refocusRow(').length - 1;
+  assert.ok(used >= 6, 'refocusRow is wired after every editor close, got ' + used);
+});
+
 test('the AI status chip is a real button, keyboard-reachable', () => {
   for (const copy of ['renderer/index.html', 'web/index.html']) {
     const html = read(copy);
