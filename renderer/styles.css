@@ -254,6 +254,12 @@ details summary { cursor: pointer; margin: 6px 0; }
 .meta.inline { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; }
 .meta.inline select { max-width: 12rem; }
 
+/* The conversation bar is a compact inline row at every width; on small
+   screens the label moves to its own line (below). */
+#ask-conv-bar { display: flex; flex-direction: row; flex-wrap: wrap; gap: 6px; align-items: center; }
+#ask-conv-bar select { flex: 1 1 12rem; }
+#ask-conv-bar button { flex: 0 0 auto; }
+
 /* Companion-first on small screens: the tab row scrolls instead of wrapping,
    and the chat bubbles use the full width. */
 @media (max-width: 640px) {
@@ -263,8 +269,5 @@ details summary { cursor: pointer; margin: 6px 0; }
   body { font-size: 15px; }
   .layout, .narrow { padding: 16px 12px 32px; }
   .qa .q, .qa .answer { max-width: 100%; }
-  #ask-conv-bar { display: flex; flex-direction: row; flex-wrap: wrap; gap: 6px; align-items: center; }
   #ask-conv-bar label { flex-basis: 100%; }
-  #ask-conv-bar select { flex: 1 1 12rem; }
-  #ask-conv-bar button { flex: 0 0 auto; }
 }
