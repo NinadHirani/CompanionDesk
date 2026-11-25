@@ -15,6 +15,7 @@
   let restoredOnBoot = false;
   const renameBtn = document.getElementById('ask-rename');
   const deleteBtn = document.getElementById('ask-delete');
+  const newChatBtn = document.getElementById('ask-newchat');
   let currentId = null;
   const titles = new Map();
 
@@ -70,7 +71,7 @@
   async function loadSelected() {
     currentId = convSel.value ? Number(convSel.value) : null;
     log.innerHTML = '';
-    if (!currentId) return;
+    if (!currentId) { updateSub(null); return; }
     const res = await api.chat_messages({ id: currentId });
     if (!res.ok) { currentId = null; convSel.value = ''; updateSub(null); return; }
     updateSub(titles.get(String(currentId)) || `Chat ${currentId}`);
@@ -233,6 +234,13 @@
   });
 
   convSel.addEventListener('change', loadSelected);
+  // A visible fresh-start affordance: it walks the same path as picking
+  // the New chat option in the picker, so both stay one behavior.
+  newChatBtn.addEventListener('click', () => {
+    convSel.value = '';
+    convSel.dispatchEvent(new Event('change'));
+    input.focus();
+  });
   btn.addEventListener('click', submit);
   // Enter sends, like a chat; Shift+Enter makes a new line.
   input.addEventListener('keydown', (e) => {
