@@ -294,7 +294,15 @@
     // never fire this, and the whole answer renders as before.
     let answerEl = null;
     const stopTokens = (typeof api.on === 'function') ? api.on('ai:token', (t) => {
-      if (!t || t.request_id !== requestId || !pending.isConnected) return;
+      if (!t || t.request_id !== requestId) return;
+      // After the first token the stream lives in answerEl, not the
+      // pending row: that row is removed on the very first token, so a
+      // pending.isConnected guard here would drop every later piece and
+      // freeze the stream at one token. The connected check follows
+      // whichever element currently holds the stream, and a mid-ask
+      // switch still silences a detached answer.
+      const anchor = answerEl || pending;
+      if (!anchor.isConnected) return;
       if (!answerEl) { pending.remove(); answerEl = el('p', '', 'answer'); entry.appendChild(answerEl); announce(companionName() + "'s answer is arriving"); }
       answerEl.textContent += String(t.piece || '');
       scrollToLatest();

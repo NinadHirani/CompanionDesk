@@ -100,9 +100,18 @@ test('the ask streams model tokens and keeps the final answer authoritative', ()
   assert.ok(s.includes("typeof api.on === 'function'"), 'streaming subscribes only where a push channel exists');
   assert.ok(s.includes("api.on('ai:token'"), 'tokens arrive on the ai:token push channel');
   assert.ok(s.includes('t.request_id !== requestId'), 'a window only renders its own ask tokens');
-  assert.ok(s.includes('!pending.isConnected'), 'tokens stop rendering once the ask row is gone');
+  assert.ok(s.includes('anchor.isConnected'), 'tokens stop rendering once the live element is gone (ask row, then answer element)');
   assert.ok(s.includes('answerEl.textContent = res.answer'), 'the final result replaces the streamed text');
   assert.ok(s.includes('if (stopTokens) stopTokens()'), 'the subscription is released when the ask ends');
+});
+
+test('streamed tokens keep landing after the first one replaces the pending row', () => {
+  const s = read('renderer/ask.js');
+  const start = s.indexOf("api.on('ai:token'");
+  const token = s.slice(start, s.indexOf('scrollToLatest', start));
+  assert.ok(token.includes('const anchor = answerEl || pending;'), 'the connected check follows the live element, not the removed pending row');
+  assert.ok(token.includes('if (!anchor.isConnected) return;'), 'a detached stream drops tokens');
+  assert.ok(!token.includes('!pending.isConnected'), 'the removed pending row no longer guards later tokens');
 });
 
 test('ai:token is allowlisted on both sides of the IPC boundary and tagged per request', () => {
