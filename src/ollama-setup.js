@@ -130,6 +130,13 @@
     const reader = res.body.getReader();
     const dec = new TextDecoder();
     let buf = '';
+    const handleLine = (line) => {
+      if (!line) return;
+      let obj;
+      try { obj = JSON.parse(line); } catch { return; }
+      if (obj.error) throw new Error(String(obj.error));
+      if (onProgress) onProgress(parsePullLine(obj));
+    };
     for (;;) {
       const { done, value } = await reader.read();
       if (done) break;
@@ -138,13 +145,13 @@
       while ((idx = buf.indexOf('\n')) >= 0) {
         const line = buf.slice(0, idx).trim();
         buf = buf.slice(idx + 1);
-        if (!line) continue;
-        let obj;
-        try { obj = JSON.parse(line); } catch { continue; }
-        if (obj.error) throw new Error(String(obj.error));
-        if (onProgress) onProgress(parsePullLine(obj));
+        handleLine(line);
       }
     }
+    // The stream's final line may lack a trailing newline; dropping it
+    // would hide a terminal error or the last progress tick.
+    buf += dec.decode();
+    handleLine(buf.trim());
     return { ok: true, model };
   }
 

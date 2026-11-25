@@ -164,3 +164,46 @@ test('safety: no process execution anywhere in the module', () => {
     assert.ok(!src.includes(banned), `module must not contain ${banned}`);
   }
 });
+
+test('REGRESSION: the pull stream tail is parsed even without a trailing newline', async () => {
+  const enc = new TextEncoder();
+  // A terminal error line that lacks the trailing newline must still fail
+  // the pull, not be silently dropped and reported as ok.
+  await assert.rejects(
+    OSU.pullModel({
+      ollamaUrl: 'http://127.0.0.1:11434',
+      model: 'llama3.2:latest',
+      fetchImpl: async () => ({
+        ok: true,
+        body: new ReadableStream({
+          start(c) {
+            c.enqueue(enc.encode(JSON.stringify({ status: 'downloading', completed: 100, total: 1000 }) + '\n'));
+            c.enqueue(enc.encode(JSON.stringify({ error: 'pull failed at the end' })));
+            c.close();
+          },
+        }),
+      }),
+    }),
+    /pull failed at the end/
+  );
+
+  // And a final progress line without the newline still reports its percent.
+  const seen = [];
+  const res = await OSU.pullModel({
+    ollamaUrl: 'http://127.0.0.1:11434',
+    model: 'llama3.2:latest',
+    onProgress: (p) => seen.push(p.pct),
+    fetchImpl: async () => ({
+      ok: true,
+      body: new ReadableStream({
+        start(c) {
+          c.enqueue(enc.encode(JSON.stringify({ status: 'downloading', completed: 250, total: 1000 }) + '\n'));
+          c.enqueue(enc.encode(JSON.stringify({ status: 'success', completed: 1000, total: 1000 })));
+          c.close();
+        },
+      }),
+    }),
+  });
+  assert.equal(res.ok, true);
+  assert.deepEqual(seen, [25, 100]);
+});
