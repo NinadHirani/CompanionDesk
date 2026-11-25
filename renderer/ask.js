@@ -39,6 +39,15 @@
   // hint's own text node (the Cancel button beside it is untouched) and
   // clears itself the moment the hint leaves the page (answer, error,
   // cancel, or first streamed token), so no timer survives the turn.
+  // A user-initiated cancel is not a failure: the abort surfaces as an
+  // AbortError from the desktop bridge or a 'canceled' result from the
+  // web bridge. The honest response is a neutral note, not an error card.
+  function isAskCancel(failure) {
+    if (!failure) return false;
+    if (failure.name === 'AbortError' || failure.code === 'ABORT_ERR') return true;
+    return /cancel|abort/i.test(String(failure.message || failure.error || failure));
+  }
+
   function startThinkingClock(textNode) {
     const started = Date.now();
     const timer = setInterval(() => {
@@ -234,7 +243,8 @@
       // retry, and the send button unlocks again.
       if (stopTokens) stopTokens();
       pending.remove();
-      entry.appendChild(el('p', UI.friendlyError('ask_failed'), 'error'));
+      const cancelled = isAskCancel(err);
+      entry.appendChild(el('p', cancelled ? 'Ask cancelled.' : UI.friendlyError('ask_failed'), cancelled ? 'hint' : 'error'));
       if (!input.value.trim()) input.value = question;
       btn.disabled = false;
       // The same rule as the declined ask: a thread created for a crashed
@@ -356,7 +366,8 @@
           // Same rule on the consented cloud path: the waiting hint and
           // its clock leave, and the failure is reported in place.
           waiting.remove();
-          entry.appendChild(el('p', UI.friendlyError('ask_failed'), 'error'));
+          const cancelled = isAskCancel(err);
+          entry.appendChild(el('p', cancelled ? 'Ask cancelled.' : UI.friendlyError('ask_failed'), cancelled ? 'hint' : 'error'));
           scrollToLatest(true);
           await cleanupEmptyAsk();
           return;
@@ -374,7 +385,8 @@
           entry.appendChild(el('p', UI.friendlyError(res2.local_error || res2.error), 'error'));
           await cleanupEmptyAsk();
         } else {
-          entry.appendChild(el('p', UI.friendlyError(res2.error), 'error'));
+          const cancelled = isAskCancel(res2.error);
+          entry.appendChild(el('p', cancelled ? 'Ask cancelled.' : UI.friendlyError(res2.error), cancelled ? 'hint' : 'error'));
           await cleanupEmptyAsk();
         }
       });
@@ -396,7 +408,9 @@
         }
       });
     } else {
-      entry.appendChild(el('p', UI.friendlyError(res.error), 'error'));
+      const cancelled = isAskCancel(res.error);
+      entry.appendChild(el('p', cancelled ? 'Ask cancelled.' : UI.friendlyError(res.error), cancelled ? 'hint' : 'error'));
+      if (cancelled && !input.value.trim()) input.value = question;
       btn.disabled = false;
       // The same rule as the declined ask: a thread created for a failed
       // ask stays empty (nothing was saved), so it goes away instead of

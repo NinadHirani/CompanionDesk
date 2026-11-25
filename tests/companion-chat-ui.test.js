@@ -259,10 +259,10 @@ test('the ask Enter path respects the in-flight guard, one ask at a time', () =>
 
 test('a failed fresh ask cleans up its empty thread instead of littering the list', () => {
   const s = read('renderer/ask.js');
-  const plain = s.slice(s.indexOf("UI.friendlyError(res.error), 'error'"));
+  const plain = s.slice(s.indexOf("const cancelled = isAskCancel(res.error);"));
   assert.ok(plain.includes('msgs.messages.length === 0'), 'the plain failure path removes only a thread with no messages');
   assert.ok(plain.includes('log.appendChild(entry)'), 'the error card stays on screen after the cleanup');
-  const caught = s.slice(s.indexOf("UI.friendlyError('ask_failed'), 'error'"));
+  const caught = s.slice(s.indexOf("cancelled ? 'Ask cancelled.' : UI.friendlyError('ask_failed')"));
   assert.ok(caught.includes('msgs.messages.length === 0'), 'the transport-crash path follows the same rule');
 });
 
@@ -342,4 +342,13 @@ test('a failed ask cleans the picker even when the user switched away', () => {
   assert.equal((s.match(/if \(del\.ok\) \{/g) || []).length, 3, 'both m21 sites and the consented helper refresh unconditionally after a delete');
   assert.equal((s.match(/const wasCurrent = currentId === emptyId;/g) || []).length, 3, 'both cleanup sites and the consented helper branch on the selection');
   assert.equal((s.match(/await refreshList\(currentId\);/g) || []).length >= 2, true, 'the refresh keeps the user where they are');
+});
+
+test('a cancelled ask reads as cancelled, not as a failure', () => {
+  const s = read('renderer/ask.js');
+  assert.ok(s.includes('function isAskCancel(failure)'), 'a cancel detector exists');
+  assert.equal((s.match(/'Ask cancelled\.'/g) || []).length, 4, 'every ask-completion site shows the neutral note on a cancel');
+  assert.equal((s.match(/cancelled \? 'hint' : 'error'/g) || []).length, 4, 'a cancel is a hint, never styled as an error');
+  assert.ok(s.includes("UI.friendlyError('ask_failed')"), 'real crashes keep their wording');
+  assert.ok(s.includes('if (cancelled && !input.value.trim()) input.value = question;'), 'a cancelled ask hands the question back');
 });
