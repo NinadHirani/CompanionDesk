@@ -48,7 +48,11 @@ function normalize(input) {
     mods.add(m);
   }
   if ([...mods].every((m) => m === 'Shift')) return { ok: false, error: 'needs_modifier' };
-  if (mods.size === 1 && mods.has('CommandOrControl') && RESERVED_WITH_CMD.has(key)) return { ok: false, error: 'reserved_hotkey' };
+  // All three cmd-like single modifiers, not only the CommandOrControl
+  // alias: Control+C is copy on Windows/Linux and Command+C on macOS, so
+  // any of them alone over an editing key hijacks it system-wide.
+  const cmdLike = mods.size === 1 && (mods.has('CommandOrControl') || mods.has('Command') || mods.has('Control'));
+  if (cmdLike && RESERVED_WITH_CMD.has(key)) return { ok: false, error: 'reserved_hotkey' };
   if (mods.size === 1 && mods.has('Alt') && key === 'F4') return { ok: false, error: 'reserved_hotkey' };
 
   const ordered = MOD_ORDER.filter((m) => mods.has(m));

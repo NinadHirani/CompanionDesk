@@ -52,3 +52,17 @@ test('overlay placement: centered near the top, always inside the work area', ()
   const small = overlayBounds({ x: 0, y: 0, width: 400, height: 300 });
   assert.ok(small.x >= 0 && small.y >= 0 && small.x + small.width <= 400 && small.y + small.height <= 300, JSON.stringify(small));
 });
+
+test('REGRESSION: plain Control or Command with an editing key is refused too, not just CommandOrControl', () => {
+  // Control+C is copy on Windows/Linux and Command+C on macOS: a global
+  // shortcut with either single modifier hijacks editing in every app, so
+  // the reserved rule must cover all three cmd-like modifiers, not only
+  // the CommandOrControl alias.
+  for (const s of ['Control+C', 'ctrl+v', 'Control+X', 'Control+A', 'Command+Q', 'Command+W', 'Control+Z', 'Control+S', 'Control+Y']) {
+    assert.equal(normalize(s).error, 'reserved_hotkey', s);
+  }
+  // Non-editing keys and two-modifier combos stay allowed.
+  assert.equal(normalize('Control+K').ok, true);
+  assert.equal(normalize('Command+Shift+C').ok, true);
+  assert.equal(normalize('Control+Shift+Space').ok, true);
+});
