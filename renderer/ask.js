@@ -10,6 +10,9 @@
   const btn = document.getElementById('ask-btn');
   const log = document.getElementById('ask-log');
   const convSel = document.getElementById('ask-conv');
+  // Set once the first show of the view has finished, so the boot-time
+  // reopen below runs exactly once.
+  let restoredOnBoot = false;
   const renameBtn = document.getElementById('ask-rename');
   const deleteBtn = document.getElementById('ask-delete');
   let currentId = null;
@@ -241,5 +244,15 @@
     input.focus();
     UI.about.refreshProposals();
     await refreshList();
+    // Companion-first: on the boot landing, reopen the most recent thread so
+    // a returning user lands back inside their conversation. The list is
+    // ordered most-recent first, and only this first show auto-selects:
+    // afterwards the picker's explicit choice, New chat included, wins.
+    const firstShow = !restoredOnBoot;
+    restoredOnBoot = true;
+    if (firstShow && !currentId && convSel.options.length > 1) {
+      convSel.value = convSel.options[1].value;
+      await loadSelected();
+    }
   });
 })();
