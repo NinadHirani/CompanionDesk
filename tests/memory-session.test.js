@@ -280,3 +280,38 @@ test('a failed file write leaves no phantom in the session view', () => {
   assert.deepEqual(s.add('Facts', 'Second fact'), { ok: true, text: 'Second fact' });
   assert.deepEqual(s.list().map((b) => b.text), ['First fact', 'Second fact']);
 });
+
+test('forget of a marked on-disk bullet clears the sidecar mark: a re-add is not silently re-marked', () => {
+  sessionMod._resetForTests();
+  const file = tmpFile();
+  seed(file, { Facts: ['likes filter coffee'] });
+  const s = sessionMod.get(file);
+  const id = s.items().find((b) => b.text === 'likes filter coffee').id;
+  assert.equal(s.markSensitive(id, true).ok, true);
+  assert.equal(s.forget('Facts', 'likes filter coffee').ok, true);
+  assert.equal(s.add('Facts', 'likes filter coffee').ok, true);
+  const again = s.items().find((b) => b.text === 'likes filter coffee');
+  assert.ok(again, 're-added bullet exists');
+  assert.ok(!again.sensitive, 'the re-added bullet must not inherit the forgotten mark');
+  assert.ok(s.search('filter coffee', { k: 5 }).length >= 1,
+    'the re-added bullet is retrievable, not hidden by a stale mark');
+});
+
+test('unmarking a session-only sensitive entry is refused and stays marked across rebuilds', () => {
+  sessionMod._resetForTests();
+  const file = tmpFile();
+  seed(file, {});
+  const s = sessionMod.get(file);
+  const r = s.add('Facts', 'private session note', { sensitive: true });
+  assert.equal(r.ok, true);
+  assert.equal(r.persisted, false);
+  const id = s.items().find((b) => b.text === 'private session note').id;
+  const u = s.markSensitive(id, false);
+  assert.equal(u.ok, false, 'a session-only entry is sensitive by construction');
+  assert.equal(u.error, 'session_only_entry');
+  fs.utimesSync(file, new Date(), new Date()); // force a rebuild via the stat check
+  const still = s.items().find((b) => b.text === 'private session note');
+  assert.ok(still && still.sensitive, 'still marked after a forced rebuild');
+  assert.ok(!fs.readFileSync(file, 'utf8').includes('private session note'),
+    'the session-only entry is never on disk');
+});

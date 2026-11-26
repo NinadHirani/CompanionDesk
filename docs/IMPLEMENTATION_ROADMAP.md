@@ -550,8 +550,10 @@ store contract now runs as the product's in-session memory view
 (`src/memory-session.js`); personal.js and screen-service.js route every
 memory operation through it, the About-me file stays canonical via
 single-bullet writes, and sync-on-demand stat freshness keeps view and
-file in step. STILL GATED: the on-disk format for sensitive marks (owner
-sub-decision) and a UI for the mark/persist interfaces. No automatic extraction,
+file in step. The on-disk format for sensitive marks is RESOLVED 26 Nov
+2026 (decision-sheet item 6): a session-only sidecar
+(`src/memory-sidecar.js`), deliberately NO on-disk format. STILL GATED: a
+UI for the mark/persist interfaces. No automatic extraction,
 no inferred-fact auto-saving, no background monitoring in this phase.
 
 ## M5 - Proactive behavior (1-2 wks)

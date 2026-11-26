@@ -129,9 +129,11 @@ real-content recall is measured, and on what threshold."
 
 ## What actually stays gated (after the 24 Nov 2026 resolution)
 
-- The ON-DISK persistence home for sensitive marks: `persistSensitive()`
-  still refuses because no format preserves the mark; designing that
-  format is the owner's remaining sub-decision.
+- The ON-DISK persistence home for sensitive marks: RESOLVED 26 Nov 2026
+  (decision-sheet item 6, commit `78a9f63`): a session-only sidecar
+  (`src/memory-sidecar.js`) holds marks and session-only sensitive
+  entries; there is deliberately NO on-disk format, and
+  `persistSensitive()` still refuses (`sensitive_storage_blocked`).
 - Any embeddings work (decision 4): revisits only through the measured
   70%/0.5 gate, and even then a model download needs separate approval.
 - The v2 store contract itself is NOW WIRED (24 Nov 2026, later the same
@@ -139,8 +141,9 @@ real-content recall is measured, and on what threshold."
   in front of the canonical About-me file, which keeps its single-bullet
   write semantics and is never rewritten whole. The sensitive gate is
   unchanged: marks stay session-only, `persistSensitive()` refuses, no
-  product surface passes sensitive entries, and the on-disk format that
-  would let a marked entry persist remains the owner's open sub-decision.
+  product surface passes sensitive entries, and the 26 Nov 2026 decision
+  resolves this deliberately: no on-disk format exists; sensitive state
+  lives only in the session-only sidecar.
 
 Gate 1 device validation is unaffected: the desktop runbook matrix stands
 in the roadmap; no device validation is claimed here.

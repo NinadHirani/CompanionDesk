@@ -152,6 +152,12 @@ function createSession(file) {
       const res = memory.removeBullet(memory.readText(file), section, value);
       if (!res.removed) { sync(); return { ok: false, error: 'not_found' }; }
       memory.writeText(file, res.text);
+      // The mark is keyed by section + normalized text, not by id: without
+      // this, an orphaned mark would silently re-mark a later re-add of
+      // the same text (sidecar.isMarked matches it on the next rebuild)
+      // and sit in the bounded mark set. Only after the file write: if the
+      // write failed the bullet still exists and its mark must stay.
+      sidecar.unmark(section, hit.text);
       sync();
       return { ok: true };
     },
@@ -160,9 +166,22 @@ function createSession(file) {
     // future UI can address it; the mark is a classification, not consent.
     markSensitive(id, value = true) {
       const view = sync();
+      const b = view.list().find((x) => x.id === id);
+      // A session-only sidecar entry is sensitive BY CONSTRUCTION: it
+      // exists only because it was added as sensitive, and an unmarked
+      // session-only entry has no home (persisting it would silently
+      // downgrade sensitive content to plain file text). Fail closed with
+      // an explicit error instead of a mark the next rebuild would
+      // silently restore.
+      if (!value && b && sidecar.has(b.section, b.text)) {
+        return {
+          ok: false,
+          error: 'session_only_entry',
+          detail: 'a session-only sensitive entry stays sensitive; forget it instead',
+        };
+      }
       const r = view.markSensitive(id, value);
       if (!r.ok) return r;
-      const b = view.list().find((x) => x.id === id);
       if (b) {
         if (value) {
           const mr = sidecar.mark(b.section, b.text);
