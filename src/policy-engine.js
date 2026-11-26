@@ -33,8 +33,15 @@
   const registryModule = (typeof require === 'function') ? require('./tool-registry') : root.CompanionToolRegistry;
   const { isCriticalName } = registryModule;
 
-  function createPolicyEngine({ registry, approvals, emergencyStop, clock } = {}) {
+  function createPolicyEngine({ registry, approvals, emergencyStop, audit, clock } = {}) {
     if (!registry) throw new TypeError('policy engine needs a registry');
+    // Optional durable audit sink (Stage B, 26 Nov 2026): when present,
+    // every grant, revocation and hydrate skip lands in the durable
+    // audit BEFORE the state moves (audit-first, like every other Gate 2
+    // transition). A refused or throwing append refuses the transition:
+    // no grant without its entry. Omitted (as in every pre-Stage-B test
+    // and the current wiring, where grants have no production caller)
+    // the engine behaves exactly as before.
     const now = clock || (() => Date.now());
     const grants = new Map(); // exact tool name -> grant record
 
@@ -59,6 +66,18 @@
         if (typeof ttlMs !== 'number' || !Number.isFinite(ttlMs) || ttlMs <= 0) return { ok: false, reason: 'grant_expiry_invalid' };
         exp = now() + ttlMs;
       }
+      if (audit) {
+        // Audit-first: the entry must be accepted BEFORE the grant exists.
+        // Detail carries the tool name and expiry only, never arguments.
+        const detail = exp === null ? { tool } : { tool, expires_at: exp };
+        let entry = null;
+        try {
+          entry = audit.append({ actor: 'user', action: 'grant.granted', decision: 'allowed', detail });
+        } catch (err) {
+          return { ok: false, reason: 'grant_audit_failed' };
+        }
+        if (!entry || entry.ok !== true) return { ok: false, reason: 'grant_audit_failed' };
+      }
       const record = { tool, capability: def.capability, grantedAt: now(), expiresAt: exp, revoked: false };
       grants.set(tool, record);
       return { ok: true, grant: { ...record } };
@@ -66,6 +85,15 @@
 
     function revoke(tool) {
       if (typeof tool !== 'string' || !grants.has(tool)) return { ok: false, reason: 'no_grant' };
+      if (audit) {
+        let entry = null;
+        try {
+          entry = audit.append({ actor: 'user', action: 'grant.revoked', decision: 'allowed', detail: { tool } });
+        } catch (err) {
+          return { ok: false, reason: 'grant_audit_failed' };
+        }
+        if (!entry || entry.ok !== true) return { ok: false, reason: 'grant_audit_failed' };
+      }
       grants.get(tool).revoked = true;
       return { ok: true };
     }
@@ -119,17 +147,31 @@
       // (reported in skipped) rather than silently repaired.
       hydrateGrants(records) {
         const list = Array.isArray(records) ? records : [];
-        let restored = 0;
+        // Two passes keep audit-first ordering: every row is validated
+        // BEFORE anything is applied, the skip entry (one bounded system
+        // entry, never one per row) is accepted, and only then does any
+        // grant come back. A refused or throwing append refuses the whole
+        // hydrate and restores nothing.
+        const valid = [];
         let skipped = 0;
         for (const g of list) {
           if (!g || typeof g.tool !== 'string') { skipped += 1; continue; }
           const def = registry.get(g.tool);
           if (!def || g.capability !== def.capability) { skipped += 1; continue; }
           if (!Number.isFinite(g.grantedAt) || !(g.expiresAt === null || Number.isFinite(g.expiresAt)) || typeof g.revoked !== 'boolean') { skipped += 1; continue; }
-          grants.set(g.tool, { tool: g.tool, capability: g.capability, grantedAt: g.grantedAt, expiresAt: g.expiresAt, revoked: g.revoked });
-          restored += 1;
+          valid.push({ tool: g.tool, capability: g.capability, grantedAt: g.grantedAt, expiresAt: g.expiresAt, revoked: g.revoked });
         }
-        return { ok: true, restored, skipped };
+        if (audit && skipped > 0) {
+          let entry = null;
+          try {
+            entry = audit.append({ actor: 'system', action: 'grant.hydrate_skipped', detail: { skipped } });
+          } catch (err) {
+            return { ok: false, reason: 'grant_hydrate_audit_failed' };
+          }
+          if (!entry || entry.ok !== true) return { ok: false, reason: 'grant_hydrate_audit_failed' };
+        }
+        for (const g of valid) grants.set(g.tool, { ...g });
+        return { ok: true, restored: valid.length, skipped };
       },
     };
   }

@@ -7,6 +7,25 @@ gated, disabled, or unmeasured; every line matches the roadmap evidence.
 
 ## [Unreleased]
 
+### 26 November 2026
+- Gate 2 run-driver Stage B: the first read-only tool, calendar_upcoming
+  (blueprint 3j.10, approved by Ninad on 26 Nov 2026). A bounded projection
+  of the local calendars the user imported, built by dependency injection
+  (the tool module requires neither src/calendar.js nor src/ics.js), with
+  uid and location dropped always, titles capped at 200 characters, rows
+  capped at 100 in the service's own order, and a 32768-byte envelope cap
+  that drops trailing rows. The step result body never reaches run state or
+  the renderer projection. Grant, revocation and hydrate-skip entries now
+  land in the audit before they take effect; a refused append refuses the
+  grant (fail closed). Nothing is registered: D-B2 option (a) keeps the
+  production registry empty, and the enable step stays a separate review.
+  Suite 1197/1197 green, selftest, pack and the web bundle green.
+- Decision sheet resolved: Ninad approved the remaining defaults on
+  26 Nov 2026 (schedule_create enable with guardrails, file-output
+  D-F1/F2/F3 root unset by default, M8 schemas-first, M4 sensitive sidecar
+  markings with session-only sensitive content, M6 OS-native TTS only) and
+  explicitly deferred M7 (capture engine) and M9 (release readiness).
+
 ### 25 November 2026
 - Gate 2 scheduling: run entry point implemented (blueprint 3j.12) as the
   single lawful consumer of the scheduling gate's audit record; nothing

@@ -1,11 +1,18 @@
 # Stage B proposal: the first read-only tool (24 Nov 2026)
 
-Status: **PROPOSAL ONLY. Nothing here is implemented, registered, granted, or
-executed.** The production registry stays empty; no tool is registered; no
-run can start; no renderer control or approval channel is added; Stage C is
-untouched. This document exists so Ninad can review the exact shape of Stage
-B before any code lands. Written per his instruction to prepare the next
-milestone without enabling anything.
+Status: **APPROVED AND IMPLEMENTED (26 Nov 2026).** Ninad approved the
+decision-sheet defaults on 26 Nov 2026, including Stage B exactly as
+proposed here. D-B1 (the calendar_upcoming tool) is implemented in
+src/agent-tool-calendar.js with tests in tests/stage-b-calendar-tool.test.js
+(15 tests, full suite 1197 green, selftest, pack and build:web green).
+D-B2 option (a): the production registry stays EMPTY and main.js registers
+nothing; the enable/registration step and the grant mechanism remain a
+separate later review. Section 5's grant.granted / grant.revoked /
+hydrate-skip audit entries are implemented in the policy engine behind an
+optional audit sink (audit-first: a refused append refuses the grant);
+production wiring of that sink arrives with the enable step. The tool
+module requires neither src/calendar.js nor src/ics.js: the service is
+dependency-injected, so the closed generator files stay untouched.
 
 ## 1. The candidate: `calendar_upcoming` (capability read_only)
 
