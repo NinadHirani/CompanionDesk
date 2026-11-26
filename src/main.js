@@ -61,6 +61,27 @@ const { createDisplayDelivery } = require('./agent-display-delivery');
 const { createRunDriver } = require('./agent-run-driver');
 const { createRunEntry } = require('./agent-run-entry');
 const { SCHEDULING_TOOL_DEFINITION } = require('./agent-tool-scheduling');
+const { FILE_ACCESS_TOOL_DEFINITION, createFileAccessTool } = require('./agent-tool-file-access');
+const fsPromises = require('fs').promises;
+// Gate 4 execution slice: the real io adapter the file-access executor runs
+// through. OS errors surface verbatim from these calls (code + message);
+// the read cap keeps a huge file from being pulled into memory whole.
+const MAX_FILE_READ_BYTES = 262144;
+const workspaceFileIo = {
+  exists: async (p) => { try { await fsPromises.stat(p); return true; } catch { return false; } },
+  readFile: async (p) => {
+    const st = await fsPromises.stat(p);
+    if (st.size > MAX_FILE_READ_BYTES) { const e = new Error('file larger than ' + MAX_FILE_READ_BYTES + ' bytes'); e.code = 'EFTOOBIG'; throw e; }
+    return fsPromises.readFile(p, 'utf8');
+  },
+  listDir: async (p) => {
+    const ents = await fsPromises.readdir(p, { withFileTypes: true });
+    return ents.slice(0, 500).map((e) => ({ name: e.name, kind: e.isDirectory() ? 'folder' : 'file' }));
+  },
+  writeFile: async (p, content) => { await fsPromises.writeFile(p, content, 'utf8'); return Buffer.byteLength(content, 'utf8'); },
+  deletePath: async (p) => { await fsPromises.unlink(p); },
+  mkdir: async (p) => { await fsPromises.mkdir(p); },
+};
 const { createReminderBook } = require('./agent-reminders');
 const { createAgentSurface } = require('./agent-surface');
 const { createWorkspaceRows } = require('./workspace-rows');
@@ -91,6 +112,7 @@ let wakeEngine = null;
 // The in-memory agent runtime (Gate 2). Constructed in init(); nothing in
 // main starts or advances a run in this slice.
 let agentRegistry = null;
+let agentFileAccess = null;
 let agentApprovals = null;
 let agentStop = null;
 let agentAudit = null;
@@ -291,6 +313,18 @@ async function init() {
       // means a fresh one-time approval is required for every call - a
       // standing grant can never authorize it.
       agentRegistry.define(SCHEDULING_TOOL_DEFINITION);
+      // Gate 4 file-access gate (approved by Ninad on 26 Nov 2026): the
+      // second registered tool, mirroring the scheduling gate's enable step.
+      // Registration alone lets no run start: requestRun still has no
+      // caller, tools execute only inside driver-driven runs, and the
+      // sensitive class means a fresh one-time approval is required for
+      // every call - a standing grant can never authorize it. Every
+      // operation runs through the policy core first; a refusal never
+      // touches the filesystem, writes to existing files and all deletes
+      // demand confirmed, and the executor surfaces OS errors verbatim
+      // (no silent destructive operations, no swallowed failures).
+      agentRegistry.define(FILE_ACCESS_TOOL_DEFINITION);
+      agentFileAccess = createFileAccessTool({ clock: () => Date.now(), io: workspaceFileIo });
       agentRegistry = stack.registry;
       agentApprovals = stack.approvals;
       agentStop = stack.emergencyStop;

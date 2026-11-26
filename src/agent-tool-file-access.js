@@ -143,12 +143,80 @@
 
   function createFileAccessTool(opts) {
     var inst = createFileAccessPolicy(opts);
+    // Execution slice (26 Nov 2026): with an io adapter the tool performs
+    // the real filesystem operation THROUGH the policy. The adapter is
+    // injected (tests use a fake; main.js wires the real fs), so the tool
+    // never reaches for the OS itself. Without one it stays policy-only
+    // and claims no execution.
+    var io = opts && opts.io ? opts.io : null;
+    var MAX_WRITE_BYTES = 65536; // same byte cap as the file-output gate
+    var IO_METHODS = { read: 'readFile', list: 'listDir', write: 'writeFile', delete: 'deletePath', mkdir: 'mkdir' };
+
+    function osError(err, action, target, attempted) {
+      // Surface the OS reason verbatim: code and message, nothing invented.
+      return {
+        ok: false, action: action, target: target,
+        performed: attempted === true,
+        reason: 'os_error',
+        code: String((err && err.code) || ''),
+        message: String((err && err.message) || String(err)),
+      };
+    }
+
+    function finish(d, args) {
+      var p;
+      if (d.action === 'write') {
+        var content = args.content;
+        if (Buffer.byteLength(content, 'utf8') > MAX_WRITE_BYTES) {
+          return { ok: false, action: 'write', target: d.target, performed: false, reason: 'content_too_large', maxBytes: MAX_WRITE_BYTES };
+        }
+        p = io.writeFile(d.target, content).then(
+          function (bytes) {
+            return { ok: true, action: 'write', target: d.target, performed: true, bytes: bytes === undefined ? Buffer.byteLength(content, 'utf8') : bytes };
+          },
+          function (err) { return osError(err, 'write', d.target, true); });
+        return p;
+      }
+      p = io[IO_METHODS[d.action]](d.target).then(
+        function (out) {
+          if (d.action === 'read') return { ok: true, action: 'read', target: d.target, performed: true, content: out };
+          if (d.action === 'list') return { ok: true, action: 'list', target: d.target, performed: true, entries: out };
+          return { ok: true, action: d.action, target: d.target, performed: true };
+        },
+        function (err) { return osError(err, d.action, d.target, true); });
+      return p;
+    }
+
+    function exec(args) {
+      if (!io) return decide(args); // policy-only: no execution, no performed flag
+      var hint = args && typeof args === 'object' ? args.existsHint : undefined;
+      var d = decide(args);
+      if (!d.ok) {
+        // Target visibility: before refusing a write as an overwrite with
+        // no existence hint, probe the real state once and re-decide. A
+        // genuinely new path proceeds; an existing one still demands
+        // confirmed. The probe itself never writes anything.
+        if (d.reason === 'overwrite_requires_confirmation' && hint === undefined && typeof io.exists === 'function') {
+          return io.exists(d.target).then(
+            function (really) {
+              var d2 = decide(Object.assign({}, args, { existsHint: !!really }));
+              if (d2.ok) return finish(d2, args);
+              return d2;
+            },
+            function (err) { return osError(err, 'write', d.target, true); });
+        }
+        return d;
+      }
+      return finish(d, args);
+    }
+
     return {
       definition: FILE_ACCESS_TOOL_DEFINITION,
       SANDBOX_NOTE: SANDBOX_NOTE,
-      // Policy decision only: no filesystem work happens here. The
-      // execution slice performs the real op through the policy.
-      execute: function (args) { return decide(args); },
+      // Policy first, execution second: every operation runs through
+      // decide(), a refusal never reaches the io layer, and an OS refusal
+      // surfaces verbatim instead of being swallowed.
+      execute: function (args) { return exec(args); },
       propose: inst.propose,
       roots: inst.roots,
     };

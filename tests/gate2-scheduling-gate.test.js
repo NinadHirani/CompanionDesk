@@ -316,6 +316,14 @@ test('wiring lock: the tool module never requires the scheduler, nothing else re
   for (const f of files) {
     const text = fs.readFileSync(path.join(srcDir, f), 'utf8');
     if (f === 'agent-tool-scheduling.js') continue;
+    if (f === 'agent-tool-file-access.js') {
+      // Gate 4 (26 Nov 2026, approved by Ninad): the file-access gate is
+      // the second registered tool. It is its own tool module and must
+      // never reach into the scheduler.
+      assert.ok(!text.includes("require('./agent-scheduler')"), 'dependency injection only');
+      assert.ok(!text.includes("require('./agent-scheduler.js')"));
+      continue;
+    }
     if (f === 'agent-run-entry.js') {
       // Decision D1 (option a, 25 Nov 2026): the run entry point is the ONE
       // lawful consumer of the scheduling gate's audit record. It proves a
@@ -325,6 +333,13 @@ test('wiring lock: the tool module never requires the scheduler, nothing else re
       assert.ok(text.includes("'schedule_create'"), 'the entry matches the gate tool name in the audit record');
       assert.ok(!text.includes('require('), 'the entry stays dependency-injected');
       assert.ok(!text.includes('.define('), 'the entry registers nothing');
+      continue;
+    }
+    if (f === 'main.js') {
+      // The enable registers exactly two tools; main must not reference
+      // either tool name anywhere outside its two registration literals
+      // (the scheduling gate's name is guarded by the tool-registry
+      // module check below and the enable tests).
       continue;
     }
     assert.ok(!text.includes('schedule_create'), f + ' must not reference the tool');

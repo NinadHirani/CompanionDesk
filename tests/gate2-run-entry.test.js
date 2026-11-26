@@ -197,9 +197,11 @@ test('wiring: main constructs the entry from the stack book and durable audit, a
   assert.ok(src.includes('createRunEntry({'), 'main constructs the entry');
   assert.ok(src.includes('book: stack.schedules'), 'the entry rides the stack schedule book');
   assert.ok(src.includes('audit: stack.persistence.durableAudit()'), 'the entry writes through the durable audit');
-  // Gate 2 enable step (26 Nov 2026, approved by Ninad): main registers
-  // EXACTLY ONE tool, the scheduling gate's definition, nothing else.
+  // Gate 2 enable step (26 Nov 2026, approved by Ninad), widened the same
+  // day by the Gate 4 approval: main registers EXACTLY TWO tools, nothing
+  // else. The run-entry still registers nothing itself.
   const mainDefines = src.split('.define(').length - 1;
-  assert.equal(mainDefines, 1, 'exactly one registration literal, got ' + mainDefines);
+  assert.equal(mainDefines, 2, 'exactly two registration literals, got ' + mainDefines);
   assert.ok(src.includes('agentRegistry.define(SCHEDULING_TOOL_DEFINITION)'), 'the enable registers the scheduling gate definition');
+  assert.ok(src.includes('agentRegistry.define(FILE_ACCESS_TOOL_DEFINITION)'), 'the enable registers the file-access gate definition');
 });

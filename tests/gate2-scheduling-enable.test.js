@@ -1,12 +1,14 @@
 'use strict';
 
 // Gate 2 enable step (26 Nov 2026, approved by Ninad in the decision-sheet
-// review): the production registry carries EXACTLY ONE tool, the
-// scheduling gate's schedule_create. Registration alone lets no run start:
+// review), widened the same day by the Gate 4 approval: the production
+// registry carries EXACTLY TWO tools, the scheduling gate's schedule_create
+// and the file-access gate's file_access (registration mirrors the
+// schedule_create enable step). Registration alone lets no run start:
 // requestRun still has no caller in this build (D1/D-S2 unchanged), tools
-// execute only inside driver-driven runs, and the sensitive class means a
-// fresh one-time approval is required for every call - a standing grant
-// can never authorize it. The renderer sees nothing new; delivery stays
+// execute only inside driver-driven runs, and both tools are sensitive, so
+// a fresh one-time approval is required for every call - a standing grant
+// can never authorize either. The renderer sees nothing new; delivery stays
 // opt-in (proactive_enabled default false); the 'scheduled' run kind stays
 // refused (D-S2 deferred).
 
@@ -17,6 +19,7 @@ const fs = require('node:fs');
 const { createAgentStack } = require('../src/agent-runtime.js');
 const LocalDb = require('../src/db.js');
 const { SCHEDULING_TOOL_DEFINITION, createSchedulingTool, MAX_HORIZON_MS } = require('../src/agent-tool-scheduling.js');
+const { FILE_ACCESS_TOOL_DEFINITION, createFileAccessTool } = require('../src/agent-tool-file-access.js');
 const { createRunDriver, KINDS } = require('../src/agent-run-driver.js');
 
 const NOW = 1_700_000_000_000;
@@ -28,18 +31,21 @@ async function enabledStack() {
   const stack = createAgentStack({ db, clock: () => NOW });
   const loaded = stack.persistence.load();
   assert.equal(loaded.ok, true, 'world must load clean: ' + JSON.stringify(loaded.problems));
-  // The one registration literal, exactly as main.js performs it.
+  // The two registration literals, exactly as main.js performs them.
   stack.registry.define(SCHEDULING_TOOL_DEFINITION);
+  stack.registry.define(FILE_ACCESS_TOOL_DEFINITION);
   const tool = createSchedulingTool({ book: stack.schedules, clock: () => NOW, audit: stack.durableAudit });
   return { db, stack, tool };
 }
 
-test('the enable registers exactly one tool in main and nothing else fires', () => {
+test('the enable registers exactly two tools in main and nothing else fires', () => {
   const main = fs.readFileSync('src/main.js', 'utf8');
   const defines = main.split('.define(').length - 1;
-  assert.equal(defines, 1, 'exactly one registration literal, got ' + defines);
+  assert.equal(defines, 2, 'exactly two registration literals, got ' + defines);
   assert.ok(main.includes('agentRegistry.define(SCHEDULING_TOOL_DEFINITION)'), 'it registers the scheduling gate definition');
+  assert.ok(main.includes('agentRegistry.define(FILE_ACCESS_TOOL_DEFINITION)'), 'it registers the file-access gate definition');
   assert.ok(main.includes("require('./agent-tool-scheduling')"), 'main requires the tool module');
+  assert.ok(main.includes("require('./agent-tool-file-access')"), 'main requires the file-access module');
   const strip = (t) => t.replace(/\/\/[^\n]*/g, '').replace(/\/\*[\s\S]*?\*\//g, '');
   assert.equal(strip(main).includes('requestRun('), false, 'no executable call site of requestRun in main');
   const preload = fs.readFileSync('src/preload.js', 'utf8');
@@ -48,13 +54,16 @@ test('the enable registers exactly one tool in main and nothing else fires', () 
   assert.deepEqual(KINDS, ['user'], "the driver's kind allowlist stays ['user']");
 });
 
-test('the enabled registry carries exactly one tool with the approved sensitive class', async () => {
+test('the enabled registry carries exactly two tools, both sensitive and non-critical', async () => {
   const { stack } = await enabledStack();
   const list = stack.registry.list();
-  assert.equal(list.length, 1);
+  assert.equal(list.length, 2);
   assert.equal(list[0].name, 'schedule_create');
   assert.equal(list[0].capability, 'sensitive');
   assert.equal(list[0].critical, false);
+  assert.equal(list[1].name, 'file_access');
+  assert.equal(list[1].capability, 'sensitive');
+  assert.equal(list[1].critical, false);
 });
 
 test('a standing grant can never authorize it; only a fresh one-time approval can', async () => {
@@ -130,8 +139,8 @@ test('scope and horizon refusals stay in force', async () => {
   assert.equal(tool.execute({ title: 'x', scope: 'reminder', due_at: NOW + MAX_HORIZON_MS + 1 }).reason, 'due_at_too_far');
 });
 
-test('Stage B tools stay unregistered: the enable covers only schedule_create', async () => {
+test('Stage B tools stay unregistered: the enable covers only schedule_create and file_access', async () => {
   const { stack } = await enabledStack();
   assert.equal(stack.registry.has('calendar_upcoming'), false);
-  assert.equal(stack.registry.list().length, 1);
+  assert.equal(stack.registry.list().length, 2);
 });
