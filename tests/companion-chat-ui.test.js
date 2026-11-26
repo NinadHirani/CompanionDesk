@@ -501,7 +501,7 @@ test('a reading that finishes on its own resets the hint like a manual stop', ()
   const settleAt = ov.indexOf('onSettled: (st) =>');
   const chunk = ov.slice(settleAt, settleAt + 520);
   assert.ok(chunk.includes("st.phase === 'failed'"), 'a failed reading reports its error');
-  assert.ok(chunk.includes("if (!busy) hint.textContent = 'Enter to ask again. Esc to close.'"), 'a finished reading resets the hint unless an ask is live');
+  assert.ok(chunk.includes("if (!busy && !starting && !recording) hint.textContent = 'Enter to ask again. Esc to close.'"), 'a finished reading resets the hint unless an ask or recording is live');
 });
 
 test('an overlay rejection cannot strand the ask, the transcription, or the mic button', () => {
@@ -625,7 +625,7 @@ test('every reading-aloud refusal reason carries friendly wording, including the
 test('a fast second mic click cannot open a second mic stream while the first start is pending', () => {
   const ov = read('renderer/overlay.js');
   const micAt = ov.indexOf("micBtn.addEventListener('click'");
-  const chunk = ov.slice(micAt, micAt + 1700);
+  const chunk = ov.slice(micAt, micAt + 2000);
   assert.ok(chunk.includes('if (busy || starting) return;'), 'the mic click is guarded against a start already in flight');
   assert.ok(chunk.includes('starting = true;'), 'the start attempt raises the flag before its first await');
   assert.ok(chunk.includes('finally {'), 'the flag releases on every path out of the start sequence');
@@ -662,4 +662,14 @@ test('the overlay status line is announced to screen readers', () => {
   assert.ok(/aria-live="polite"/.test(tag), 'the status line (Listening/Transcribing/Reading) is a live region');
   const answerTag = html.slice(html.lastIndexOf('<', html.indexOf('id="ov-answer"')), html.indexOf('>', html.indexOf('id="ov-answer"')) + 1);
   assert.ok(/aria-live="polite"/.test(answerTag), 'the answer region stays a live region');
+});
+
+test('opening the mic stops an in-flight reading instead of recording over it', () => {
+  const ov = read('renderer/overlay.js');
+  const click = ov.indexOf("micBtn.addEventListener('click'");
+  const open = ov.indexOf('CompanionRecorder.startRecording', click);
+  const chunk = ov.slice(click, open);
+  assert.ok(chunk.includes('if (speech.isSpeaking()) speech.stop();'), 'a playing read-aloud is stopped before the recorder opens');
+  assert.ok(chunk.includes('readBtn.hidden = true;'), 'the read button retires while the mic is live');
+  assert.ok(ov.includes('if (!busy && !starting && !recording)'), 'the settle path leaves a live start or recording its own hint');
 });

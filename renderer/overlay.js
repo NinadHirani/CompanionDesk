@@ -25,8 +25,9 @@
       readBtn.textContent = 'Read aloud';
       if (st.phase === 'failed') { hint.textContent = window.friendlyError(st.failure); return; }
       // A reading that finishes on its own must not leave the reading
-      // line up; only a live ask keeps its own hint here.
-      if (!busy) hint.textContent = 'Enter to ask again. Esc to close.';
+      // line up; only a live ask or a live recording keeps its own hint
+      // here (the mic start stops a reading, and its settle lands late).
+      if (!busy && !starting && !recording) hint.textContent = 'Enter to ask again. Esc to close.';
     },
   });
   let busy = false;
@@ -261,6 +262,12 @@
       }
       // Escape pressed while the status check ran: the mic must not open.
       if (startCancelled) return;
+      // A reading still playing when the mic opens feeds the speakers
+      // straight into the transcription; stop it and retire the read
+      // button first, the same cleanup a cancel does.
+      if (speech.isSpeaking()) speech.stop();
+      readBtn.hidden = true;
+      readBtn.textContent = 'Read aloud';
       try {
         recording = await window.CompanionRecorder.startRecording({ onAutoStop: () => { if (recording) stopAndTranscribe(); } });
       } catch (err) {
