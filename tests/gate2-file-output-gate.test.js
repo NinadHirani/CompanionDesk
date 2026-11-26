@@ -211,7 +211,11 @@ test('the returned result carries name and bytes, never the content', () => {
 });
 
 test('a real reference io adapter: atomic write contract (temp+rename, 0o600, no execute bit)', async () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'fo-gate2-'));
+  // Resolve the temp dir through realpath: on macOS the tmpdir sits under
+  // a symlinked path (/var/folders -> /private/var/folders), and the tool's
+  // symlink-escape guard correctly refuses a root that does not resolve to
+  // itself.
+  const dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'fo-gate2-')));
   const calls = { exists: 0, realpath: 0, writeFileAtomic: 0 };
   const io = {
     exists: (fullPath) => { calls.exists++; return fs.existsSync(fullPath); },
