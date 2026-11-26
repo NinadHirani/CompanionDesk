@@ -122,7 +122,16 @@
         if (record.state !== 'pending') return { ok: false, reason: STATE_REASONS[record.state] || 'approval_unknown_state' };
         if (now() >= record.expiresAt) return { ok: false, reason: 'approval_expired' };
         if (record.tool !== tool) return { ok: false, reason: 'approval_tool_mismatch' };
-        if (argsDigest(tool, args) !== record.argsDigest) return { ok: false, reason: 'approval_args_mismatch' };
+        // Fail closed (26 Nov 2026): the same non-plain args request()
+        // refuses with approval_args_not_plain_data must be refused here
+        // too, never a TypeError escaping the desk.
+        let dg;
+        try {
+          dg = argsDigest(tool, args);
+        } catch (e) {
+          return { ok: false, reason: 'approval_args_not_plain_data' };
+        }
+        if (dg !== record.argsDigest) return { ok: false, reason: 'approval_args_mismatch' };
         return { ok: true };
       },
 

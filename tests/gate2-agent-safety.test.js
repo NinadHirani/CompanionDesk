@@ -658,3 +658,32 @@ test('a missing or failing approvals desk is a denial, not a crash', () => {
   engine3.grantTool({ tool: 'calendar.export' });
   assert.equal(engine3.authorize({ tool: 'calendar.export', args: { format: 'ics' } }).reason, 'approval_required');
 });
+
+// REGRESSION (26 Nov 2026): verify() (and through it consume()) called
+// argsDigest without the fail-closed guard request() has. Non-plain args
+// (an accessor property, a symbol-keyed property) made canonicalJson throw
+// a TypeError out of the desk instead of returning a stable refusal, the
+// same crash-instead-of-deny class the policy engine had. request() already
+// answers this exact input with 'approval_args_not_plain_data', so verify()
+// must refuse the same way.
+test('verify and consume refuse non-plain args instead of throwing', () => {
+  const { registry, approvals, engine } = world();
+  const args = { amount: 250, currency: 'INR' };
+  const a = approvals.request({ tool: 'payments.charge', args }).approval;
+  const hostile = { get amount() { return 250; }, currency: 'INR' };
+  const v = approvals.verify(a.id, { tool: 'payments.charge', args: hostile });
+  assert.equal(v.ok, false);
+  assert.equal(v.reason, 'approval_args_not_plain_data');
+  const symArgs = {}; symArgs[Symbol('s')] = 1; Object.assign(symArgs, args);
+  const v2 = approvals.verify(a.id, { tool: 'payments.charge', args: symArgs });
+  assert.equal(v2.ok, false);
+  assert.equal(v2.reason, 'approval_args_not_plain_data');
+  // consume inherits the same refusal and the approval stays usable
+  const c = approvals.consume(a.id, { tool: 'payments.charge', args: hostile });
+  assert.equal(c.ok, false);
+  assert.equal(c.reason, 'approval_args_not_plain_data');
+  assert.equal(approvals.get(a.id).state, 'pending');
+  // the ordinary path is untouched: matching plain args still verify and consume
+  const ok = approvals.consume(a.id, { tool: 'payments.charge', args });
+  assert.equal(ok.ok, true);
+});
