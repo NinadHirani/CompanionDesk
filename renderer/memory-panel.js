@@ -42,12 +42,31 @@
     if (statusEl) statusEl.textContent = text;
   }
 
+  // The shaper's outcome formatter is guarded like every other call: a
+  // partial or missing shaper degrades to the plain confirmation, it
+  // never crashes a click handler.
+  function outcomeText(v, r) {
+    return v && typeof v.shapeOutcome === 'function' ? v.shapeOutcome(r) : 'memory: done';
+  }
+
+  // Every button guards itself: while its async work is in flight, a
+  // second click is a no-op (the bridge call is not re-fired), and the
+  // button is re-enabled when the work settles, whatever the outcome. A
+  // throw that escapes the handler still lands as a status line, never an
+  // unhandled rejection.
   function button(label, ariaLabel, onClick) {
     const b = el('button');
     b.type = 'button';
     b.textContent = label;
     b.setAttribute('aria-label', ariaLabel);
-    b.addEventListener('click', onClick);
+    b.addEventListener('click', () => {
+      if (b.disabled) return;
+      b.disabled = true;
+      Promise.resolve()
+        .then(onClick)
+        .catch(() => say('memory: unavailable right now'))
+        .then(() => { b.disabled = false; });
+    });
     return b;
   }
 
@@ -117,7 +136,7 @@
       const r = await attempt(() => a.memory_add({ section: sec.value, text, sensitive: keep.checked }));
       if (r !== null) {
         const v = view();
-        say(v && v.shapeOutcome ? v.shapeOutcome(r) : 'memory: done');
+        say(outcomeText(v, r));
         if (r && r.ok) inp.value = '';
       }
       await refresh();
@@ -212,25 +231,25 @@
       if (act.kind === 'mark') {
         list.appendChild(button('mark', 'Mark ' + act.id + ' sensitive', async () => {
           const r = await attempt(() => a.memory_mark({ id: act.id, value: true }));
-          if (r !== null) say(v.shapeOutcome(r));
+          if (r !== null) say(outcomeText(v, r));
           await refresh();
         }));
       } else if (act.kind === 'unmark') {
         list.appendChild(button('unmark', 'Remove the sensitive mark from ' + act.id, async () => {
           const r = await attempt(() => a.memory_mark({ id: act.id, value: false }));
-          if (r !== null) say(v.shapeOutcome(r));
+          if (r !== null) say(outcomeText(v, r));
           await refresh();
         }));
       } else if (act.kind === 'forget') {
         list.appendChild(button('forget', 'Forget ' + act.id, async () => {
           const r = await attempt(() => a.memory_forget({ section: it.section, text: it.text }));
-          if (r !== null) say(v.shapeOutcome(r));
+          if (r !== null) say(outcomeText(v, r));
           await refresh();
         }));
       } else if (act.kind === 'persist') {
         list.appendChild(button('try to save', 'Attempt to save ' + act.id + ', expected to be refused', async () => {
           const r = await attempt(() => a.memory_persist({ id: act.id }));
-          if (r !== null) say(v.shapeOutcome(r));
+          if (r !== null) say(outcomeText(v, r));
           await refresh();
         }));
       }

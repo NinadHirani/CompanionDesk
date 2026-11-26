@@ -1,0 +1,142 @@
+'use strict';
+
+// Behavioral error-safety tests for the memory panel (M2/M4 UI slice,
+// 26 Nov 2026), complementing the structural guard in
+// tests/memory-panel-guard.test.js. The panel's contract says every
+// bridge call is error-safe: a failure becomes a status line, never an
+// unhandled rejection and never a retry. These tests pin two edges:
+// a row action must not reject when the shaper lacks its outcome
+// formatter, and a double click on a button must not fire the bridge
+// call twice. A minimal DOM stub is used because the panel is plain
+// browser-side code with no existing behavioral harness.
+
+const test = require('node:test');
+const assert = require('node:assert');
+
+function makeElement(registry, tag) {
+  const el = {
+    tagName: tag,
+    children: [],
+    attrs: {},
+    handlers: {},
+    dataset: {},
+    textContent: '',
+    id: '',
+    value: '',
+    checked: false,
+    type: '',
+    disabled: false,
+    appendChild(child) {
+      el.children.push(child);
+      if (child.id && !registry.byId.has(child.id)) registry.byId.set(child.id, child);
+    },
+    setAttribute(k, v) { el.attrs[k] = String(v); },
+    addEventListener(name, fn) {
+      (el.handlers[name] = el.handlers[name] || []).push(fn);
+    },
+  };
+  return el;
+}
+
+function installDom() {
+  const registry = { byId: new Map(), created: [], docHandlers: {} };
+  global.document = {
+    readyState: 'loading',
+    body: makeElement(registry, 'body'),
+    createElement(tag) { const e = makeElement(registry, tag); registry.created.push(e); return e; },
+    getElementById(id) { return registry.byId.get(id) || null; },
+    addEventListener(name, fn) { (registry.docHandlers[name] = registry.docHandlers[name] || []).push(fn); },
+  };
+  return registry;
+}
+
+function uninstallDom(registry) {
+  delete global.document;
+  delete global.window;
+  registry.byId.clear();
+  registry.created.length = 0;
+}
+
+function fireDOMContentLoaded(registry) {
+  return Promise.all((registry.docHandlers.DOMContentLoaded || []).map((fn) => fn()));
+}
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+async function until(fn, tries = 200) {
+  for (let i = 0; i < tries; i++) {
+    if (fn()) return true;
+    await sleep(5);
+  }
+  return false;
+}
+
+function freshPanel() {
+  const path = require.resolve('../renderer/memory-panel.js');
+  delete require.cache[path];
+  return require(path);
+}
+
+function bridgeWith(impl, log) {
+  const bridge = {};
+  for (const m of ['memory_items', 'memory_add', 'memory_forget', 'memory_mark', 'memory_persist', 'memory_search']) {
+    bridge[m] = (...args) => { log.push(m); return Promise.resolve(impl[m] ? impl[m](...args) : { ok: true }); };
+  }
+  return bridge;
+}
+
+test('a row action does not reject when the shaper lacks shapeOutcome', async () => {
+  const registry = installDom();
+  try {
+    const log = [];
+    const bridge = bridgeWith({
+      memory_items: () => ({ ok: true, items: [{ id: 'm1', section: 'facts', text: 'hello there', sensitive: false, persisted: true }], sections: ['facts'] }),
+    }, log);
+    const viewModule = require('../src/memory-view.js');
+    const partialView = Object.assign({}, viewModule);
+    delete partialView.shapeOutcome;
+    global.window = { companiondesk: bridge, CompanionMemoryView: partialView };
+    freshPanel();
+    await fireDOMContentLoaded(registry);
+    const mark = registry.created.find((e) => e.tagName === 'button' && e.textContent === 'mark');
+    assert.ok(mark, 'the mark button exists');
+    const status = registry.byId.get('memory-panel-status');
+    let rejection = null;
+    try { await mark.handlers.click[0](); } catch (e) { rejection = e; }
+    assert.equal(rejection, null, 'the click handler must never reject');
+    assert.ok(await until(() => status && status.textContent !== ''), 'a status line is shown');
+    assert.equal(status.textContent, 'memory: done', 'the action succeeded and the status says so');
+  } finally { uninstallDom(registry); }
+});
+
+test('a double click on add fires the bridge call once and the button recovers', async () => {
+  const registry = installDom();
+  try {
+    const log = [];
+    let releaseAdd;
+    const gate = new Promise((res) => { releaseAdd = res; });
+    const bridge = bridgeWith({
+      memory_items: () => ({ ok: true, items: [], sections: ['facts'] }),
+      memory_add: () => gate,
+    }, log);
+    const viewModule = require('../src/memory-view.js');
+    global.window = { companiondesk: bridge, CompanionMemoryView: viewModule };
+    freshPanel();
+    await fireDOMContentLoaded(registry);
+    const add = registry.created.find((e) => e.tagName === 'button' && e.textContent === 'add');
+    assert.ok(add, 'the add button exists');
+    const input = registry.byId.get('memory-add-text');
+    input.value = 'remember the thing';
+    add.handlers.click[0]();
+    add.handlers.click[0]();
+    await until(() => log.some((m) => m === 'memory_add'), 50);
+    assert.equal(log.filter((m) => m === 'memory_add').length, 1, 'the second click while in flight must not re-fire the add');
+    releaseAdd({ ok: true });
+    assert.ok(await until(() => add.disabled === false), 'the button is re-enabled once the call settles');
+    assert.equal(log.filter((m) => m === 'memory_add').length, 1, 'settling the call does not add a retry');
+    input.value = 'remember the thing';
+    add.handlers.click[0]();
+    assert.ok(await until(() => log.filter((m) => m === 'memory_add').length === 2), 'a settled button accepts the next click');
+    assert.ok(await until(() => input.value === ''), 'the input clears on a successful add');
+  } finally { uninstallDom(registry); }
+});
