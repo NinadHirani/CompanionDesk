@@ -65,10 +65,14 @@ bundling blocked pending license review; self-trained or alternative models
 as fallback. Wake word stays behind a separate auto-listening toggle, off by
 default, with visible mic state and immediate stop.
 
-## ADR-0010 - TTS: OS-native first
-Proposed. Per-OS system voices need no dependency and no license risk.
-Piper is deferred pending verification of its successor project (the
-original repository is reported archived).
+## ADR-0010 - TTS: OS-native only
+DECIDED by Ninad on 26 Nov 2026 (decision-sheet item 7): the only TTS
+engine is the OS's own voice stack through the standard speechSynthesis
+interface; no bundled model or asset, no download, no external service,
+no paid dependency, no third-party TTS engine. piper1-gpl (the verified
+successor, GPL-3.0) stays DEFERRED and unbundled; adopting it or any
+other engine or voice asset requires Ninad's explicit reopening of this
+decision. Guarded by tests/m6-tts-decision.test.js.
 
 ## ADR-0011 - Model licensing stance
 Needs user decision. License status is judged per exact model and version,

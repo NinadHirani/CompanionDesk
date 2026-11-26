@@ -43,9 +43,11 @@ official sources.
   only, nothing bundled pending license review; self-trained or alternative
   models as fallback. Residual: low if honored.
 - **R7 - TTS dependency health.** Reported: the original Piper repository is
-  archived; its successor's maintenance and licensing are unverified.
-  Mitigation: OS-native TTS first; Piper only after the successor is
-  verified. Residual: low.
+  archived; the successor piper1-gpl is verified active (24 Nov 2026) but
+  GPL-3.0. Mitigation (owner-decided 26 Nov 2026): OS-native TTS ONLY;
+  piper1-gpl stays deferred and unbundled, adoption only on Ninad's
+  explicit reopening. Guarded by tests/m6-tts-decision.test.js.
+  Residual: low.
 - **R8 - Android background constraints.** Reported: Android 14+ generally
   prevents starting a microphone foreground service from the background, and
   Android 15 restricts microphone/MediaProjection services from boot
