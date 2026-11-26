@@ -130,7 +130,7 @@
     keepLabel.textContent = 'keep session-only (sensitive, not saved)';
     const addBtn = button('add', 'Add this memory bullet', async () => {
       const a = api();
-      if (!a) return;
+      if (!a) { say('memory: unavailable right now'); return; }
       const text = inp.value;
       if (!text.trim()) { say('memory: enter some text first'); return; }
       const r = await attempt(() => a.memory_add({ section: sec.value, text, sensitive: keep.checked }));
@@ -173,18 +173,21 @@
       if (!a) return;
       if (!q.value.trim()) { say('memory: enter a search first'); return; }
       const r = await attempt(() => a.memory_search({ query: q.value, includeSensitive: consent.checked }));
+      if (r === null) return; // attempt already announced the failure
       const v = view();
-      if (r !== null && v && typeof v.shapeSearch === 'function') {
-        const shaped = v.shapeSearch(r);
-        results.textContent = '';
-        if (shaped && shaped.ok === true) {
-          results.appendChild(line(shaped.header));
-          for (const t of shaped.lines) results.appendChild(line(t));
-          if (shaped.hidden > 0) results.appendChild(line('memory: ' + shaped.hidden + ' further results not shown'));
-          say('memory: search done');
-        } else {
-          say('memory: search unavailable');
-        }
+      if (!v || typeof v.shapeSearch !== 'function') {
+        say('memory: unavailable right now');
+        return;
+      }
+      const shaped = v.shapeSearch(r);
+      results.textContent = '';
+      if (shaped && shaped.ok === true) {
+        results.appendChild(line(shaped.header));
+        for (const t of shaped.lines) results.appendChild(line(t));
+        if (shaped.hidden > 0) results.appendChild(line('memory: ' + shaped.hidden + ' further results not shown'));
+        say('memory: search done');
+      } else {
+        say('memory: search unavailable');
       }
     });
     searchBox.appendChild(qLabel);
@@ -198,11 +201,19 @@
 
   async function refresh() {
     const a = api();
-    const v = view();
-    if (!a || !v) return;
+    if (!a) return;
     const panel = panelEl();
     buildStatic(panel);
     const list = document.getElementById('memory-panel-list');
+    const v = view();
+    if (!v || typeof v.shapeItems !== 'function') {
+      // A missing or partial shaper must degrade to an honest unavailable
+      // state at mount, never an unhandled rejection.
+      list.textContent = '';
+      list.appendChild(line('memory: unavailable'));
+      say('memory: unavailable right now');
+      return;
+    }
     const res = await attempt(() => a.memory_items({}));
     if (!res || res.ok !== true) {
       list.textContent = '';

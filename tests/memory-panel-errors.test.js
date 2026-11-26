@@ -140,3 +140,78 @@ test('a double click on add fires the bridge call once and the button recovers',
     assert.ok(await until(() => input.value === ''), 'the input clears on a successful add');
   } finally { uninstallDom(registry); }
 });
+
+test('a partial shaper missing shapeItems degrades the mount to an honest unavailable state', async () => {
+  const registry = installDom();
+  try {
+    const log = [];
+    const bridge = bridgeWith({
+      memory_items: () => ({ ok: true, items: [{ id: 'm1', section: 'facts', text: 'hello there', sensitive: false, persisted: true }], sections: ['facts'] }),
+    }, log);
+    const viewModule = require('../src/memory-view.js');
+    const partialView = Object.assign({}, viewModule);
+    delete partialView.shapeItems;
+    global.window = { companiondesk: bridge, CompanionMemoryView: partialView };
+    freshPanel();
+    let mountErr = null;
+    try { await fireDOMContentLoaded(registry); } catch (e) { mountErr = e; }
+    assert.equal(mountErr, null, 'the mount path must never reject');
+    const status = registry.byId.get('memory-panel-status');
+    assert.ok(await until(() => status && status.textContent !== ''), 'a status line is shown at mount');
+    assert.equal(status.textContent, 'memory: unavailable right now', 'the mount says the panel is unavailable');
+    const list = registry.byId.get('memory-panel-list');
+    assert.ok(list && list.children.some((c) => c.textContent === 'memory: unavailable'), 'the list carries the honest unavailable line');
+  } finally { uninstallDom(registry); }
+});
+
+test('a search click with a partial shaper announces itself instead of a silent no-op', async () => {
+  const registry = installDom();
+  try {
+    const log = [];
+    const bridge = bridgeWith({
+      memory_items: () => ({ ok: true, items: [], sections: ['facts'] }),
+      memory_search: () => ({ ok: true, results: [], task: 'chat', budget: 12, candidates: 0, sensitiveTotal: 0, sensitiveIncluded: 0 }),
+    }, log);
+    const viewModule = require('../src/memory-view.js');
+    const partialView = Object.assign({}, viewModule);
+    delete partialView.shapeSearch;
+    global.window = { companiondesk: bridge, CompanionMemoryView: partialView };
+    freshPanel();
+    await fireDOMContentLoaded(registry);
+    const search = registry.created.find((e) => e.tagName === 'button' && e.textContent === 'search');
+    assert.ok(search, 'the search button exists');
+    const input = registry.byId.get('memory-search-query');
+    input.value = 'anything';
+    const status = registry.byId.get('memory-panel-status');
+    let rejection = null;
+    try { await search.handlers.click[0](); } catch (e) { rejection = e; }
+    assert.equal(rejection, null, 'the search click must never reject');
+    assert.ok(await until(() => status && status.textContent !== ''), 'a status line is shown');
+    assert.equal(status.textContent, 'memory: unavailable right now', 'the search says the panel is unavailable');
+  } finally { uninstallDom(registry); }
+});
+
+test('a missing bridge at click time is announced instead of a silent no-op', async () => {
+  const registry = installDom();
+  try {
+    const log = [];
+    const bridge = bridgeWith({
+      memory_items: () => ({ ok: true, items: [], sections: ['facts'] }),
+    }, log);
+    const viewModule = require('../src/memory-view.js');
+    global.window = { companiondesk: bridge, CompanionMemoryView: viewModule };
+    freshPanel();
+    await fireDOMContentLoaded(registry);
+    delete global.window.companiondesk;
+    const add = registry.created.find((e) => e.tagName === 'button' && e.textContent === 'add');
+    assert.ok(add, 'the add button exists');
+    const input = registry.byId.get('memory-add-text');
+    input.value = 'remember the thing';
+    const status = registry.byId.get('memory-panel-status');
+    let rejection = null;
+    try { await add.handlers.click[0](); } catch (e) { rejection = e; }
+    assert.equal(rejection, null, 'the click handler must never reject');
+    assert.ok(await until(() => status && status.textContent !== ''), 'a status line is shown');
+    assert.equal(status.textContent, 'memory: unavailable right now', 'the missing bridge is announced');
+  } finally { uninstallDom(registry); }
+});
