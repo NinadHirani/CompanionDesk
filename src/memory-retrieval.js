@@ -2,10 +2,12 @@
 
 // Memory v2 retrieval core: the measured harness ranker (BM25 + section
 // boost + contiguous bigram phrase bonus + fold-normalized seeded synonym
-// map), ported from experiments/memory-v2-harness/lib/rank.js as a PURE,
-// UNWIRED library. Nothing in the product calls it yet: the four open
-// decisions in docs/M2_MEMORY_V2_DESIGN.md gate implementation, and this
-// module deliberately leaves all four untouched:
+// map), ported from experiments/memory-v2-harness/lib/rank.js as a PURE
+// library. It is WIRED in product as M4 slices 1-2: persona selection
+// (src/persona.js) runs on the decided budgets below, and the memory v2
+// store (src/memory-store.js) builds on this contract. The four decisions
+// were resolved by the owner on 24 Nov 2026 (docs/M4_MEMORY_DECISIONS.md,
+// "Status: RESOLVED"; full design in docs/M2_MEMORY_V2_DESIGN.md):
 //
 //   D1 sensitive-entry convention: explicit per-bullet marks (NOT a
 //      `Sensitive:` prefix). A mark is a SENSITIVITY CLASSIFICATION, not
@@ -152,11 +154,6 @@ function search(index, query, opts) {
   out.sort((a, b) => (b.score - a.score) || (a.order - b.order));
   return out.slice(0, k);
 }
-
-module.exports = {
-  tokenize, buildIndex, search, expand, fold, SYNONYMS, FOLDED_SYNONYMS,
-  K1, B, SECTION_BOOST, PHRASE_BONUS, STOPWORDS,
-};
 
 // ---- task budgets (decided 24 Nov 2026, tunable conservative defaults) ------
 
