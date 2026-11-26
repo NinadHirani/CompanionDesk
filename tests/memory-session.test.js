@@ -142,7 +142,7 @@ test('persistSensitive is fail-closed for marks and a no-op for plain bullets', 
   assert.deepEqual(s.persistSensitive(plainId), { ok: true, persisted: true });
 });
 
-test('sensitive add: persisted:false, session view only, never on disk, dropped by refresh', () => {
+test('sensitive add: persisted:false, session view only, never on disk, survives refresh via the sidecar', () => {
   sessionMod._resetForTests();
   const file = tmpFile();
   seed(file);
@@ -153,9 +153,69 @@ test('sensitive add: persisted:false, session view only, never on disk, dropped 
   assert.ok(s.items().some((b) => b.text === 'bank pin is 1234'));
   assert.equal(fs.readFileSync(file, 'utf8').includes('bank pin'), false, 'never written');
   assert.equal(s.search('bank pin', { k: 5 }).length, 0, 'consent gate hides it');
-  // any refresh drops it: session-only by design
+  // the sidecar holds it for the session: a refresh re-injects it, the
+  // file still never sees it (no on-disk format, per the 26 Nov decision)
   fs.appendFileSync(file, '- unrelated\n');
+  assert.ok(s.items().some((b) => b.text === 'bank pin is 1234' && b.sensitive === true), 'survives refresh');
+  assert.equal(fs.readFileSync(file, 'utf8').includes('bank pin'), false, 'still never written');
+});
+
+test('forget of a session-only sensitive entry works and leaves the file untouched', () => {
+  sessionMod._resetForTests();
+  const file = tmpFile();
+  seed(file, { Facts: ['kept fact'] });
+  const s = sessionMod.get(file);
+  s.add('Facts', 'bank pin is 1234', { sensitive: true });
+  const before = fs.readFileSync(file, 'utf8');
+  const r = s.forget('Facts', 'bank pin is 1234');
+  assert.equal(r.ok, true);
   assert.equal(s.items().some((b) => b.text === 'bank pin is 1234'), false);
+  assert.equal(fs.readFileSync(file, 'utf8'), before, 'file unchanged');
+  assert.ok(s.items().some((b) => b.text === 'kept fact'));
+});
+
+test('a manual duplicate write collapses the sidecar entry into the file bullet', () => {
+  sessionMod._resetForTests();
+  const file = tmpFile();
+  seed(file);
+  const s = sessionMod.get(file);
+  s.add('Facts', 'bank pin is 1234', { sensitive: true });
+  const cur = fs.readFileSync(file, 'utf8');
+  const res = memory.addBullet(cur, 'Facts', 'bank pin is 1234');
+  assert.equal(res.added, true);
+  fs.writeFileSync(file, res.text);
+  const rows = s.items().filter((b) => b.text === 'bank pin is 1234');
+  assert.equal(rows.length, 1, 'no duplicate row');
+  assert.equal(rows[0].sensitive, undefined, 'the file bullet stays the user\'s own unmarked line');
+});
+
+test('the sidecar is bounded: a full sidecar refuses the add and rolls the view back', () => {
+  sessionMod._resetForTests();
+  const file = tmpFile();
+  seed(file);
+  const s = sessionMod.get(file);
+  for (let i = 0; i < 50; i++) {
+    const r = s.add('Facts', `entry number ${i} stays session-only`, { sensitive: true });
+    assert.equal(r.ok, true);
+  }
+  const r = s.add('Facts', 'one entry too many stays session-only', { sensitive: true });
+  assert.equal(r.ok, false);
+  assert.equal(r.error, 'sidecar_full');
+  assert.equal(s.items().some((b) => b.text === 'one entry too many stays session-only'), false, 'rolled back');
+  assert.equal(s.count(), 50);
+});
+
+test('the sidecar is bounded for marks too: a full sidecar rolls the mark back', () => {
+  sessionMod._resetForTests();
+  const file = tmpFile();
+  seed(file, { Facts: Array.from({ length: 101 }, (_, i) => `fact ${i}`) });
+  const s = sessionMod.get(file);
+  const ids = s.items().map((b) => b.id);
+  for (let i = 0; i < 100; i++) assert.equal(s.markSensitive(ids[i], true).ok, true);
+  const r = s.markSensitive(ids[100], true);
+  assert.equal(r.ok, false);
+  assert.equal(r.error, 'sidecar_full');
+  assert.equal(s.items().find((b) => b.id === ids[100]).sensitive, undefined, 'rolled back');
 });
 
 test('ids are stable within a sync epoch and reassigned after a rebuild', () => {

@@ -15,20 +15,26 @@
 // the same freshness guarantee the previous per-ask file read had, so a
 // hand edit to the file is picked up by the next operation.
 //
-// Sensitive marks (decision D1, docs/M4_MEMORY_DECISIONS.md) stay
-// SESSION-ONLY and fail closed:
+// Sensitive state (decision D1, docs/M4_MEMORY_DECISIONS.md; the sidecar
+// slice approved by Ninad on 26 Nov 2026) stays SESSION-ONLY and fails
+// closed, held in src/memory-sidecar.js:
 //   - a mark is a sensitivity CLASSIFICATION, never consent;
 //   - a marked bullet is hidden from retrieval by the consent gate but is
 //     still the user's own file content, so list() keeps showing it;
 //   - a mark on an on-disk bullet survives refreshes within the session
-//     (tracked by section + normalized text), never silently dropped;
-//   - persistSensitive() refuses (sensitive_storage_blocked) because no
-//     on-disk format preserves the mark yet; that format is the owner's
-//     still-open sub-decision and this module does NOT choose one;
-//   - add(..., {sensitive:true}) keeps the entry in the session view only
-//     (persisted:false); it is never written to the file and does not
-//     survive a refresh. No product surface passes sensitive entries yet:
-//     the IPC/service layer stays non-sensitive in this slice.
+//     (tracked by section + normalized text in the sidecar), never
+//     silently dropped;
+//   - persistSensitive() refuses (sensitive_storage_blocked): the owner
+//     sub-decision is now RESOLVED (26 Nov 2026) as a session-only
+//     sidecar, so there is deliberately NO on-disk format for sensitive
+//     state and this module does not choose one;
+//   - add(..., {sensitive:true}) keeps the entry in the sidecar and the
+//     session view only (persisted:false); it is never written to the
+//     file, and the sidecar re-injects it after every rebuild so it
+//     survives refreshes within the session and dies with it. If the
+//     sidecar is full the add is refused and rolled back (fail closed).
+//     No product surface passes sensitive entries yet: the IPC/service
+//     layer stays non-sensitive in this slice.
 //
 // Ids (m1, m2, ...) are session-view handles: stable within one sync
 // epoch, reassigned by file position on every rebuild. They are NOT
@@ -37,6 +43,7 @@
 const fs = require('fs');
 const memory = require('./memory');
 const storeMod = require('./memory-store');
+const sidecarMod = require('./memory-sidecar');
 
 const sessions = new Map(); // resolved path -> session
 
@@ -50,24 +57,29 @@ function statKey(file) {
   }
 }
 
-function markKey(section, text) {
-  return `${section}\u0000${memory.normalize(text)}`;
-}
-
 function createSession(file) {
   let store = null;
   let fileKey = null;
-  // Session-only sensitivity marks for (section, normalized text). Marks
-  // never touch the file; they are re-applied to matching bullets after a
-  // rebuild so a mark is not silently lost mid-session.
-  const marks = new Set();
+  // The session-only sidecar holds ALL sensitive state: marks on on-disk
+  // bullets and session-only sensitive entries. It never touches the file.
+  const sidecar = sidecarMod.createSidecar({ normalize: memory.normalize });
 
   function sync() {
     const key = statKey(file);
     if (store && key === fileKey) return store;
     const bullets = storeMod.parseMarkdown(memory.readText(file));
-    for (const b of bullets) if (marks.has(markKey(b.section, b.text))) b.sensitive = true;
+    for (const b of bullets) if (sidecar.isMarked(b.section, b.text)) b.sensitive = true;
     store = storeMod.createStore(bullets);
+    // Re-inject the sidecar's session-only sensitive entries: they live in
+    // the sidecar, not the file, so a rebuild must re-add them or a
+    // refresh would silently drop session content. A re-inject refused as
+    // duplicate means the same bullet is now file content (a manual edit):
+    // drop the sidecar's copy so no ghost entry lingers; the file bullet
+    // stays the user's own unmarked line.
+    for (const e of sidecar.entryList()) {
+      const r = store.addMemory(e.section, e.text, { sensitive: true });
+      if (!r.ok && r.error === 'duplicate') sidecar.forget(e.section, e.text);
+    }
     fileKey = key;
     return store;
   }
@@ -95,7 +107,16 @@ function createSession(file) {
       const view = sync();
       const r = view.addMemory(section, value, { sensitive });
       if (!r.ok) return r;
-      if (sensitive) return r; // session-only; never written to the file
+      if (sensitive) {
+        // Session-only: the sidecar must hold it or the entry does not
+        // exist reliably. Fail closed: roll the view add back and refuse.
+        const sr = sidecar.remember(section, r.text);
+        if (!sr.ok) {
+          view.forgetMemory(r.id);
+          return { ok: false, error: sr.reason === 'sidecar_full' ? 'sidecar_full' : 'bad_input' };
+        }
+        return r; // { ok, id, text, persisted:false }; never written to the file
+      }
       const res = memory.addBullet(memory.readText(file), section, r.text);
       if (!res.added) { sync(); return { ok: false, error: 'duplicate' }; }
       try {
@@ -119,6 +140,15 @@ function createSession(file) {
       const target = memory.normalize(value);
       const hit = store.list().find((b) => b.section === section && memory.normalize(b.text) === target);
       if (!hit) return { ok: false, error: 'not_found' };
+      // A session-only sidecar entry is not file content: forget it in the
+      // sidecar and rebuild, leaving the file untouched.
+      if (hit.sensitive && sidecar.has(section, hit.text)) {
+        const fr = sidecar.forget(section, hit.text);
+        if (!fr.ok) return { ok: false, error: 'not_found' };
+        fileKey = null; // the file did not change, so force the rebuild
+        sync();
+        return { ok: true };
+      }
       const res = memory.removeBullet(memory.readText(file), section, value);
       if (!res.removed) { sync(); return { ok: false, error: 'not_found' }; }
       memory.writeText(file, res.text);
@@ -134,8 +164,15 @@ function createSession(file) {
       if (!r.ok) return r;
       const b = view.list().find((x) => x.id === id);
       if (b) {
-        const k = markKey(b.section, b.text);
-        if (value) marks.add(k); else marks.delete(k);
+        if (value) {
+          const mr = sidecar.mark(b.section, b.text);
+          if (!mr.ok && mr.reason === 'sidecar_full') {
+            view.markSensitive(id, false); // roll the mark back: fail closed
+            return { ok: false, error: 'sidecar_full' };
+          }
+        } else {
+          sidecar.unmark(b.section, b.text);
+        }
       }
       return r;
     },
