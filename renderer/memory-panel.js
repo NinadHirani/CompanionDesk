@@ -170,24 +170,32 @@
     results.id = 'memory-panel-results';
     const searchBtn = button('search', 'Search memory with matched terms and budget', async () => {
       const a = api();
-      if (!a) return;
+      if (!a) { consent.checked = false; return; }
       if (!q.value.trim()) { say('memory: enter a search first'); return; }
-      const r = await attempt(() => a.memory_search({ query: q.value, includeSensitive: consent.checked }));
-      if (r === null) return; // attempt already announced the failure
-      const v = view();
-      if (!v || typeof v.shapeSearch !== 'function') {
-        say('memory: unavailable right now');
-        return;
-      }
-      const shaped = v.shapeSearch(r);
-      results.textContent = '';
-      if (shaped && shaped.ok === true) {
-        results.appendChild(line(shaped.header));
-        for (const t of shaped.lines) results.appendChild(line(t));
-        if (shaped.hidden > 0) results.appendChild(line('memory: ' + shaped.hidden + ' further results not shown'));
-        say('memory: search done');
-      } else {
-        say('memory: search unavailable');
+      try {
+        const r = await attempt(() => a.memory_search({ query: q.value, includeSensitive: consent.checked }));
+        if (r === null) return; // attempt already announced the failure
+        const v = view();
+        if (!v || typeof v.shapeSearch !== 'function') {
+          say('memory: unavailable right now');
+          return;
+        }
+        const shaped = v.shapeSearch(r);
+        results.textContent = '';
+        if (shaped && shaped.ok === true) {
+          results.appendChild(line(shaped.header));
+          for (const t of shaped.lines) results.appendChild(line(t));
+          if (shaped.hidden > 0) results.appendChild(line('memory: ' + shaped.hidden + ' further results not shown'));
+          say('memory: search done');
+        } else {
+          say('memory: search unavailable');
+        }
+      } finally {
+        // Consent is strictly per-search: the box resets after every
+        // attempt (success, refusal, empty, error), so the next search
+        // needs a fresh explicit opt-in. The empty-query refusal above
+        // runs before this block and leaves an armed box untouched.
+        consent.checked = false;
       }
     });
     searchBox.appendChild(qLabel);

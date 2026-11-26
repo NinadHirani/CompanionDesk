@@ -215,3 +215,119 @@ test('a missing bridge at click time is announced instead of a silent no-op', as
     assert.equal(status.textContent, 'memory: unavailable right now', 'the missing bridge is announced');
   } finally { uninstallDom(registry); }
 });
+
+test('consent resets after each search so the next search needs a fresh opt-in', async () => {
+  const registry = installDom();
+  try {
+    const log = [];
+    const searches = [];
+    const bridge = bridgeWith({
+      memory_items: () => ({ ok: true, items: [], sections: ['facts'] }),
+      memory_search: (args) => {
+        searches.push(args.includeSensitive === true);
+        return { ok: true, results: [], task: 'chat', budget: 12, candidates: 0, sensitiveTotal: 1, sensitiveIncluded: args.includeSensitive === true ? 1 : 0 };
+      },
+    }, log);
+    const viewModule = require('../src/memory-view.js');
+    global.window = { companiondesk: bridge, CompanionMemoryView: viewModule };
+    freshPanel();
+    await fireDOMContentLoaded(registry);
+    const search = registry.created.find((e) => e.tagName === 'button' && e.textContent === 'search');
+    assert.ok(search, 'the search button exists');
+    const input = registry.byId.get('memory-search-query');
+    const consent = registry.byId.get('memory-search-consent');
+    input.value = 'anything';
+    consent.checked = true;
+    let rejection = null;
+    try { await search.handlers.click[0](); } catch (e) { rejection = e; }
+    assert.equal(rejection, null, 'the search click must never reject');
+    assert.ok(await until(() => searches.length >= 1), 'the first search ran');
+    assert.equal(searches[0], true, 'the first search used the explicit consent');
+    assert.ok(await until(() => consent.checked === false), 'consent resets after the search');
+    await until(() => search.disabled === false, 50);
+    search.handlers.click[0]();
+    assert.ok(await until(() => searches.length >= 2), 'the second search ran');
+    assert.equal(searches[1], false, 'the second search without re-consent must not include sensitive entries');
+    consent.checked = true;
+    await until(() => search.disabled === false, 50);
+    search.handlers.click[0]();
+    assert.ok(await until(() => searches.length >= 3), 'the third search ran');
+    assert.equal(searches[2], true, 'a fresh explicit opt-in is honored again');
+    assert.ok(await until(() => consent.checked === false), 'consent resets again');
+  } finally { uninstallDom(registry); }
+});
+
+test('an errored search still resets consent', async () => {
+  const registry = installDom();
+  try {
+    const log = [];
+    const bridge = bridgeWith({
+      memory_items: () => ({ ok: true, items: [], sections: ['facts'] }),
+      memory_search: () => Promise.reject(new Error('bridge down')),
+    }, log);
+    const viewModule = require('../src/memory-view.js');
+    global.window = { companiondesk: bridge, CompanionMemoryView: viewModule };
+    freshPanel();
+    await fireDOMContentLoaded(registry);
+    const search = registry.created.find((e) => e.tagName === 'button' && e.textContent === 'search');
+    const input = registry.byId.get('memory-search-query');
+    const consent = registry.byId.get('memory-search-consent');
+    input.value = 'anything';
+    consent.checked = true;
+    let rejection = null;
+    try { await search.handlers.click[0](); } catch (e) { rejection = e; }
+    assert.equal(rejection, null, 'the errored search must not reject the handler');
+    assert.ok(await until(() => consent.checked === false), 'consent resets even when the search errors');
+    assert.equal(log.filter((m) => m === 'memory_search').length, 1, 'no retry followed the error');
+  } finally { uninstallDom(registry); }
+});
+
+test('the empty-query refusal does not spend or reset consent', async () => {
+  const registry = installDom();
+  try {
+    const log = [];
+    const bridge = bridgeWith({
+      memory_items: () => ({ ok: true, items: [], sections: ['facts'] }),
+    }, log);
+    const viewModule = require('../src/memory-view.js');
+    global.window = { companiondesk: bridge, CompanionMemoryView: viewModule };
+    freshPanel();
+    await fireDOMContentLoaded(registry);
+    const search = registry.created.find((e) => e.tagName === 'button' && e.textContent === 'search');
+    const consent = registry.byId.get('memory-search-consent');
+    consent.checked = true;
+    let rejection = null;
+    try { await search.handlers.click[0](); } catch (e) { rejection = e; }
+    assert.equal(rejection, null);
+    const status = registry.byId.get('memory-panel-status');
+    assert.ok(await until(() => status && status.textContent !== ''));
+    assert.equal(status.textContent, 'memory: enter a search first', 'the refusal is the empty-query one');
+    await until(() => search.disabled === false, 50);
+    assert.equal(consent.checked, true, 'no search was attempted, so consent stays armed');
+    assert.equal(log.filter((m) => m === 'memory_search').length, 0, 'no search call was made');
+  } finally { uninstallDom(registry); }
+});
+
+test('a search with a missing bridge resets consent', async () => {
+  const registry = installDom();
+  try {
+    const log = [];
+    const bridge = bridgeWith({
+      memory_items: () => ({ ok: true, items: [], sections: ['facts'] }),
+    }, log);
+    const viewModule = require('../src/memory-view.js');
+    global.window = { companiondesk: bridge, CompanionMemoryView: viewModule };
+    freshPanel();
+    await fireDOMContentLoaded(registry);
+    delete global.window.companiondesk;
+    const search = registry.created.find((e) => e.tagName === 'button' && e.textContent === 'search');
+    const input = registry.byId.get('memory-search-query');
+    const consent = registry.byId.get('memory-search-consent');
+    input.value = 'anything';
+    consent.checked = true;
+    let rejection = null;
+    try { await search.handlers.click[0](); } catch (e) { rejection = e; }
+    assert.equal(rejection, null, 'the click handler must never reject');
+    assert.ok(await until(() => consent.checked === false), 'consent resets when the bridge is missing');
+  } finally { uninstallDom(registry); }
+});
