@@ -90,7 +90,16 @@
       const critical = criticalDeclared;
       if (critical) {
         if (approvalId === undefined || approvalId === null) return deny('approval_required');
-        const v = approvals.verify(approvalId, { tool, args });
+        // Fail closed (26 Nov 2026): a missing approvals desk or a verify()
+        // that throws is a denial with a stable refusal record, never an
+        // exception escaping the only door to tool execution.
+        if (!approvals || typeof approvals.verify !== 'function') return deny('approval_desk_missing');
+        let v;
+        try {
+          v = approvals.verify(approvalId, { tool, args });
+        } catch (err) {
+          return deny('approval_desk_error');
+        }
         if (!v.ok) return deny('approval_invalid', { approvalReason: v.reason });
       }
       const grant = { tool: g.tool, capability: g.capability, grantedAt: g.grantedAt, expiresAt: g.expiresAt };

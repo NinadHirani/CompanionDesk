@@ -634,3 +634,27 @@ test('audit verify enforces contiguous sequence numbers starting at 1', () => {
   // the intact log still verifies, contiguity included
   assert.equal(audit.verify(ex).ok, true);
 });
+
+// REGRESSION (26 Nov 2026): the approval-verification step assumed a
+// constructed, well-behaved approvals desk. With no desk configured at all
+// the engine threw a TypeError out of authorize(), and a desk whose
+// verify() threw propagated the exception: the only door to tool execution
+// crashed instead of denying. The gate's contract is deny by default with a
+// stable refusal record, so both cases must come back as denials.
+test('a missing or failing approvals desk is a denial, not a crash', () => {
+  const registry = fixtureRegistry();
+  const engine = createPolicyEngine({ registry });
+  engine.grantTool({ tool: 'calendar.export' });
+  const d = engine.authorize({ tool: 'calendar.export', args: { format: 'ics' }, approvalId: 'whatever00000000' });
+  assert.equal(d.allowed, false);
+  assert.equal(d.reason, 'approval_desk_missing');
+  const engine2 = createPolicyEngine({ registry, approvals: { verify: () => { throw new Error('desk blew up'); } } });
+  engine2.grantTool({ tool: 'calendar.export' });
+  const d2 = engine2.authorize({ tool: 'calendar.export', args: { format: 'ics' }, approvalId: 'whatever00000000' });
+  assert.equal(d2.allowed, false);
+  assert.equal(d2.reason, 'approval_desk_error');
+  // the ordinary critical path is untouched
+  const engine3 = createPolicyEngine({ registry, approvals: createApprovalDesk({ clock }) });
+  engine3.grantTool({ tool: 'calendar.export' });
+  assert.equal(engine3.authorize({ tool: 'calendar.export', args: { format: 'ics' } }).reason, 'approval_required');
+});
