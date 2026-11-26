@@ -13,7 +13,7 @@ table below was refreshed in the next commit, which is docs-only.
 | GATE 1 Android intelligence | PREPARED, NOT RUN | repo-only scaffold `experiments/android-inference-benchmark/` (metrics, fairness rules, acceptance criteria, owner runbook, desktop matrix below); no device measurement exists; blocked on physical OnePlus 12R time |
 | GATE 2 agent foundation | IN PROGRESS (security workstream, SUPPORTS the product phases) | slices 1-4, persistence wiring, 3j.3-3j.6 notification gates, run-driver Stage A (3j.9), the scheduling gate (schedule_create, 3j.11, D-S1 approved 24 Nov), the run entry point (3j.12, D1 option a approved 25 Nov) and run-driver Stage B (3j.10, approved and implemented 26 Nov 2026: the calendar_upcoming read-only projection plus grant/revocation/hydrate audit entries) implemented; the enable step landed 26 Nov 2026 (approved by Ninad the same day, D-B2 resolved: grant path (a)): main.js registers EXACTLY ONE tool, the scheduling gate's schedule_create (capability sensitive, guardrails tested in tests/gate2-scheduling-enable.test.js), while the Stage B calendar_upcoming tool stays unregistered, the run entry point fires nothing (requestRun has no caller in this build; D-S2 decided DEFER 25 Nov 2026, see docs/D_S2_DECISION_BRIEF.md), and the production registry carries exactly that one registered tool; the file-output gate (3j.13, D-F1/F2/F3 approved and implemented 26 Nov 2026: the pure validation/policy layer with the injected io adapter contract, root unset by default) is implemented but NOT registered or wired. On 26 Nov 2026 Ninad approved the remaining decision-sheet defaults (schedule_create enable with guardrails, file-output D-F1/F2/F3 with the root unset by default, M8 schemas-first with no connectors until he names services, M4 sensitive sidecar markings with sensitive content session-only, M6 OS-native TTS only with piper1-gpl deferred) and explicitly deferred M7 (capture engine) and M9 (release readiness); their implementation slices follow in that order. Per Ninad's 24 Nov direction the run-driver work proceeds only through these approved slices |
 | M4 memory v2 | DECIDED + WIRED (slices 1-2) | the owner resolved all four decisions 24 Nov 2026 (`docs/M4_MEMORY_DECISIONS.md`, Resolution); `189e3a7` wired the defaults (measured ranker in the persona/chat path, budgets chat 12/screen 6/goal 8/vision 0, screen-derived asks pull zero memory, fail-closed sensitive storage gate). WIRED SLICE 2: `src/memory-session.js` runs the v2 store contract (`src/memory-store.js`) as the product's in-session memory view; every memory operation (list, add, forget, suggest, decide, onboarding, chat ask path, screen ask) flows through it. The About-me file stays canonical with SINGLE-bullet writes (manual edits survive; the contract's toMarkdown is deliberately not used for persistence) and sync-on-demand stat freshness replaces the per-ask re-read with the same guarantee. Session-only sensitivity marks survive refreshes within a session; `persistSensitive()` stays fail-closed (`sensitive_storage_blocked`) and no product surface passes sensitive entries yet. STILL GATED: the on-disk format for sensitive marks (owner sub-decision) and a UI for the mark/persist interfaces |
-| M5 proactive / M6 voice / M7 screen understanding v2 / M8 integrations + workspace UI | SLICES LANDED, MILESTONES OPEN | M5 complete as specified (slices 1-4, scheduler + panel + settings + quiet-hours visibility). M6 slices 1-4 landed incl. wake milestone 2 (dynamic-name engine, platform gate, honest listener state; training pipeline, provenance `docs/WAKE_PROVENANCE.md`, reproducible eval `scripts/wake/repro_eval.py`); wake stays default-off pending physical mic validation on macOS/Windows/Linux/Android. M7 policy slice + observation-session machine landed; the capture engine stays unbuilt pending real permission flows and device testing. M8 slices 1-3 landed (integrations registry, Device Access Centre policy core, workspace-views groundwork); real connectors, further view schemas and floating-companion customization await the owner's picks |
+| M5 proactive / M6 voice / M7 screen understanding v2 / M8 integrations + workspace UI | SLICES LANDED, MILESTONES OPEN | M5 complete as specified (slices 1-4, scheduler + panel + settings + quiet-hours visibility). M6 slices 1-4 landed incl. wake milestone 2 (dynamic-name engine, platform gate, honest listener state; training pipeline, provenance `docs/WAKE_PROVENANCE.md`, reproducible eval `scripts/wake/repro_eval.py`); wake stays default-off pending physical mic validation on macOS/Windows/Linux/Android. M7 policy slice + observation-session machine landed; the capture engine stays unbuilt pending real permission flows and device testing. M8 slices 1-3 landed (integrations registry, Device Access Centre policy core, workspace-views groundwork); M8 slice 4 landed 26 Nov 2026 (the schemas-first wiring Ninad approved the same day, no connectors): six further view schemas wired in src/workspace-views.js, each mirroring one owning module's rows exactly and none touching a closed file (tasks <- agent-reminders, memory <- memory-session.items with sensitive-flagged rows skipped until M4 defines the workspace treatment, tools <- tool-registry.list, permissions <- device-access.list, activity <- audit-log entries incl. the append-allowlisted extras and chain fields, integrations <- integrations.js list); files, workflows and models have no owning row store yet and settings stays unwired because its owning module (settings.js) is in the m84 checkpoint-closed set; real connectors and floating-companion customization still await the owner's picks |
 
 Verified state: full `npm test` on 24 Nov 2026: 950/950 pass,
 selftest PASS (937/937 at `2ca99d4`, CI runs 45426721777, 45426721768;
@@ -781,6 +781,36 @@ Per Ninad's requirement that CompanionDesk offer broad device/app access rather 
   Ninad chooses: real connectors (each verified against official APIs
   before any capability claim), the workspace views, and companion
   move/resize/remember.
+
+
+### M8 slice 4: view schemas wired schemas-first (landed 26 Nov 2026)
+
+Per Ninad's approval of decision-sheet item 5 (26 Nov 2026: "M8
+schemas-first, no connectors until he names services"), six further view
+schemas are wired in `src/workspace-views.js`, each one mirroring exactly
+the rows of an owning module read this run and none of them touching any
+file in the closed/checkpoint set: tasks from agent-reminders reminder
+rows (id/title/dueAt/notes/createdAt/cancelled, the due stamp rendered as
+ISO), memory from memory-session.items() rows ({id, section, text}; a row
+carrying the session-only `sensitive` flag carries a field outside the
+schema and is skipped and counted until M4 defines the workspace
+treatment of sensitive marks), tools from tool-registry.list()
+definitions ({name, description, capability, schema, critical?}, so
+`optional` fields entered the shaper contract: absent is fine, present
+must still pass the schema's checks), permissions from device-access
+grant rows ({appId, capability, scopes, grantedAt}), activity from
+audit-log entries ({at, actor, action} plus the append-allowlisted
+extras tool/decision/reason/grantId/approvalId/detail and the chain
+fields seq/hash; an entry carrying any other payload key is skipped and
+counted), and integrations from integrations.js list() rows ({id, name,
+version, declaredScopes, connected, revoked, grantedScopes,
+consentedAt}). files, workflows and models stay unwired because no
+owning row store exists yet, and settings stays unwired because its
+owning module (settings.js) is in the m84 checkpoint-closed set.
+Conversations' line format is unchanged byte for byte. No connector, no
+customization, no renderer UI, no IPC. Verified by
+tests/workspace-views.test.js (17 tests, 11 new or updated); full suite
+1226/1226, selftest PASS, web build green.
 
 ### M8 slice 3: workspace-views groundwork (landed 24 Nov 2026)
 

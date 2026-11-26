@@ -1,16 +1,27 @@
 'use strict';
 
-// M8 slice 3: the pure workspace-views groundwork. CompanionDesk's workspace
-// surface (roadmap M8) is a set of fixed views; this module is the
-// decision-independent part: the view catalog itself and a fail-closed
-// record shaper a view can use to turn stored rows into bounded plain-text
-// lines. Pure data shaping only: no DOM, no IPC, no DB, no timers, no
-// network, and no require of any other app module.
+// M8 slice 3 (groundwork) + the schemas-first slice (approved by Ninad on
+// 26 Nov 2026): the pure workspace-views groundwork for CompanionDesk's
+// workspace surface (roadmap M8). The view catalog itself and a
+// fail-closed record shaper a view can use to turn stored rows into
+// bounded plain-text lines. Pure data shaping only: no DOM, no IPC, no
+// DB, no timers, no network, and no require of any other app module.
 //
 // The catalog is the eleven views the roadmap names, fixed and complete:
-// a view not in the catalog does not exist, and a view in the catalog whose
-// record schema is not wired yet refuses to shape anything (fail closed,
-// never a guess at someone else's record shape).
+// a view not in the catalog does not exist, and a view in the catalog
+// whose record schema is not wired yet refuses to shape anything (fail
+// closed, never a guess at someone else's record shape).
+//
+// Six schemas are wired, each mirroring one owning module's rows exactly
+// and none of them touching a closed file: conversations
+// (chat-history.listConversations), tasks (agent-reminders), memory
+// (memory-session.items, sensitive-flagged rows skipped until M4 defines
+// the workspace treatment), tools (tool-registry.list), permissions
+// (device-access.list), activity (audit-log entries), integrations
+// (integrations.js list). Four stay unwired: files, workflows and models
+// have no owning row store yet (no stable rows to mirror), and settings'
+// owning module (settings.js) is in the m84 checkpoint-closed set, so its
+// schema waits until Ninad reopens that module.
 //
 // Boundaries (all fail closed), mirroring schedules-view.js:
 //   - Display cap: at most MAX_DISPLAY (10) records per call. A caller may
@@ -18,7 +29,8 @@
 //   - Allowlisted fields only; a record carrying any other own enumerable
 //     key, a symbol key, an accessor property, or an exotic prototype is
 //     skipped, never displayed. Descriptors are inspected before any value
-//     is read.
+//     is read. A schema may name optional fields: absent is fine, present
+//     must still pass the schema's checks.
 //   - Records are never mutated; the output is fresh plain strings.
 //   - Malformed records are skipped and counted, never thrown on.
 
@@ -34,23 +46,30 @@
   // but its record schema is not wired yet; shaping refuses for it.
   const VIEWS = [
     { name: 'conversations', label: 'Conversations', wired: true },
-    { name: 'tasks', label: 'Tasks', wired: false },
-    { name: 'memory', label: 'Memory', wired: false },
-    { name: 'tools', label: 'Tools', wired: false },
+    { name: 'tasks', label: 'Tasks', wired: true },
+    { name: 'memory', label: 'Memory', wired: true },
+    { name: 'tools', label: 'Tools', wired: true },
     { name: 'files', label: 'Files', wired: false },
     { name: 'workflows', label: 'Workflows', wired: false },
     { name: 'settings', label: 'Settings', wired: false },
-    { name: 'permissions', label: 'Permissions', wired: false },
-    { name: 'activity', label: 'Activity', wired: false },
+    { name: 'permissions', label: 'Permissions', wired: true },
+    { name: 'activity', label: 'Activity', wired: true },
     { name: 'models', label: 'Models', wired: false },
-    { name: 'integrations', label: 'Integrations', wired: false },
+    { name: 'integrations', label: 'Integrations', wired: true },
   ];
   const NAMES = VIEWS.map(v => v.name);
 
-  // The one wired schema: rows exactly as src/chat-history.listConversations
-  // returns them (id, title, created_at, updated_at, message_count). Types
-  // are checked per field; anything else fails the record.
+  // Display helpers: clip an already-checked string to the title cap;
+  // stamp a safe epoch millisecond as ISO (always 24 chars, within
+  // MAX_STAMP).
+  const clip = (s) => (s.length > MAX_TITLE ? s.slice(0, MAX_TITLE) : s);
+  const stamp = (ms) => new Date(ms).toISOString();
+  const ISO_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$/;
+
   const SCHEMAS = {
+    // Rows exactly as src/chat-history.listConversations returns them
+    // (id, title, created_at, updated_at, message_count). Types are
+    // checked per field; anything else fails the record.
     conversations: {
       fields: ['id', 'title', 'created_at', 'updated_at', 'message_count'],
       check(r) {
@@ -60,6 +79,136 @@
         if (typeof r.updated_at !== 'string' || r.updated_at.length === 0 || r.updated_at.length > MAX_STAMP) return false;
         if (!Number.isSafeInteger(r.message_count) || r.message_count < 0) return false;
         return true;
+      },
+      line(r) {
+        const msgs = r.message_count === 1 ? '1 message' : `${r.message_count} messages`;
+        return `#${r.id} ${r.title} (${msgs}, updated ${r.updated_at})`;
+      },
+    },
+
+    // agent-reminders rows exactly: { id 'rem-NNNNNN', title (<=120),
+    // dueAt (safe integer epoch ms), notes (string <=500 or null),
+    // createdAt (safe integer), cancelled (boolean) }.
+    tasks: {
+      fields: ['id', 'title', 'dueAt', 'notes', 'createdAt', 'cancelled'],
+      check(r) {
+        if (typeof r.id !== 'string' || !/^rem-\d{6}$/.test(r.id)) return false;
+        if (typeof r.title !== 'string' || r.title.length === 0 || r.title.length > 120) return false;
+        if (!Number.isSafeInteger(r.dueAt) || r.dueAt <= 0) return false;
+        if (r.notes !== null && (typeof r.notes !== 'string' || r.notes.length > 500)) return false;
+        if (!Number.isSafeInteger(r.createdAt) || r.createdAt <= 0) return false;
+        if (typeof r.cancelled !== 'boolean') return false;
+        return true;
+      },
+      line(r) {
+        return `#${r.id} ${clip(r.title)} (due ${stamp(r.dueAt)}, ${r.cancelled ? 'cancelled' : 'active'})`;
+      },
+    },
+
+    // memory-session.items() rows exactly: { id 'm<N>', section, text
+    // (<=200, memory.js MAX_BULLET) }. A row carrying the session-only
+    // `sensitive` flag carries a field outside this schema, so it is
+    // skipped and counted (fail closed) until M4 defines the workspace
+    // treatment of sensitive marks.
+    memory: {
+      fields: ['id', 'section', 'text'],
+      check(r) {
+        if (typeof r.id !== 'string' || !/^m\d+$/.test(r.id)) return false;
+        if (typeof r.section !== 'string' || r.section.length === 0 || r.section.length > MAX_TITLE) return false;
+        if (typeof r.text !== 'string' || r.text.length === 0 || r.text.length > MAX_TITLE) return false;
+        return true;
+      },
+      line(r) { return `#${r.id} ${clip(r.section)}: ${clip(r.text)}`; },
+    },
+
+    // tool-registry.list() definitions exactly: { name (<=64),
+    // description (<=400, LIMITS.description), capability (string),
+    // schema (plain object), critical (optional boolean) }.
+    tools: {
+      fields: ['name', 'description', 'capability', 'schema'],
+      optional: ['critical'],
+      check(r) {
+        if (typeof r.name !== 'string' || r.name.length === 0 || r.name.length > 64) return false;
+        if (typeof r.description !== 'string' || r.description.length === 0 || r.description.length > 400) return false;
+        if (typeof r.capability !== 'string' || r.capability.length === 0 || r.capability.length > MAX_TITLE) return false;
+        if (r.schema === null || typeof r.schema !== 'object' || Array.isArray(r.schema)) return false;
+        const sproto = Object.getPrototypeOf(r.schema);
+        if (sproto !== Object.prototype && sproto !== null) return false;
+        if (r.critical !== undefined && typeof r.critical !== 'boolean') return false;
+        return true;
+      },
+      line(r) { return `${r.name} (${r.capability}${r.critical ? ', critical' : ''})`; },
+    },
+
+    // device-access.list() grant rows exactly: { appId, capability,
+    // scopes (non-empty string[]), grantedAt (safe integer epoch ms) }.
+    permissions: {
+      fields: ['appId', 'capability', 'scopes', 'grantedAt'],
+      check(r) {
+        if (typeof r.appId !== 'string' || r.appId.length === 0 || r.appId.length > MAX_TITLE) return false;
+        if (typeof r.capability !== 'string' || r.capability.length === 0 || r.capability.length > MAX_TITLE) return false;
+        if (!Array.isArray(r.scopes) || r.scopes.length === 0) return false;
+        for (const s of r.scopes) {
+          if (typeof s !== 'string' || s.length === 0 || s.length > MAX_TITLE) return false;
+        }
+        if (!Number.isSafeInteger(r.grantedAt) || r.grantedAt <= 0) return false;
+        return true;
+      },
+      line(r) {
+        return `${r.appId}: ${r.capability} (${r.scopes.length} scope${r.scopes.length === 1 ? '' : 's'})`;
+      },
+    },
+
+    // Audit-log entries exactly as audit.js append() stores them:
+    // { at, actor, action } plus the append-allowlisted extras (tool,
+    // decision, reason, grantId, approvalId, detail) and the chain
+    // fields (seq, hash; hash bounded 128, a hex digest is 64). An
+    // entry carrying any other payload key is skipped and counted:
+    // fail closed, never a guess at a future producer's shape.
+    activity: {
+      fields: ['at', 'actor', 'action'],
+      optional: ['tool', 'decision', 'reason', 'grantId', 'approvalId', 'detail', 'seq', 'hash'],
+      check(r) {
+        if (typeof r.at !== 'string' || !ISO_RE.test(r.at)) return false;
+        if (typeof r.actor !== 'string' || !['user', 'agent', 'system'].includes(r.actor)) return false;
+        if (typeof r.action !== 'string' || !/^[a-z][a-z0-9_.]{0,47}$/.test(r.action)) return false;
+        for (const k of ['tool', 'decision', 'reason', 'grantId', 'approvalId']) {
+          if (r[k] !== undefined && (typeof r[k] !== 'string' || r[k].length === 0 || r[k].length > MAX_TITLE)) return false;
+        }
+        if (r.detail !== undefined) {
+          if (r.detail === null || typeof r.detail !== 'object' || Array.isArray(r.detail)) return false;
+          const dproto = Object.getPrototypeOf(r.detail);
+          if (dproto !== Object.prototype && dproto !== null) return false;
+        }
+        if (r.seq !== undefined && (!Number.isSafeInteger(r.seq) || r.seq < 0)) return false;
+        if (r.hash !== undefined && (typeof r.hash !== 'string' || r.hash.length === 0 || r.hash.length > 128)) return false;
+        return true;
+      },
+      line(r) { return `${r.actor} ${r.action}${r.decision ? ' ' + r.decision : ''}`; },
+    },
+
+    // integrations.js list() rows exactly: { id, name (<=80), version
+    // (semver), declaredScopes (string[]), connected, revoked,
+    // grantedScopes (string[]), consentedAt (safe integer or null) }.
+    integrations: {
+      fields: ['id', 'name', 'version', 'declaredScopes', 'connected', 'revoked', 'grantedScopes', 'consentedAt'],
+      check(r) {
+        if (typeof r.id !== 'string' || r.id.length === 0 || r.id.length > MAX_TITLE) return false;
+        if (typeof r.name !== 'string' || r.name.length === 0 || r.name.length > 80) return false;
+        if (typeof r.version !== 'string' || !/^\d+\.\d+\.\d+$/.test(r.version)) return false;
+        for (const k of ['declaredScopes', 'grantedScopes']) {
+          if (!Array.isArray(r[k])) return false;
+          for (const s of r[k]) {
+            if (typeof s !== 'string' || s.length === 0 || s.length > MAX_TITLE) return false;
+          }
+        }
+        if (typeof r.connected !== 'boolean' || typeof r.revoked !== 'boolean') return false;
+        if (r.consentedAt !== null && (!Number.isSafeInteger(r.consentedAt) || r.consentedAt <= 0)) return false;
+        return true;
+      },
+      line(r) {
+        const state = r.revoked ? 'revoked' : r.connected ? 'connected' : 'registered';
+        return `${r.id} ${clip(r.name)} ${r.version} (${state})`;
       },
     },
   };
@@ -86,9 +235,10 @@
     const proto = Object.getPrototypeOf(r);
     if (proto !== Object.prototype && proto !== null) return false;
     if (Object.getOwnPropertySymbols(r).length > 0) return false;
+    const optional = schema.optional || [];
     const keys = Object.keys(r);
     for (const k of keys) {
-      if (!schema.fields.includes(k)) return false;
+      if (!schema.fields.includes(k) && !optional.includes(k)) return false;
       const d = Object.getOwnPropertyDescriptor(r, k);
       if (!d || !('value' in d) || d.get || d.set) return false;
     }
@@ -116,8 +266,7 @@
     for (const r of records) {
       if (!accept(r, schema)) { skipped += 1; continue; }
       if (lines.length >= limit) { skipped += 1; continue; }
-      const msgs = r.message_count === 1 ? '1 message' : `${r.message_count} messages`;
-      lines.push(`#${r.id} ${r.title} (${msgs}, updated ${r.updated_at})`);
+      lines.push(schema.line(r));
     }
     return { ok: true, view: name, lines, shown: lines.length, skipped, total: records.length };
   }
