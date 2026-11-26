@@ -1,0 +1,103 @@
+# CompanionDesk physical-device validation checklist
+
+Owner: Ninad Hirani. Prepared by Fo, 26 Nov 2026 (docs-only, no code changed).
+Devices: MacBook Air M1 (macOS, 8 GB) and OnePlus 12R (Android).
+
+Purpose: a precise manual pass that turns the shipped M4/M5/M6/M8 features
+from "unit-tested, never seen on hardware" into "verified on device". Every
+item below maps to a landed, roadmap-documented behavior; nothing here opens
+a closed lane. Wake-word validation is excluded per the owner's standing
+closure, the floating-companion toggle (m84) is already verified and is not
+re-tested, and the capture engine does not exist yet, so there is nothing to
+validate there.
+
+Ground rules:
+
+- Record pass/fail per item with the app commit (`git log -1` at test time)
+  and the OS version, then send the results back to Fo.
+- Nothing here needs a network connection or an account.
+- If an item cannot be reached in the build you have, record "unreachable"
+  with what the UI showed. That is a result, not a failed pass.
+
+## A. macOS (MacBook Air M1)
+
+1. Launch. The app opens to a usable window, no crash. Nothing requests an
+   OS permission at launch (Device Access rule: no startup blanket
+   permission prompts).
+2. Chat core. Send a normal message. The answer streams progressively and
+   completes without a truncated tail (regression target: the m85
+   tail-buffer fix).
+3. Voice defaults. Voice/mic features are off until you enable them, and no
+   mic indicator exists before that.
+4. Mic permission flow. Enabling voice triggers the OS microphone prompt at
+   the moment of use, not before; grant it. While listening, a visible
+   indicator shows the honest listener state.
+5. Mic race guard. Rapidly start/stop the mic several times, and press
+   Escape while a mic start is still in flight. Each session cancels
+   cleanly, the indicator clears, nothing stays stuck, and the next start
+   works first try.
+6. Spoken replies. Trigger a reply with speech output on. Audio plays using
+   the OS voice (macOS speechSynthesis). The app bundles no TTS engine
+   (26 Nov decision: OS-native only, piper deferred and unbundled).
+7. Proactive scheduler. Create a reminder in About > Proactive reminders /
+   the schedules panel. With delivery off (the default) nothing notifies,
+   and the panel says so in plain language.
+8. Delivery and quiet hours. Turn delivery on. Create a schedule due inside
+   the quiet-hours window (default 22:00-08:00). Confirm it is not dropped:
+   it notifies when the window ends, and the panel states that contract.
+   Confirm a due schedule fires exactly once, with no duplicate
+   notifications.
+9. Per-scope controls. Toggle the reminder and deadline scope switches off
+   and on; the panel's per-scope state lines match what settings say.
+10. Editing schedules. Edit an active schedule's title and due time in the
+    panel; the change saves, and the scope field stays fixed while editing.
+11. Memory view. Add a memory, see it listed, forget it, confirm the list
+    updates. The view reflects in-session state.
+12. Sensitive marks are session-only. In-session, mark an entry sensitive
+    and refresh the view: the mark survives within the session. Quit and
+    relaunch: the sensitive content is not on disk (session-only, no
+    on-disk format). Attempting to persist sensitive content is refused,
+    never silently saved.
+13. Workspace views. Open each wired view: tasks, memory, tools,
+    permissions, activity, integrations. Each renders rows from its owning
+    module; integrations shows an honest empty registry (no placeholder
+    connectors).
+14. Device Access Centre. In the permissions view, enable one non-sensitive
+    capability, grant it, then revoke it. Revocation takes effect
+    immediately and an audit entry appears in the activity view.
+15. Window resize. Resize across narrow and wide; the layout adapts, and
+    nothing clips or overlaps.
+
+Optional, same session (Gate 1 groundwork): the roadmap's Gate 1 device
+benchmarking wants local-model numbers measured on this exact machine. If
+you want that unlocked, run `npm run test:benchmark` while you are set up
+and keep the output.
+
+## B. Android (OnePlus 12R)
+
+Get the APK from the repo's Android CI artifact for the same main commit.
+
+1. Install and launch; core chat works; streamed answers complete without
+   truncation.
+2. Settings render; voice stays off until enabled; record exactly what the
+   Android build offers for mic and speech. Feature parity on Android is a
+   finding either way.
+3. Rotate and resize; no clipped layout.
+4. Memory and workspace views render, or degrade honestly if a surface is
+   desktop-only; record what ships.
+5. No background mic or capture without explicit enablement and a visible
+   indicator; no OS permission requested at launch.
+
+## What this unlocks
+
+- Honest "verified on device" claims for every item above. Until then, such
+  claims stay out of docs and READMEs.
+- Mic-validation data recorded per platform (the wake-word lane itself
+  stays closed regardless of this checklist).
+- Direct input for the M9 release-readiness phase once defined.
+
+## The single missing input
+
+Nothing in the repo, CI, or the build environment blocks this gate. The one
+missing input is physical: the owner running this checklist on the two
+devices (about 30-60 minutes) and sending the results back.
