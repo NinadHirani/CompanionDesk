@@ -156,3 +156,28 @@ test('voice status reports why it is unavailable', () => {
   assert.deepEqual(voice.status({ find: () => ({ available: false, reason: 'no_model' }) }), { ok: true, available: false, reason: 'no_model' });
   assert.deepEqual(voice.status({ find: () => ({ available: true, bin: 'b', model: 'm' }) }), { ok: true, available: true });
 });
+
+test('voice service: a second overlapping transcription is refused until the first settles', async () => {
+  let release;
+  let hang = true;
+  const run = ({ onSpawn }) => new Promise((resolve) => {
+    if (hang) { hang = false; release = resolve; if (onSpawn) onSpawn({ kill: () => {} }); }
+    else resolve('quick answer');
+  });
+  const deps = { find: () => ({ available: true, bin: 'b', model: 'm' }), run };
+  const rec = concat(silence(1000), tone(800), silence(1000));
+  const first = voice.transcribe({ pcm: bytes(rec) }, deps);
+  await new Promise((r) => setImmediate(r));
+  assert.deepEqual(await voice.transcribe({ pcm: bytes(rec) }, deps), { ok: false, error: 'already_active' }, 'the second overlapping ask is refused');
+  release('second try');
+  assert.deepEqual(await first, { ok: true, text: 'second try' });
+  assert.deepEqual(await voice.transcribe({ pcm: bytes(rec) }, deps), { ok: true, text: 'quick answer' }, 'the next ask proceeds once the slot frees');
+});
+
+test('voice service: a cancel before the binary spawns still maps to cancelled', async () => {
+  const deps = { find: () => ({ available: true, bin: 'b', model: 'm' }), run: async () => 'late text' };
+  const pending = voice.transcribe({ pcm: bytes(concat(tone(600), silence(300), tone(600))) }, deps);
+  assert.deepEqual(voice.cancelActiveRun(), { ok: true });
+  assert.deepEqual(await pending, { ok: false, error: 'cancelled' });
+  assert.deepEqual(voice.cancelActiveRun(), { ok: false, reason: 'nothing_active' }, 'the slot is freed after completion');
+});

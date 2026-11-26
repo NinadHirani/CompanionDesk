@@ -59,10 +59,19 @@ async function transcribe(payload, { modelsDir, preferredModel, find = whisper.f
   const trimmed = trimSilence(samples, SAMPLE_RATE);
 
   let cancelled = false;
+  // Enforce the at-most-one claim: refuse a second overlapping transcription
+  // (the overlay or a double-fired ask) instead of letting a second whisper
+  // process run and clobber the cancel slot. The claim is synchronous, so two
+  // calls in the same tick cannot both pass, and it is held from here until
+  // the finally below. A cancel that lands before the binary has spawned is
+  // honored at completion: the result is discarded as cancelled.
+  if (active) return { ok: false, error: 'already_active' };
+  active = { cancel: () => { cancelled = true; } };
   try {
     const text = await run({ pcm: Buffer.from(trimmed.buffer, trimmed.byteOffset, trimmed.byteLength), bin: w.bin, model: w.model, language: lang, onSpawn: (child) => {
-      active = { cancel: () => { cancelled = true; child.kill(); } };
+      active.cancel = () => { cancelled = true; child.kill(); };
     } });
+    if (cancelled) return { ok: false, error: 'cancelled' };
     return text ? { ok: true, text } : { ok: false, error: 'no_speech' };
   } catch {
     return { ok: false, error: cancelled ? 'cancelled' : 'transcribe_failed' };
