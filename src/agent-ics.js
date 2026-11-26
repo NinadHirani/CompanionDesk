@@ -73,7 +73,7 @@
       .replace(/\\/g, '\\\\')
       .replace(/;/g, '\\;')
       .replace(/,/g, '\\,')
-      .replace(/\r?\n/g, '\\n');
+      .replace(/\r\n?|\n/g, '\\n');
     return fold(name + ':' + escaped);
   }
 
@@ -122,6 +122,10 @@
         } else {
           return { ok: false, reason: 'end_or_duration_required' };
         }
+        // A duration may overflow past year 9999, where toISOString falls
+        // back to the extended year form (+010000-...), which is not a valid
+        // RFC 5545 DATE-TIME (26 Nov 2026 hardening).
+        if (!ISO_UTC_RE.test(endValue)) return { ok: false, reason: 'end_out_of_range' };
         if (description !== undefined && (typeof description !== 'string' || description.length > MAX_DESCRIPTION)) return { ok: false, reason: 'description_invalid' };
         if (location !== undefined && (typeof location !== 'string' || location.length > MAX_LOCATION)) return { ok: false, reason: 'location_invalid' };
 

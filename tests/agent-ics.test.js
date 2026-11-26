@@ -135,3 +135,33 @@ test('emoji-heavy summaries fold at exact UTF-8 octets and unfold intact', () =>
   const unfolded = r.ics.replace(/\r\n /g, '');
   assert.ok(unfolded.includes('SUMMARY:' + emojis), 'no emoji lost or split at a fold boundary');
 });
+
+// REGRESSION (26 Nov 2026), two narrow defects, both red-first:
+// 1) textLine escaped \r\n and \n but left a bare \r in the value, so a
+//    summary carrying a lone carriage return put a raw CR outside the CRLF
+//    line delimiters; lenient parsers treat it as a line ending, which lets
+//    hostile summary text introduce structure into the generated file.
+// 2) the durationMinutes path could overflow past year 9999: start
+//    9999-12-31T23:00:00Z + 1440 minutes produced a DTEND in the extended
+//    year form (+010000-...), which is not a valid RFC 5545 DATE-TIME. The
+//    explicit-end path already refuses a 5-digit year; the duration path
+//    must refuse the same way.
+test('a lone carriage return is escaped like any other newline', () => {
+  const r = gen().generateEvent({ summary: 'line one\rlone CR here', start: '2026-12-01T10:00:00Z', durationMinutes: 30 });
+  assert.equal(r.ok, true);
+  // every CR in the output is part of a CRLF line delimiter
+  assert.doesNotMatch(r.ics, /(^|[^\n])\r(?!\n)/);
+  const unfolded = r.ics.replace(/\r\n /g, '');
+  assert.ok(unfolded.includes('SUMMARY:line one\\nlone CR here'), 'the bare CR became an escaped newline');
+});
+
+test('a duration that overflows past year 9999 is refused', () => {
+  const r = gen().generateEvent({ summary: 'far future boundary', start: '9999-12-31T23:00:00Z', durationMinutes: 1440 });
+  assert.equal(r.ok, false);
+  assert.equal(r.reason, 'end_out_of_range');
+  // a duration that stays inside the calendar is untouched
+  const ok = gen().generateEvent({ summary: 'still inside', start: '9999-12-31T10:00:00Z', durationMinutes: 600 });
+  assert.equal(ok.ok, true);
+  const unfolded = ok.ics.replace(/\r\n /g, '');
+  assert.ok(unfolded.includes('DTEND:9999-12-31T20:00:00Z'), 'end stays a 4-digit UTC date-time');
+});
