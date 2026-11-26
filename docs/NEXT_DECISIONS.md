@@ -48,6 +48,8 @@ the lifecycle, still nothing activated without his choice).
 
 ## 3. Workspace renderer UI -- RESOLVED (26 Nov 2026 late evening)
 
+Settings-view wiring, owner hard stop (27 Nov 2026, 00:27 IST): Ninad ruled the settings view stays UNWIRED. Do not reopen settings.js (m84 checkpoint-closed) and do not create a new settings row-store category without owner approval. This closes the last renderer-wiring candidate; the five row-store views (files, databases, appdata, workflows, models) remain the complete wired set, exactly as the c94dbb4 slice shipped them.
+
 Ninad approved (a) FULL: implement the Workspace UI end to end --
 functional interactions, responsive layouts, settings, wiring to the
 existing architecture -- with the scoped renderer paths (overlay.js,
