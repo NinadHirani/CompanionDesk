@@ -403,7 +403,12 @@ test('static guards: the driver stays pure, main wires it without registering to
   const mainSrc = fs.readFileSync('src/main.js', 'utf8');
   assert.equal(mainSrc.includes('createRunDriver('), true, 'main constructs the driver');
   assert.equal(mainSrc.includes('reconcileInterruptedRuns()'), true, 'main reconciles interrupted runs at startup');
-  assert.equal(mainSrc.includes('.define('), false, 'main registers no tools: the shipped registry stays empty');
+  // Gate 2 enable step (26 Nov 2026, approved by Ninad): main registers
+  // EXACTLY ONE tool, the scheduling gate's definition, nothing else.
+  const mainDefines = mainSrc.split('.define(').length - 1;
+  assert.equal(mainDefines, 1, 'exactly one registration literal, got ' + mainDefines);
+  assert.ok(mainSrc.includes('agentRegistry.define(SCHEDULING_TOOL_DEFINITION)'), 'the enable registers the scheduling gate definition');
+  assert.equal(strip(mainSrc).includes('requestRun('), false, 'no executable call site of requestRun in main');
   const preloadSrc = fs.readFileSync('src/preload.js', 'utf8');
   assert.equal(preloadSrc.includes('run-driver'), false);
   const rendererFiles = ['renderer/app.js', 'renderer/index.html'].filter((f) => fs.existsSync(f));

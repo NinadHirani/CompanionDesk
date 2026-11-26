@@ -60,6 +60,7 @@ const { createNotificationsDisplayStore } = require('./agent-notifications-displ
 const { createDisplayDelivery } = require('./agent-display-delivery');
 const { createRunDriver } = require('./agent-run-driver');
 const { createRunEntry } = require('./agent-run-entry');
+const { SCHEDULING_TOOL_DEFINITION } = require('./agent-tool-scheduling');
 const { createReminderBook } = require('./agent-reminders');
 const { createAgentSurface } = require('./agent-surface');
 const { createSchedulerSurface } = require('./scheduler-surface');
@@ -239,6 +240,14 @@ async function init() {
       // persistence FIRST, then the orchestrator wired to the persistence
       // layer's durable audit wrapper (never the raw audit log).
       const stack = createAgentStack({ db: agentDb, clock: () => Date.now() });
+      // Gate 2 enable step (approved by Ninad on 26 Nov 2026): the
+      // production registry carries EXACTLY ONE tool, the scheduling
+      // gate's definition (capability sensitive). Registration alone lets
+      // no run start: requestRun still has no caller in this build, tools
+      // execute only inside driver-driven runs, and the sensitive class
+      // means a fresh one-time approval is required for every call - a
+      // standing grant can never authorize it.
+      agentRegistry.define(SCHEDULING_TOOL_DEFINITION);
       agentRegistry = stack.registry;
       agentApprovals = stack.approvals;
       agentStop = stack.emergencyStop;
@@ -249,8 +258,9 @@ async function init() {
       // Gate 2 3j.9 Stage A: the run driver is constructed and ready but
       // nothing in this build calls it (decision D1: runs come only from
       // explicit user-initiated plans, whose entry point is a later gate).
-      // The registry stays EMPTY (nothing registers tools), so no step can
-      // execute even if a run were started.
+      // The registry carries exactly one registered tool (the scheduling
+      // gate's definition, enabled 26 Nov 2026); nothing in this build
+      // starts a run, so no step can execute.
       agentRunDriver = createRunDriver({
         orchestrator: stack.orchestrator,
         persistence: stack.persistence,
@@ -264,9 +274,7 @@ async function init() {
       // the named schedule, then writes the durable user-intent entry
       // BEFORE driver.run() and always passes kind 'user' (the 'scheduled'
       // kind stays refused: D-S2 is a separate, unapproved gate).
-      // Nothing in this build calls requestRun: the scheduling gate's tool
-      // stays unregistered (no scheduling-gate schedule can exist yet) and
-      // the registry stays EMPTY, so no run can start.
+      // Nothing in this build calls requestRun, so no run can start.
       agentRunEntry = createRunEntry({
         driver: agentRunDriver,
         book: stack.schedules,

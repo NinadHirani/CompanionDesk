@@ -7,9 +7,11 @@
 // approval and a standing grant can never authorize it; it is creation
 // only over the EXISTING M5 schedule book by dependency injection,
 // reminder scope only, 365-day horizon, exact-duplicate refusal. Nothing
-// here registers anything: the production registry stays empty (pinned
-// below and by src/main.js), the run driver's 'scheduled' kind stays
-// refused (D-S2 deferred). Stage-A D1 was decided 25 Nov 2026 (option a):
+// The tool is registered into the production registry only by the
+// separately-approved enable step (26 Nov 2026, EXACTLY ONE registered
+// tool, pinned by src/main.js and gate2-scheduling-enable.test.js), and
+// the run driver's 'scheduled' kind stays refused (D-S2 deferred).
+// Stage-A D1 was decided 25 Nov 2026 (option a):
 // the run entry point (src/agent-run-entry.js) is the only path into
 // driver.run() and it accepts only scheduling-gate-originated requests.
 
