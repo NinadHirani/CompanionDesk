@@ -66,6 +66,15 @@ mirrors the schedule_create enable step (guardrails tested); any scoped
 root starts unset by default. Implemented as the file-access policy core
 plus its Gate 2 enable step.
 
+Follow-on (26 Nov 2026 night, f239a93): the EXECUTION slice landed the same
+evening under this approval - real filesystem operations run through the
+policy core (injected io adapter, main.js wires the fs-backed one), the
+executor probes real existence before refusing a write as an overwrite,
+OS errors surface verbatim, and file_access is now the registry's second
+tool with the two-registration-literal guardrail. Nothing auto-runs:
+requestRun still has no caller and the sensitive class still demands a
+fresh one-time approval per call.
+
 ## 5. M7 capture engine (deferred item 4)
 
 Decision: (a) green-light now (it brings the real permission flows and
