@@ -107,3 +107,5 @@ src/workspace-views.js wire once the stores exist.
 Not on this sheet: the wake-word lane stays closed per the owner's standing
 closure; reopening it is always the owner's call and no question about it is
 asked here.
+
+Follow-on to the Gate 8 row-store decision (26 Nov 2026 night, c923013): Ninad confirmed Gate 8 A covered local databases and structured app data, so the two remaining categories landed as bounded row stores (databases prefix db, appdata prefix ad) with view adapters in workspace-views.js, same EMPTY/no-auto-exposure contract. Renderer wiring for these two views stays a later lane (wired false today). Still owner-gated: renderer wiring of the row-store views, and any persistence design for the stores (not clearly covered by Gate 8 A; M2/M4 sensitive persistence and the canonical markdown format stay untouched).
