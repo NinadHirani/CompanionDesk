@@ -23,12 +23,23 @@
   // such a value can therefore never execute a getter, never see a hidden
   // or symbol-keyed property, and never collapse two different structures
   // (a sparse array and its dense counterpart are distinct values).
-  function plainDataProblem(value) {
+  // Recursion is bounded two ways so this function always terminates with a
+  // reason instead of overflowing the stack: ancestors tracks the current
+  // path (a value reached again through itself is circular) and depth caps
+  // path length. A shared-but-acyclic reference (a DAG) is legal and still
+  // digests: ancestors tracks only the current path.
+  const MAX_DEPTH = 256;
+
+  function plainDataProblem(value, ancestors, depth) {
+    if (ancestors === undefined) ancestors = new Set();
+    if (depth === undefined) depth = 0;
     if (value === null) return null;
     const t = typeof value;
     if (t === 'string' || t === 'boolean') return null;
     if (t === 'number') return Number.isFinite(value) ? null : 'non_finite_number';
     if (Array.isArray(value)) {
+      if (ancestors.has(value)) return 'circular';
+      if (depth >= MAX_DEPTH) return 'too_deep';
       const keys = Object.keys(value);
       if (keys.length !== value.length) return 'sparse_or_extra_array_keys';
       for (let i = 0; i < value.length; i++) {
@@ -37,22 +48,28 @@
         if (d.get !== undefined || d.set !== undefined) return 'accessor_property';
       }
       if (Object.getOwnPropertySymbols(value).length > 0) return 'symbol_key';
+      ancestors.add(value);
       for (const e of value) {
-        const p = plainDataProblem(e);
-        if (p) return p;
+        const p = plainDataProblem(e, ancestors, depth + 1);
+        if (p) { ancestors.delete(value); return p; }
       }
+      ancestors.delete(value);
       return null;
     }
     if (t !== 'object') return 'unsupported_type';
     const proto = Object.getPrototypeOf(value);
     if (proto !== Object.prototype && proto !== null) return 'not_plain_object';
+    if (ancestors.has(value)) return 'circular';
+    if (depth >= MAX_DEPTH) return 'too_deep';
     const ownNames = Object.getOwnPropertyNames(value);
     if (ownNames.length !== Object.keys(value).length) return 'non_enumerable_property';
     if (Object.getOwnPropertySymbols(value).length > 0) return 'symbol_key';
     for (const k of ownNames) {
       const d = Object.getOwnPropertyDescriptor(value, k);
       if (d.get !== undefined || d.set !== undefined) return 'accessor_property';
-      const p = plainDataProblem(value[k]);
+      ancestors.add(value);
+      const p = plainDataProblem(value[k], ancestors, depth + 1);
+      ancestors.delete(value);
       if (p) return p;
     }
     return null;

@@ -7,7 +7,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert');
-const { canonicalJson, sha256Hex } = require('../src/digest');
+const { canonicalJson, sha256Hex, plainDataProblem } = require('../src/digest');
 const { CAPABILITIES, createRegistry, isCriticalName } = require('../src/tool-registry');
 const { createApprovalDesk, argsDigest } = require('../src/approval');
 const { createPolicyEngine } = require('../src/policy-engine');
@@ -686,4 +686,36 @@ test('verify and consume refuse non-plain args instead of throwing', () => {
   // the ordinary path is untouched: matching plain args still verify and consume
   const ok = approvals.consume(a.id, { tool: 'payments.charge', args });
   assert.equal(ok.ok, true);
+});
+
+test('circular and over-deep arguments are refused with a reason, never a stack overflow', () => {
+  const self = {}; self.self = self;
+  assert.equal(plainDataProblem(self), 'circular');
+  assert.throws(() => canonicalJson(self), /circular/);
+  const a = {}, b = {}; a.b = b; b.a = a;
+  assert.equal(plainDataProblem(a), 'circular');
+  const arr = []; arr.push(arr);
+  assert.equal(plainDataProblem(arr), 'circular');
+  let deep = []; let cur = deep;
+  for (let i = 0; i < 100000; i++) { const n = []; cur.push(n); cur = n; }
+  assert.equal(plainDataProblem(deep), 'too_deep');
+  let ok = []; cur = ok;
+  for (let i = 0; i < 200; i++) { const n = []; cur.push(n); cur = n; }
+  assert.equal(plainDataProblem(ok), null);
+  assert.ok(canonicalJson(ok).length > 0);
+  const shared = { v: 1 };
+  assert.equal(plainDataProblem({ a: shared, b: shared }), null);
+});
+
+test('circular approval args are refused by request and verify, never a crash', () => {
+  const clock = () => 1700000000000;
+  const desk = createApprovalDesk({ clock, randomHex: (n) => 'c'.repeat(n * 2) });
+  const self = {}; self.self = self;
+  const req = desk.request({ tool: 'fs.write', args: self });
+  assert.equal(req.ok, false);
+  assert.equal(req.reason, 'approval_args_not_plain_data');
+  const good = desk.request({ tool: 'fs.write', args: { path: 'x' } });
+  assert.equal(good.ok, true);
+  assert.equal(desk.verify(good.approval.id, { tool: 'fs.write', args: self }).reason, 'approval_args_not_plain_data');
+  assert.equal(desk.verify(good.approval.id, { tool: 'fs.write', args: { path: 'x' } }).ok, true);
 });
