@@ -112,6 +112,8 @@
         connEl.appendChild(line('workspace: no connectors in the catalog'));
         return;
       }
+      const connectedCount = list.filter((e) => e && e.state === 'connected').length;
+      connEl.appendChild(line('connector catalog: ' + list.length + ' shipped, ' + connectedCount + ' connected; connecting is always your explicit pick per connector'));
       for (const e of list) {
         if (!e || typeof e !== 'object') continue;
         connEl.appendChild(line((e.name || e.id) + ' - ' + (e.state || 'discovered') + ' - ' + (e.costNote || '') + ' - ' + (e.limits || '')));

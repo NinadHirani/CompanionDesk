@@ -209,6 +209,22 @@ test('connectors render with cost and limits visible and nothing connects on loa
   } finally { uninstallDom(); }
 });
 
+test('the connector wait state states the activation rule up front: explicit pick, counts shown', async () => {
+  installDom();
+  try {
+    const connectors = [
+      { id: 'rss', name: 'RSS feeds', state: 'discovered', costNote: 'Free; RSS feeds are open by design', limits: 'Bound by each feed publisher', scopes: [{ name: 'feed.read', class: 'read_only' }] },
+      { id: 'github', name: 'GitHub', state: 'connected', costNote: 'Free for public repos', limits: '5,000 REST requests per hour on the free tier', scopes: [{ name: 'repos.read', class: 'read_only' }] },
+    ];
+    const bridge = bridgeStub({ rows: () => [], connectors });
+    const P = await loadPanel();
+    P.mount({ api: bridge, initialView: 'conversations' });
+    const box = global.document.getElementById('ws-connectors');
+    assert.ok(await until(() => box.children[0] && /connector catalog: 2 shipped, 1 connected/.test(box.children[0].textContent)));
+    assert.ok(/explicit pick per connector/.test(box.children[0].textContent));
+  } finally { uninstallDom(); }
+});
+
 test('connecting is an explicit click that passes the entry scopes and surfaces a refusal verbatim', async () => {
   installDom();
   try {
