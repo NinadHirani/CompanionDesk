@@ -25,3 +25,24 @@ test('about view: the wake controls block is not nested inside the save handler'
   const initCall = '  if (F.wakeStatus) refreshWakeStatus();\n\n  // ---- provider status';
   assert.ok(src.includes(initCall), 'the wake status loads at module init, not on Save');
 });
+
+// M8 customization: the companion float toggle. It must live in the Quick
+// overlay card, be wired at module top level (the m76 lesson), save the
+// settings key, revert on a refused save, and stay hidden on the web build
+// where no companion window exists.
+const html = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'index.html'), 'utf8');
+
+test('about view: the float toggle exists in the Quick overlay card', () => {
+  assert.ok(html.includes('id="ov-always-top"'), 'the checkbox exists');
+  const card = html.slice(html.indexOf('Quick overlay'), html.indexOf('ov-msg'));
+  assert.ok(card.includes('ov-always-top'), 'the checkbox sits inside the Quick overlay card');
+  assert.ok(card.includes('Keep the companion above other windows'), 'the label says what it does');
+});
+
+test('about view: the float toggle is wired at module level, saves the key, reverts on refusal, hides on web', () => {
+  assert.ok(src.includes("getElementById('ov-always-top')"), 'about.js wires the checkbox');
+  assert.ok(src.includes('companion_always_on_top: ovTop.checked'), 'the change saves the settings key');
+  assert.ok(src.includes("bridgeMode === 'web'") && src.includes("ovTop.closest('label').hidden = true"), 'the web build hides the control');
+  assert.ok(src.includes('ovTop.checked = !ovTop.checked'), 'a refused save reverts the checkbox instead of lying');
+  assert.ok(src.includes('set.settings.companion_always_on_top !== false'), 'refresh() fills the checkbox from stored settings');
+});

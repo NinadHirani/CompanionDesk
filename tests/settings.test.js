@@ -102,3 +102,25 @@ test('wake word settings: wake_enabled boolean, wake_threshold bounded numeric',
   assert.strictEqual(validatePatch({ wake_threshold: '0.5' }).ok, false); // number type required
   assert.strictEqual(validatePatch({ wake_enabled: 'yes' }).ok, false);
 });
+
+// M8 customization: the companion window float. always-on-top is ON by
+// default (today's behavior), the user can turn it off from About, and the
+// stored value is a strict boolean like every other gate: a malformed
+// stored value fails closed to the default instead of being trusted.
+test('companion_always_on_top: boolean gate, floats by default', () => {
+  const { DEFAULTS, normalizeSettings, validatePatch } = require('../src/settings');
+  assert.strictEqual(DEFAULTS.companion_always_on_top, true);
+  assert.strictEqual(normalizeSettings({}).companion_always_on_top, true);
+  assert.strictEqual(normalizeSettings({ companion_always_on_top: 'false' }).companion_always_on_top, false);
+  assert.strictEqual(normalizeSettings({ companion_always_on_top: 'true' }).companion_always_on_top, true);
+  for (const bad of ['yes', 1, null, undefined]) {
+    const b = normalizeSettings({ companion_always_on_top: bad });
+    assert.strictEqual(b.companion_always_on_top, true, String(bad));
+  }
+  const p = validatePatch({ companion_always_on_top: false });
+  assert.strictEqual(p.ok, true);
+  assert.strictEqual(p.clean.companion_always_on_top, 'false');
+  assert.strictEqual(validatePatch({ companion_always_on_top: true }).clean.companion_always_on_top, 'true');
+  assert.strictEqual(validatePatch({ companion_always_on_top: 'yes' }).ok, false);
+  assert.strictEqual(validatePatch({ companion_always_on_top: 1 }).ok, false);
+});

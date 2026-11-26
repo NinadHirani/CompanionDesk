@@ -493,6 +493,32 @@
     if (!res.ok) { ovMsg.textContent = UI.friendlyError(res.error); ovMsg.className = 'hint error'; }
   });
 
+  // M8 customization: the companion window floats above other windows by
+  // default; this is the off switch. Registered at module top level (the
+  // m76 lesson), the web/Android build hides it because no companion window
+  // exists there, and a refused save reverts the checkbox so the UI never
+  // claims a state that is not stored.
+  const ovTop = document.getElementById('ov-always-top');
+  if (ovTop) {
+    if (api.bridgeMode === 'web') {
+      ovTop.closest('label').hidden = true;
+    } else {
+      ovTop.addEventListener('change', async () => {
+        const res = await api.settings_save({ companion_always_on_top: ovTop.checked });
+        if (res.ok) {
+          ovMsg.textContent = ovTop.checked
+            ? 'Saved. The companion floats above other windows.'
+            : 'Saved. The companion no longer floats above other windows.';
+          ovMsg.className = 'hint';
+        } else {
+          ovTop.checked = !ovTop.checked;
+          ovMsg.textContent = UI.friendlyError(res.error);
+          ovMsg.className = 'hint error';
+        }
+      });
+    }
+  }
+
   // ---- setup check ---------------------------------------------------------------
   const STATUS_TEXT = { ok: 'Ready', needed: 'Needed', optional: 'Optional' };
 
@@ -567,6 +593,7 @@
     if (mem.ok) { renderItems(mem); renderProposals(mem.proposals); }
     if (pat.ok) renderPatterns(pat);
     if (set.ok) { fillSettings(set.settings); fillModels(set.settings); fillHardware(); }
+    if (set.ok && ovTop && api.bridgeMode !== 'web') ovTop.checked = set.settings.companion_always_on_top !== false;
     fillProviderStatus();
     await fillCloud();
   }

@@ -14,7 +14,7 @@ const { restoreBounds, captureBounds } = require('./companion-window-state');
 
 const SAVE_DEBOUNCE_MS = 250;
 
-function createOverlayController({ preloadPath, htmlPath, iconPath, loadSavedBounds, saveBounds }) {
+function createOverlayController({ preloadPath, htmlPath, iconPath, loadSavedBounds, saveBounds, alwaysOnTop }) {
   let win = null;
   let registered = null; // the accelerator currently held, or null
   // remembered: a saved placement or a user move/resize is in charge of the
@@ -23,6 +23,11 @@ function createOverlayController({ preloadPath, htmlPath, iconPath, loadSavedBou
   // user who never drags the companion.
   let remembered = false;
   let placing = false; // a programmatic setBounds is in flight, not a user move
+  // M8 customization: the companion floats above other windows by default
+  // (today's behavior); the About toggle can turn the float off. True means
+  // today's always-on-top companion, unchanged for anyone who never touches
+  // the toggle.
+  let floatOn = alwaysOnTop !== false;
   let saveTimer = null;
 
   function boundsWorkAreas() {
@@ -63,7 +68,7 @@ function createOverlayController({ preloadPath, htmlPath, iconPath, loadSavedBou
       maximizable: false,
       fullscreenable: false,
       skipTaskbar: true,
-      alwaysOnTop: true,
+      alwaysOnTop: floatOn,
       title: 'CompanionDesk overlay',
       ...(iconPath ? { icon: iconPath } : {}),
       backgroundColor: '#1f2523',
@@ -90,6 +95,21 @@ function createOverlayController({ preloadPath, htmlPath, iconPath, loadSavedBou
     return win;
   }
 
+  // One place decides what "floats above other windows" means, so the
+  // constructor, show() and a live settings change can never disagree.
+  function applyFloat(w) {
+    w.setAlwaysOnTop(floatOn, 'floating');
+    try { w.setVisibleOnAllWorkspaces(floatOn, { visibleOnFullScreen: true }); } catch { /* not supported everywhere */ }
+  }
+
+  // M8 customization: apply a changed float choice. A live change reaches
+  // the open window immediately; the next ensure() picks it up too.
+  function setAlwaysOnTop(enabled) {
+    floatOn = enabled !== false;
+    if (win && !win.isDestroyed()) applyFloat(win);
+    return { ok: true, alwaysOnTop: floatOn };
+  }
+
   function isVisible() {
     return Boolean(win && !win.isDestroyed() && win.isVisible());
   }
@@ -103,8 +123,7 @@ function createOverlayController({ preloadPath, htmlPath, iconPath, loadSavedBou
       applyBounds(overlayBounds(display.workArea));
       remembered = true;
     }
-    w.setAlwaysOnTop(true, 'floating');
-    try { w.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true }); } catch { /* not supported everywhere */ }
+    applyFloat(w);
     w.show();
     w.focus();
     if (reset) w.webContents.send('overlay:reset');
@@ -140,7 +159,7 @@ function createOverlayController({ preloadPath, htmlPath, iconPath, loadSavedBou
     registered = null;
   }
 
-  return { ensure, show, hide, toggle, send, register, unregisterAll, isVisible, getWindow: () => win, getHotkey: () => registered };
+  return { ensure, show, hide, toggle, send, register, unregisterAll, isVisible, setAlwaysOnTop, getWindow: () => win, getHotkey: () => registered };
 }
 
 module.exports = { createOverlayController };

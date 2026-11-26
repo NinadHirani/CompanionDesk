@@ -49,6 +49,11 @@ const DEFAULTS = Object.freeze({
   // mobile platforms regardless of what is stored here.
   screen_mode: 'manual',
   screen_background_consent: false,
+  // M8 customization: the floating companion stays above other windows by
+  // default (today's behavior); this is the user's off switch. Desktop
+  // wiring lives in overlay.js and main.js; the web build has no companion
+  // window, so About hides the control there.
+  companion_always_on_top: true,
 });
 
 const ENUMS = Object.freeze({
@@ -61,7 +66,7 @@ const ENUMS = Object.freeze({
   // the multilingual twins are selectable so Hindi can be added later.
   voice_model: ['small.en', 'base.en', 'tiny.en', 'small', 'base', 'tiny'],
 });
-const BOOLEANS = ['learn_from_activity', 'suggest_memories', 'cloud_personal', 'cloud_enabled', 'onboarding_done', 'proactive_enabled', 'proactive_scope_reminder', 'proactive_scope_deadline', 'proactive_quiet_enabled', 'voice_enabled', 'voice_output_enabled', 'wake_enabled', 'screen_observation_enabled', 'screen_background_consent'];
+const BOOLEANS = ['learn_from_activity', 'suggest_memories', 'cloud_personal', 'cloud_enabled', 'onboarding_done', 'proactive_enabled', 'proactive_scope_reminder', 'proactive_scope_deadline', 'proactive_quiet_enabled', 'voice_enabled', 'voice_output_enabled', 'wake_enabled', 'screen_observation_enabled', 'screen_background_consent', 'companion_always_on_top'];
 // 'HH:MM' 24h local clock times bounding the quiet window.
 const QUIET_TIME_KEYS = ['proactive_quiet_start', 'proactive_quiet_end'];
 const QUIET_TIME_RE = /^([01][0-9]|2[0-3]):[0-5][0-9]$/;

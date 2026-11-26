@@ -648,7 +648,13 @@ function registerIpc() {
       }),
     };
   });
-  ipcMain.handle('settings:save', async (_e, payload) => P.saveSettings(db, payload));
+  ipcMain.handle('settings:save', async (_e, payload) => {
+    const res = await P.saveSettings(db, payload);
+    // M8 customization: a float-toggle change applies to the open companion
+    // window immediately, no restart needed.
+    if (res && res.ok && overlay) overlay.setAlwaysOnTop(res.settings.companion_always_on_top !== false);
+    return res;
+  });
 
   ipcMain.handle('memory:list', async () => P.listMemory(ctx()));
   ipcMain.handle('memory:add', async (_e, payload) => P.addMemory(ctx(), payload));
@@ -974,6 +980,9 @@ app.whenReady().then(async () => {
     // validator in companion-window-state.js refuses anything unusable.
     loadSavedBounds: () => db.getSetting('companion_window_bounds', ''),
     saveBounds: (json) => db.setSetting('companion_window_bounds', json),
+    // M8 customization: the float choice rides the settings table; the
+    // settings:save handler applies later changes to the open window.
+    alwaysOnTop: P.getSettings(db).companion_always_on_top !== false,
   });
   lockDownPermissions();
   registerIpc();
