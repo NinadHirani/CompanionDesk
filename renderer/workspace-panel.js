@@ -180,6 +180,7 @@
           return;
         }
         for (const l of sh.lines) rowsEl.appendChild(line(l));
+        if (sh.total === 0) rowsEl.appendChild(line('no rows yet: rows appear only through explicit app actions, never a scan'));
         say('workspace: showing ' + sh.shown + ' of ' + sh.total + (sh.skipped ? ', ' + sh.skipped + ' skipped' : ''));
         await renderConnectors(a);
       } catch {

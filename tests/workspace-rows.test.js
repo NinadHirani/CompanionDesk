@@ -26,10 +26,14 @@ test('rows() projects owning rows to exactly the schema fields', () => {
 test('rows() refuses every fail-closed edge with a reason', () => {
   const w = createWorkspaceRows({
     tasks: () => [REMINDER],
+    files: () => [],
     conversations: () => { throw new Error('boom'); },
     tools: () => 'not-an-array',
   });
-  assert.strictEqual(w.rows('files').reason, 'view_not_wired');
+  const f = w.rows('files');
+  assert.strictEqual(f.ok, true, 'files view is wired via the Gate 8 store provider');
+  assert.deepStrictEqual(f.rows, []);
+  assert.strictEqual(w.rows('settings').reason, 'view_not_wired', 'settings stays unwired');
   assert.strictEqual(w.rows('nope').reason, 'unknown_view');
   assert.strictEqual(w.rows('').reason, 'bad_input');
   assert.strictEqual(w.rows(7).reason, 'bad_input');

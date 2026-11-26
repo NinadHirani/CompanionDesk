@@ -138,10 +138,23 @@ test('an unwired view stays honest: not wired yet, no rows invented', async () =
   try {
     const bridge = bridgeStub({ rows: () => [GOOD_ROW] });
     const P = await loadPanel();
-    P.mount({ api: bridge, initialView: 'files' });
+    P.mount({ api: bridge, initialView: 'settings' });
     assert.ok(await until(() => /not wired yet in this build/.test(statusText())));
     assert.strictEqual(rowsOf().length, 0);
     assert.strictEqual(bridge.__calls.rows.length, 0, 'no fetch for an unwired view');
+  } finally { uninstallDom(); }
+});
+
+test('a wired row-store view with no rows shows its empty state, never invented rows', async () => {
+  installDom();
+  try {
+    const bridge = bridgeStub({ rows: () => [] });
+    const P = await loadPanel();
+    P.mount({ api: bridge, initialView: 'files' });
+    assert.ok(await until(() => /showing 0 of 0/.test(statusText())));
+    assert.strictEqual(rowsOf().length, 1, 'the empty-state note is the only row');
+    assert.ok(/no rows yet/.test(rowsOf()[0].textContent));
+    assert.strictEqual(bridge.__calls.rows[0], 'files');
   } finally { uninstallDom(); }
 });
 

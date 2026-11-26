@@ -60,7 +60,7 @@ test('main wires the rows provider with the six owning sources and never registe
 
 test('main keeps the three Gate 8 stores and wires their providers; stores start empty', () => {
   const mainSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'main.js'), 'utf8');
-  for (const name of ['workspaceFilesStore', 'workspaceWorkflowsStore', 'workspaceModelsStore']) {
+  for (const name of ['workspaceFilesStore', 'workspaceWorkflowsStore', 'workspaceModelsStore', 'workspaceDatabasesStore', 'workspaceAppDataStore']) {
     assert.ok(mainSrc.includes('const ' + name + ' = createWorkspaceStore('), name + ' created');
     assert.ok(mainSrc.includes('() => ' + name + '.list()'), name + ' provider wired');
   }

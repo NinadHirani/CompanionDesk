@@ -49,14 +49,14 @@
     { name: 'tasks', label: 'Tasks', wired: true },
     { name: 'memory', label: 'Memory', wired: true },
     { name: 'tools', label: 'Tools', wired: true },
-    { name: 'files', label: 'Files', wired: false },
-    { name: 'databases', label: 'Databases', wired: false },
-    { name: 'appdata', label: 'App data', wired: false },
-    { name: 'workflows', label: 'Workflows', wired: false },
+    { name: 'files', label: 'Files', wired: true },
+    { name: 'databases', label: 'Databases', wired: true },
+    { name: 'appdata', label: 'App data', wired: true },
+    { name: 'workflows', label: 'Workflows', wired: true },
     { name: 'settings', label: 'Settings', wired: false },
     { name: 'permissions', label: 'Permissions', wired: true },
     { name: 'activity', label: 'Activity', wired: true },
-    { name: 'models', label: 'Models', wired: false },
+    { name: 'models', label: 'Models', wired: true },
     { name: 'integrations', label: 'Integrations', wired: true },
   ];
   const NAMES = VIEWS.map(v => v.name);
@@ -214,11 +214,12 @@
       },
     },
 
-    // Gate 8 row stores (approved 26 Nov 2026): files/folders, workflow
-    // and task data, model/AI views. These schemas shape the three row
-    // stores main keeps; the stores start EMPTY and fill only through
-    // explicit app actions (no auto-scan, no auto-exposure, no model
-    // downloads).
+    // Gate 8 row stores (approved 26 Nov 2026; renderer wiring landed
+    // 27 Nov 2026, Ninad-approved): files/folders, local databases,
+    // structured app data, workflow/task data, model/AI views. These
+    // schemas shape the five row stores main keeps; the stores start
+    // EMPTY and fill only through explicit app actions (no auto-scan, no
+    // auto-exposure, no model downloads, no persistence).
     files: {
       fields: ['id', 'name', 'path', 'kind', 'size', 'modifiedAt', 'source'],
       check(r) {

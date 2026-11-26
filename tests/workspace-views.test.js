@@ -28,9 +28,10 @@ test('catalog: exactly the thirteen roadmap views, fixed order, fresh copies', (
   for (const n of ['tasks', 'memory', 'tools', 'permissions', 'activity']) {
     assert.equal(c.find(v => v.name === n).wired, true);
   }
-  for (const n of ['files', 'databases', 'appdata', 'workflows', 'settings', 'models']) {
-    assert.equal(c.find(v => v.name === n).wired, false);
+  for (const n of ['files', 'databases', 'appdata', 'workflows', 'models']) {
+    assert.equal(c.find(v => v.name === n).wired, true, n + ' wired by Gate 8 A + Gate 3');
   }
+  assert.equal(c.find(v => v.name === 'settings').wired, false, 'settings still unwired');
   c.push({ name: 'rogue' });
   c[0].name = 'rogue';
   assert.equal(wv.catalog()[0].name, 'conversations');
@@ -40,7 +41,11 @@ test('catalog: exactly the thirteen roadmap views, fixed order, fresh copies', (
 test('resolve: one active view at a time, unknown refused', () => {
   assert.deepEqual(wv.resolve('memory'), { ok: true, view: 'memory', label: 'Memory', wired: true });
   assert.deepEqual(wv.resolve('tasks'), { ok: true, view: 'tasks', label: 'Tasks', wired: true });
-  assert.deepEqual(wv.resolve('models'), { ok: true, view: 'models', label: 'Models', wired: false });
+  assert.deepEqual(wv.resolve('models'), { ok: true, view: 'models', label: 'Models', wired: true });
+  assert.deepEqual(wv.resolve('databases'), { ok: true, view: 'databases', label: 'Databases', wired: true });
+  assert.deepEqual(wv.resolve('appdata'), { ok: true, view: 'appdata', label: 'App data', wired: true });
+  assert.deepEqual(wv.resolve('files'), { ok: true, view: 'files', label: 'Files', wired: true });
+  assert.deepEqual(wv.resolve('workflows'), { ok: true, view: 'workflows', label: 'Workflows', wired: true });
   assert.deepEqual(wv.resolve('conversations'), { ok: true, view: 'conversations', label: 'Conversations', wired: true });
   assert.equal(wv.resolve('nope').ok, false);
   assert.equal(wv.resolve('nope').reason, 'unknown_view');
@@ -49,9 +54,7 @@ test('resolve: one active view at a time, unknown refused', () => {
 });
 
 test('shape: unwired views refuse, wired view shapes rows', () => {
-  for (const n of ['files', 'workflows', 'settings', 'models']) {
-    assert.equal(wv.shape(n, [conv()]).reason, 'view_not_wired');
-  }
+  assert.equal(wv.shape('settings', [conv()]).reason, 'view_not_wired');
   assert.equal(wv.shape('nope', [conv()]).reason, 'unknown_view');
   const s = wv.shape('conversations', [conv({ id: 7, title: 'Wake plan', message_count: 1 })]);
   assert.equal(s.ok, true);
@@ -60,6 +63,28 @@ test('shape: unwired views refuse, wired view shapes rows', () => {
   assert.equal(s.shown, 1);
   assert.equal(s.skipped, 0);
   assert.equal(s.total, 1);
+});
+
+test('Gate 8 row-store views are wired and shape their store rows fail-closed', () => {
+  const good = {
+    files: { id: 'f1', name: 'notes.txt', path: '/tmp/notes.txt', kind: 'file', size: 12, modifiedAt: 1735312800000, source: 'app_data' },
+    databases: { id: 'db1', name: 'chat index', kind: 'sqlite', state: 'available', updatedAt: 1735312800000, detail: 'local sqlite file' },
+    appdata: { id: 'ad1', name: 'ui prefs', kind: 'kv', state: 'active', updatedAt: 1735312800000, detail: 'structured app data' },
+    workflows: { id: 'w1', name: 'nightly sync', kind: 'workflow', state: 'draft', updatedAt: 1735312800000, detail: 'syncs nightly' },
+    models: { id: 'md1', name: 'whisper-small', kind: 'stt', source: 'local', status: 'unavailable', notes: 'not downloaded' },
+  };
+  for (const n of ['files', 'databases', 'appdata', 'workflows', 'models']) {
+    assert.deepEqual(wv.fields(n), ['id'].concat(Object.keys(good[n]).filter(k => k !== 'id')), n + ' schema fields exposed');
+    const empty = wv.shape(n, []);
+    assert.equal(empty.ok, true, n + ' empty rows shape ok');
+    assert.deepEqual(empty.lines, []);
+    const ok = wv.shape(n, [good[n]]);
+    assert.equal(ok.ok, true, n + ' a store row shapes cleanly');
+    assert.equal(ok.shown, 1);
+    assert.equal(ok.skipped, 0);
+    const bad = wv.shape(n, [{ ...good[n], id: 'x99' }]);
+    assert.equal(bad.skipped, 1, n + ' a wrong-shape row is skipped, never guessed');
+  }
 });
 
 test('shape: empty list is ok with zero lines', () => {
