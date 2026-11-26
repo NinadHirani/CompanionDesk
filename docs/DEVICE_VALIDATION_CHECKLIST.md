@@ -15,11 +15,20 @@ Ground rules:
 
 - Record pass/fail per item with the app commit (`git log -1` at test time)
   and the OS version, then send the results back to Fo.
-- Nothing here needs a network connection or an account.
+- Nothing here needs an account, but the chat/AI items need a working model
+  path: on the Mac that is local Ollama (on-device, no network, no account);
+  on Android, AI answers require the opt-in Gemini fallback you configure
+  yourself, which does use the network. With no model path configured,
+  record the chat/AI items as unreachable with what the app showed.
 - If an item cannot be reached in the build you have, record "unreachable"
   with what the UI showed. That is a result, not a failed pass.
 
 ## A. macOS (MacBook Air M1)
+
+Setup: build or run the app from the current main commit (`git log -1` in
+the repo, or the packaged app). Chat items assume Ollama is installed with a
+local model picked; install it first if it is missing.
+
 
 1. Launch. The app opens to a usable window, no crash. Nothing requests an
    OS permission at launch (Device Access rule: no startup blanket
@@ -77,8 +86,10 @@ and keep the output.
 
 Get the APK from the repo's Android CI artifact for the same main commit.
 
-1. Install and launch; core chat works; streamed answers complete without
-   truncation.
+1. Install and launch. With a model path configured (on Android that is the
+   opt-in Gemini fallback, per the README), core chat works and streamed
+   answers complete without truncation; without one, record chat as
+   unreachable and continue with the rest.
 2. Settings render; voice stays off until enabled; record exactly what the
    Android build offers for mic and speech. Feature parity on Android is a
    finding either way.

@@ -38,6 +38,10 @@ a workflow artifact (below), which needs a GitHub sign-in and changes URL
 with every run. A newer public release is published only after an explicit
 review.
 
+Real-hardware validation: before trusting any install/run claim, run the
+manual pass in [docs/DEVICE_VALIDATION_CHECKLIST.md](docs/DEVICE_VALIDATION_CHECKLIST.md)
+on a Mac and an Android phone, and record the results.
+
 **Desktop one-click local AI setup:** the app walks you through Ollama in one click
 (see [docs/OLLAMA_SETUP.md](docs/OLLAMA_SETUP.md)). It opens the official installer
 for *you* to run, then downloads the recommended model in-app with a progress bar,
