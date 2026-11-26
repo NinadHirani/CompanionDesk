@@ -33,8 +33,9 @@
 //     file, and the sidecar re-injects it after every rebuild so it
 //     survives refreshes within the session and dies with it. If the
 //     sidecar is full the add is refused and rolled back (fail closed).
-//     No product surface passes sensitive entries yet: the IPC/service
-//     layer stays non-sensitive in this slice.
+//     The only product surface that passes sensitive entries is the
+//     memory panel's explicit, user-commanded controls (M2/M4 UI slice,
+//     26 Nov 2026); the ask paths stay non-sensitive.
 //
 // Ids (m1, m2, ...) are session-view handles: stable within one sync
 // epoch, reassigned by file position on every rebuild. They are NOT
@@ -200,6 +201,18 @@ function createSession(file) {
     // the mark); an unmarked bullet is already persisted on disk.
     persistSensitive(id) {
       return sync().persistSensitive(id);
+    },
+
+    // Persistence provenance for one view bullet, for the panel's status
+    // lines: 'file' when the bullet is the user's own file content (a mark
+    // does not change where the bullet lives; only the mark is
+    // session-only), 'session-only' when it lives only in the sidecar,
+    // null for an unknown id.
+    persisted(id) {
+      const view = sync();
+      const b = view.list().find((x) => x.id === id);
+      if (!b) return null;
+      return sidecar.has(b.section, b.text) ? 'session-only' : 'file';
     },
 
     // The measured ranker over the session view (consent gate included).

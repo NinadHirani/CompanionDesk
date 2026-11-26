@@ -13,6 +13,7 @@ const { computePatterns, describePatterns } = require('./patterns');
 const { buildPersona, renderContextPack, renderCalendarBlock } = require('./persona');
 const calendar = require('./calendar');
 const proposals = require('./proposals');
+const retrieval = require('./memory-retrieval');
 const onboarding = require('./onboarding');
 const { addDaysIso } = require('./dates');
 const { validIsoDate } = require('./extraction-core');
@@ -41,12 +42,63 @@ function listMemory({ db, meFile }) {
 
 function addMemory({ meFile }, payload) {
   if (!payload || typeof payload.section !== 'string' || typeof payload.text !== 'string') return { ok: false, error: 'bad_request' };
-  return session.get(meFile).add(payload.section, payload.text);
+  const sensitive = payload.sensitive === true;
+  return session.get(meFile).add(payload.section, payload.text, { sensitive });
 }
 
 function forgetMemory({ meFile }, payload) {
   if (!payload || typeof payload.section !== 'string' || typeof payload.text !== 'string') return { ok: false, error: 'bad_request' };
   return session.get(meFile).forget(payload.section, payload.text);
+}
+
+// M2/M4 memory panel slice (26 Nov 2026): the four panel channels. Full
+// view incl. ids, sensitive flags and persistence provenance, for the
+// panel's explicit status lines.
+function itemsMemory({ meFile }) {
+  const s = session.get(meFile);
+  const items = s.items().map((it) => ({ ...it, persisted: s.persisted(it.id) === 'file' }));
+  return { ok: true, file: meFile, sections: memory.SECTIONS, items };
+}
+
+// User-commanded mark/unmark from the panel. A mark is a sensitivity
+// CLASSIFICATION, never consent; session-only entries refuse unmark
+// (session_only_entry) because an unmarked session-only entry has no home.
+function markMemory({ meFile }, payload) {
+  if (!payload || typeof payload.id !== 'string') return { ok: false, error: 'bad_request' };
+  const value = payload.value !== false;
+  return { ...session.get(meFile).markSensitive(payload.id, value), id: payload.id, value };
+}
+
+// Explicit save attempt for a sensitive entry. Fail-closed by design: the
+// session refuses (sensitive_storage_blocked) and the refusal reaches the
+// panel verbatim; nothing is written and nothing is downgraded.
+function persistMemory({ meFile }, payload) {
+  if (!payload || typeof payload.id !== 'string') return { ok: false, error: 'bad_request' };
+  return session.get(meFile).persistSensitive(payload.id);
+}
+
+// The measured ranker over the session view with the consent gate and the
+// task budget made visible to the caller. includeSensitive defaults false:
+// sensitive bullets stay hidden unless this call explicitly consents.
+function searchMemory({ meFile }, payload) {
+  if (!payload || typeof payload.query !== 'string' || payload.query.length === 0) return { ok: false, error: 'bad_request' };
+  const task = typeof payload.task === 'string' && retrieval.BUDGETS[payload.task] !== undefined ? payload.task : 'chat';
+  const budget = retrieval.BUDGETS[task];
+  const s = session.get(meFile);
+  const items = s.items();
+  const sensitiveTotal = items.filter((b) => b.sensitive).length;
+  const includeSensitive = payload.includeSensitive === true;
+  const k = typeof payload.k === 'number' && payload.k >= 0 ? Math.floor(payload.k) : budget;
+  return {
+    ok: true,
+    task,
+    budget,
+    requested: k,
+    candidates: items.length,
+    sensitiveTotal,
+    sensitiveIncluded: includeSensitive ? sensitiveTotal : 0,
+    results: s.search(payload.query, { k, includeSensitive }),
+  };
 }
 
 // Ask the local model whether the student's message holds anything worth
@@ -257,6 +309,7 @@ module.exports = {
   PERSONAL_COURSE,
   getSettings, saveSettings,
   listMemory, addMemory, forgetMemory, suggest, decide,
+  itemsMemory, markMemory, persistMemory, searchMemory,
   getPatterns, clearActivity,
   getOnboarding, answerOnboarding, completeOnboarding,
   addDeadline, removeDeadline,

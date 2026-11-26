@@ -21,12 +21,15 @@ const RET = path.join(__dirname, '..', 'src', 'memory-retrieval.js');
 
 // --- wiring lock ------------------------------------------------------------
 
-// Wiring scope as of 24 Nov 2026: src/memory-retrieval.js is wired into
-// persona.js (per-task budgeted selection) and lives inside the M4 pair.
+// Wiring scope as of 26 Nov 2026: src/memory-retrieval.js is wired into
+// persona.js (per-task budgeted selection), lives inside the M4 pair, and
+// is required by personal.js ONLY for the memory panel's budgeted search
+// channel (M2/M4 UI slice: the budget value must come from the single
+// frozen BUDGETS source, never a copy).
 // src/memory-store.js (the v2 store contract) is wired into
 // src/memory-session.js ONLY: the session view layer in front of the
 // canonical About-me file. No surface or registry file may reference it.
-const WIRED_RETRIEVAL = new Set(['memory-store.js', 'persona.js']);
+const WIRED_RETRIEVAL = new Set(['memory-store.js', 'persona.js', 'personal.js']);
 
 test('WIRING LOCK: memory-retrieval is required only by persona.js and the M4 pair', () => {
   const dir = path.join(__dirname, '..', 'src');

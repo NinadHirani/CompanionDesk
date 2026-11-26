@@ -315,3 +315,19 @@ test('unmarking a session-only sensitive entry is refused and stays marked acros
   assert.ok(!fs.readFileSync(file, 'utf8').includes('private session note'),
     'the session-only entry is never on disk');
 });
+
+test('persisted(): plain and marked file bullets are file content, session-only entries are not', () => {
+  sessionMod._resetForTests();
+  const file = tmpFile();
+  seed(file, { Facts: ['plain fact one'] });
+  const s = sessionMod.get(file);
+  const add = s.add('Facts', 'private session note', { sensitive: true });
+  assert.equal(add.ok, true);
+  const plain = s.items().find((b) => b.text === 'plain fact one');
+  const sess = s.items().find((b) => b.text === 'private session note');
+  assert.equal(s.persisted(plain.id), 'file');
+  assert.equal(s.persisted(sess.id), 'session-only');
+  s.markSensitive(plain.id, true);
+  assert.equal(s.persisted(plain.id), 'file', 'a mark does not change where the bullet lives');
+  assert.equal(s.persisted('m999'), null, 'an unknown id is not a persistence claim');
+});

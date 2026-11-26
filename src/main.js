@@ -670,6 +670,14 @@ function registerIpc() {
   ipcMain.handle('memory:suggest', async (_e, payload) => P.suggest(ctx(), payload, localNowIso()));
   ipcMain.handle('memory:decide', async (_e, payload) => P.decide(ctx(), payload));
 
+  // M2/M4 memory panel slice: the panel's four channels. items is
+  // read-only; mark/persist/search are user-commanded and the persist
+  // path stays fail-closed (sensitive_storage_blocked) by design.
+  ipcMain.handle('memory:items', async () => P.itemsMemory(ctx()));
+  ipcMain.handle('memory:mark', async (_e, payload) => P.markMemory(ctx(), payload));
+  ipcMain.handle('memory:persist', async (_e, payload) => P.persistMemory(ctx(), payload));
+  ipcMain.handle('memory:search', async (_e, payload) => P.searchMemory(ctx(), payload));
+
   ipcMain.handle('patterns:get', async () => P.getPatterns(db));
   ipcMain.handle('activity:clear', async () => P.clearActivity(db));
 
