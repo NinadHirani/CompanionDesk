@@ -885,3 +885,5 @@ provisional. Each is confirmed only by its own POC or license review; the
 architecture keeps every one of them behind a replaceable interface.
 
 Device validation groundwork (26 Nov 2026, docs-only): `docs/DEVICE_VALIDATION_CHECKLIST.md`, a precise physical-device pass for the owner's MacBook Air M1 and OnePlus 12R over the shipped M4/M5/M6/M8 features; the wake-word lane and the m84 float toggle are excluded per owner closure. Running it is the single physical input that unlocks honest device-verified claims, and it doubles as Gate 1 benchmarking groundwork and future M9 input.
+
+Next decisions groundwork (26 Nov 2026, docs-only): `docs/NEXT_DECISIONS.md` consolidates every open gate (device pass, connectors, workspace UI, file_write registration, M7, M9, sensitive-memory UI, files/workflows/models row stores) into one fillable sheet. The morning decision sheet is fully executed and no implementation-ready ungated slice remains.
