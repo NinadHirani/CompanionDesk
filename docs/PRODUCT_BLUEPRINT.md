@@ -1334,3 +1334,54 @@ start. The wiring lock in tests/gate2-scheduling-gate.test.js now
 names the entry as the ONE lawful consumer of the gate's audit record:
 it must keep proving origin from the audit, must stay
 dependency-injected and must register nothing.
+
+## 3j.13. File-output gate: `file_write` (26 Nov 2026): IMPLEMENTED, NOT enabled
+
+Per Ninad's D-F1/D-F2/D-F3 approvals on 26 Nov 2026
+(docs/GATE2_SCHEDULING_FILE_OUTPUT_PROPOSAL.md, Part 2). The pure
+validation/policy layer exists in code and tests; NOTHING is registered,
+the io adapter and the root wiring arrive only with a separately-approved
+enable step, and the production registry keeps carrying exactly the one
+scheduling-gate tool.
+
+- Tool: `file_write`, capability `sensitive` (a fresh one-time approval
+  for EVERY call, digest-bound to the exact name AND content; a standing
+  grant can never authorize a write), `critical: false`. Pure adapter
+  `src/agent-tool-file-output.js`; disk I/O is an INJECTED io adapter
+  with the narrow contract { exists(fullPath), realpath(fullPath),
+  writeFileAtomic(fullPath, content) }; the module never requires a
+  filesystem module, so the pure layer is testable without a disk.
+- Least-privilege root: configured ONLY main-side from a user setting
+  and injected. Default UNSET: every call is refused
+  (`file_output_root_unconfigured`) even with a grant and a valid
+  approval, until the user configures a folder on the product surface.
+  The renderer and the model can never set or widen the root.
+- Flat root only: strict basename `/^[A-Za-z0-9][A-Za-z0-9._-]{0,126}$/`
+  ending in an allowlisted extension (.ics, .txt, .md). No separators, no
+  leading dot, no absolute paths, no subdirectories.
+- Text only: valid Unicode (lone surrogates refused), at most 65536 bytes
+  UTF-8 (`content_too_large`). The registry's global string cap binds at
+  validation time; the adapter's byte cap is the authoritative design
+  limit. The tool never parses content for commands and never executes it.
+- Refuse-if-exists, always: overwrite is out of scope for v1 entirely; a
+  retried step needs BOTH a fresh approval AND a different name. The
+  atomic write contract (temp file + rename in the same directory, mode
+  0o600, no execute bit) is the io adapter's documented duty, proven by a
+  reference adapter in tests; a refused write leaves at most a temp file.
+- Symlink escape guard: before any write, realpath(root) must equal the
+  configured root; the target must NOT exist; the flat, pre-existing root
+  means no intermediate component is ever created. io failures pass
+  through as `io_refusal`; every io call is guarded.
+- Audit: on success one entry { actor 'agent', action 'file.write',
+  tool 'file_write', decision 'allowed', detail { name, bytes } };
+  content is NEVER audited. An append failure is the approved poison-rule
+  failure mode (`audit_append_failed`): the step fails, the written file
+  stays user-visible and removable.
+- Tests: tests/gate2-file-output-gate.test.js (16 tests) through the real
+  stack pieces with a fake io adapter: the deny ladder end to end, digest
+  binding, traversal/name rejections, exists/realpath refusals, the byte
+  cap and surrogate rejection, the atomic write contract, a content-free
+  audit entry, the emergency stop, and the wiring locks.
+- STILL DISABLED: production registration; the io adapter; the root
+  setting; any read-back tool; the run-driver 'scheduled' kind; all
+  renderer surfaces.
