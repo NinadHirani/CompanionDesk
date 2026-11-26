@@ -170,7 +170,7 @@
     results.id = 'memory-panel-results';
     const searchBtn = button('search', 'Search memory with matched terms and budget', async () => {
       const a = api();
-      if (!a) { consent.checked = false; return; }
+      if (!a) { consent.checked = false; say('memory: unavailable right now'); return; }
       if (!q.value.trim()) { say('memory: enter a search first'); return; }
       try {
         const r = await attempt(() => a.memory_search({ query: q.value, includeSensitive: consent.checked }));

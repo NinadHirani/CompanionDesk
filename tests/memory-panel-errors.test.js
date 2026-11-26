@@ -329,5 +329,8 @@ test('a search with a missing bridge resets consent', async () => {
     try { await search.handlers.click[0](); } catch (e) { rejection = e; }
     assert.equal(rejection, null, 'the click handler must never reject');
     assert.ok(await until(() => consent.checked === false), 'consent resets when the bridge is missing');
+    const status = registry.byId.get('memory-panel-status');
+    assert.ok(await until(() => status && status.textContent !== ''), 'a status line is shown');
+    assert.equal(status.textContent, 'memory: unavailable right now', 'the missing bridge is announced like add');
   } finally { uninstallDom(registry); }
 });
