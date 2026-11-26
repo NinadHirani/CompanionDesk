@@ -99,6 +99,42 @@ Get the APK from the repo's Android CI artifact for the same main commit.
 5. No background mic or capture without explicit enablement and a visible
    indicator; no OS permission requested at launch.
 
+## Memory panel checks (landed 26 Nov 2026, commit a0e69fc)
+
+The desktop app mounts a memory panel with the main window. On macOS:
+
+1. The list shows every bullet with a status: [saved] or [session-only,
+   not saved]; sensitive entries show [sensitive]; a sensitive mark on a
+   saved bullet says the mark itself is session-only (a restart drops it).
+2. Mark a plain bullet sensitive, then unmark it; the status line reports
+   each outcome and the list re-renders.
+3. Add a bullet with "keep session-only (sensitive, not saved)" ticked: it
+   appears labelled session-only; press its "try to save" button and record
+   the refusal text the status line shows.
+4. Search once with the consent box off and once with it on: record the
+   budget line ("task budget: chat keeps 12"), the matched terms, and that
+   a sensitive entry appears in results only with consent.
+
+## Results template (copy, fill, send back)
+
+- macOS (version, chip):
+  - launch + core chat (model path used):
+  - streamed answer completes without truncation:
+  - settings render + companion toggle positions:
+  - voice: mic permission prompt timing, speech output works:
+  - memory panel: list labels / mark-unmark / session-only add + refusal
+    text / search consent behaviour:
+  - schedules panel, notifications, activity views:
+  - anything clipped or broken:
+- Android (OnePlus 12R, OxygenOS version):
+  - APK commit + install result:
+  - chat reachable (model path used) or unreachable:
+  - settings render; mic/speech features offered:
+  - rotate/resize clipping:
+  - memory/workspace views render or degrade honestly:
+  - permissions requested at launch (should be none):
+- Overall: how long the pass took; anything blocking.
+
 ## What this unlocks
 
 - Honest "verified on device" claims for every item above. Until then, such

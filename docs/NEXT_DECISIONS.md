@@ -7,10 +7,13 @@ gate, M8 slice 4 schemas, the M4 sidecar, the M6 TTS decision); items 4 (M7
 capture engine) and 8 (M9 release readiness) were deferred by Ninad.
 
 Every remaining roadmap item is gated on one decision below or on the
-physical device pass. Reply in chat with item numbers and choices; each
-approved item is implemented red-first with targeted tests, the full suite
-plus selftest, commit/push and exact-head CI verification, exactly as the
-morning sheet's items were.
+physical device pass, with one exception: item 7 (the sensitive-memory UI)
+is RESOLVED as of 26 Nov 2026 evening, commit `a0e69fc` -- Ninad reopened
+the M2/M4 UI paths for that scoped slice and the memory panel landed.
+Reply in chat with item numbers and choices; each approved item is
+implemented red-first with targeted tests, the full suite plus selftest,
+commit/push and exact-head CI verification, exactly as the morning sheet's
+items were.
 
 ## 1. Physical device pass (no decision needed, only the pass)
 
@@ -57,10 +60,14 @@ A docs-only proposal exists (docs/M9_RELEASE_BRIEF.md); it is not a
 definition. Decision: (a) define the phase now (say what M9 must contain),
 or (b) keep deferred.
 
-## 7. Sensitive-memory UI
+## 7. Sensitive-memory UI -- RESOLVED (26 Nov 2026 evening)
 
-The session-only sidecar landed; a UI for the mark/persist interfaces is
-still gated. Decision: (a) build it, or (b) later.
+Done, not open: Ninad reopened the M2/M4 UI paths for this scoped slice and
+the memory panel landed at `a0e69fc`: explicit mark/unmark with visible
+status lines, session-only/nonpersistent labels from `persisted()`
+provenance, the fail-closed persistSensitive refusal surfaced verbatim, and
+consent-gated retrieval with the budget and matched-terms header. No
+on-disk sensitive format was created and none is proposed.
 
 ## 8. Workspace row stores for files, workflows, models
 
