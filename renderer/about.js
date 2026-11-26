@@ -35,8 +35,24 @@
   }
 
   async function decide(id, approve) {
-    const res = await api.memory_decide({ id, approve });
+    let res;
+    try {
+      res = await api.memory_decide({ id, approve });
+    } catch {
+      res = { ok: false, error: 'bad_request' };
+    }
     if (res.ok) renderProposals(res.proposals);
+    else {
+      // A decision that did not land is never a silent no-op: report it in
+      // place on the About view and re-sync the cards in both views, so a
+      // stale suggestion cannot sit unanswered.
+      if (!document.getElementById('view-about').hidden) {
+        const msg = document.getElementById('mem-msg');
+        msg.textContent = UI.friendlyError(res.error || 'bad_request');
+        msg.className = 'hint error';
+      }
+      await refreshProposals();
+    }
     if (!document.getElementById('view-about').hidden) await refresh();
   }
 
@@ -62,7 +78,15 @@
         const forget = el('button', 'Forget');
         forget.setAttribute('aria-label', `Forget: ${it.text}`);
         forget.addEventListener('click', async () => {
-          await api.memory_forget({ section: it.section, text: it.text });
+          const msg = document.getElementById('mem-msg');
+          try {
+            const res = await api.memory_forget({ section: it.section, text: it.text });
+            if (!res.ok) { msg.textContent = UI.friendlyError(res.error || 'bad_request'); msg.className = 'hint error'; }
+            else { msg.textContent = ''; msg.className = 'hint'; }
+          } catch {
+            msg.textContent = UI.friendlyError('bad_request');
+            msg.className = 'hint error';
+          }
           await refresh();
         });
         li.appendChild(forget);
@@ -78,7 +102,12 @@
   document.getElementById('mem-add').addEventListener('click', async () => {
     const text = document.getElementById('mem-text');
     const msg = document.getElementById('mem-msg');
-    const res = await api.memory_add({ section: secSelect.value, text: text.value });
+    let res;
+    try {
+      res = await api.memory_add({ section: secSelect.value, text: text.value });
+    } catch {
+      res = { ok: false, error: 'bad_request' };
+    }
     if (!res.ok) { msg.textContent = UI.friendlyError(res.error); msg.className = 'hint error'; return; }
     text.value = '';
     msg.textContent = 'Saved.';
