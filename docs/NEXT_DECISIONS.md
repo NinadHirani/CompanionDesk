@@ -25,13 +25,23 @@ Fo). It unlocks device-verified claims, doubles as Gate 1 benchmarking
 groundwork (`npm run test:benchmark` in the same session), and feeds M9
 later.
 
-## 2. M8 connectors
+## 2. M8 connectors -- RESOLVED (26 Nov 2026 evening)
 
-The integrations registry and Device Access Centre are built; the registry
-is honestly empty because no service is approved. Decision: name the
-services to connect (a) now, or (b) keep the registry empty for now. Each
-named service is verified against its official API before any capability
-claim, and nothing connects without your pick.
+Ninad approved (22:10 IST): build the Connector Settings/catalog with
+free-first worldwide discovery and extensible integrations, and the
+settings to manage connections. Prioritize free/open-source/free-tier/
+self-hostable; surface paid requirements, costs and limits BEFORE
+activation; secure credential storage (opaque references only); explicit
+per-connector permission scopes; the full connection lifecycle
+(connect/disconnect/reconnect/revoke/test); local-first where possible;
+approval gates for sensitive/write/send/delete/external actions; NO
+blanket auto-connect and NO connector or permission granted without his
+explicit choice. Architecture is connector-ready and the catalog is
+broad, but nothing is activated automatically. Implemented 26 Nov 2026
+evening as src/connectors.js (pure policy core, 12 red-first tests,
+AUTO_CONNECT false, unregistered in main.js, nothing connected).
+Connecting a real service still needs a named service and an explicit
+per-connector activation by Ninad.
 
 ## 3. Workspace renderer UI for the six wired views
 
