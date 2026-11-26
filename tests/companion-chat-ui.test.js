@@ -653,3 +653,13 @@ test('Escape during a pending mic start aborts the start, not just the settled r
   assert.ok(micChunk.includes('if (startCancelled) return;'), 'Escape during the status await stops the start before the recorder opens');
   assert.ok(micChunk.includes('if (startCancelled) { recording.cancel(); recording = null; return; }'), 'Escape after the recorder opened releases its tracks');
 });
+
+test('the overlay status line is announced to screen readers', () => {
+  const html = read('renderer/overlay.html');
+  const hint = html.indexOf("id=\"ov-hint\"");
+  assert.ok(hint > 0, 'the overlay hint element exists');
+  const tag = html.slice(html.lastIndexOf('<', hint), html.indexOf('>', hint) + 1);
+  assert.ok(/aria-live="polite"/.test(tag), 'the status line (Listening/Transcribing/Reading) is a live region');
+  const answerTag = html.slice(html.lastIndexOf('<', html.indexOf('id="ov-answer"')), html.indexOf('>', html.indexOf('id="ov-answer"')) + 1);
+  assert.ok(/aria-live="polite"/.test(answerTag), 'the answer region stays a live region');
+});
