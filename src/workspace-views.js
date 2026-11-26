@@ -50,6 +50,8 @@
     { name: 'memory', label: 'Memory', wired: true },
     { name: 'tools', label: 'Tools', wired: true },
     { name: 'files', label: 'Files', wired: false },
+    { name: 'databases', label: 'Databases', wired: false },
+    { name: 'appdata', label: 'App data', wired: false },
     { name: 'workflows', label: 'Workflows', wired: false },
     { name: 'settings', label: 'Settings', wired: false },
     { name: 'permissions', label: 'Permissions', wired: true },
@@ -230,6 +232,40 @@
         return true;
       },
       line(r) { return `${r.id} ${clip(r.name)} (${r.kind}, ${r.size}B) ${clip(r.path)}`; },
+    },
+
+    // Gate 8 A continuation (26 Nov 2026 night): local databases and
+    // structured app data, the two remaining approved store categories.
+    // Same contract: rows arrive only through explicit app actions; the
+    // stores start EMPTY and expose nothing on their own. These adapters
+    // are shaped like files/workflows/models and wire into the renderer
+    // in a later wiring lane, never by auto-exposure.
+    databases: {
+      fields: ['id', 'name', 'kind', 'state', 'updatedAt', 'detail'],
+      check(r) {
+        if (typeof r.id !== 'string' || !/^db\d+$/.test(r.id)) return false;
+        if (typeof r.name !== 'string' || r.name.length === 0 || r.name.length > MAX_TITLE) return false;
+        if (['sqlite', 'json', 'other'].indexOf(r.kind) === -1) return false;
+        if (['available', 'configured', 'unavailable'].indexOf(r.state) === -1) return false;
+        if (!Number.isSafeInteger(r.updatedAt) || r.updatedAt <= 0) return false;
+        if (typeof r.detail !== 'string' || r.detail.length > MAX_TITLE) return false;
+        return true;
+      },
+      line(r) { return `${r.id} ${clip(r.name)} (${r.kind}, ${r.state}) ${clip(r.detail)}`; },
+    },
+
+    appdata: {
+      fields: ['id', 'name', 'kind', 'state', 'updatedAt', 'detail'],
+      check(r) {
+        if (typeof r.id !== 'string' || !/^ad\d+$/.test(r.id)) return false;
+        if (typeof r.name !== 'string' || r.name.length === 0 || r.name.length > MAX_TITLE) return false;
+        if (['kv', 'document', 'other'].indexOf(r.kind) === -1) return false;
+        if (['active', 'archived'].indexOf(r.state) === -1) return false;
+        if (!Number.isSafeInteger(r.updatedAt) || r.updatedAt <= 0) return false;
+        if (typeof r.detail !== 'string' || r.detail.length > MAX_TITLE) return false;
+        return true;
+      },
+      line(r) { return `${r.id} ${clip(r.name)} (${r.kind}, ${r.state}) ${clip(r.detail)}`; },
     },
 
     workflows: {

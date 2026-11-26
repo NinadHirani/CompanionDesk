@@ -235,7 +235,7 @@ test('a connected connector offers disconnect and revoke, each on its own explic
   } finally { uninstallDom(); }
 });
 
-test('the catalog select carries all eleven catalog views in roadmap order', async () => {
+test('the catalog select carries all thirteen catalog views in roadmap order', async () => {
   installDom();
   try {
     const bridge = bridgeStub({ rows: () => [] });
@@ -243,6 +243,6 @@ test('the catalog select carries all eleven catalog views in roadmap order', asy
     P.mount({ api: bridge, initialView: 'conversations' });
     const sel = global.document.getElementById('ws-view');
     const labels = sel.children.map((o) => o.textContent);
-    assert.deepStrictEqual(labels, ['Conversations', 'Tasks', 'Memory', 'Tools', 'Files', 'Workflows', 'Settings', 'Permissions', 'Activity', 'Models', 'Integrations']);
+    assert.deepStrictEqual(labels, ['Conversations', 'Tasks', 'Memory', 'Tools', 'Files', 'Databases', 'App data', 'Workflows', 'Settings', 'Permissions', 'Activity', 'Models', 'Integrations']);
   } finally { uninstallDom(); }
 });

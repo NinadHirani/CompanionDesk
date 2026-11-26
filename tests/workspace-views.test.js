@@ -16,24 +16,25 @@ const conv = (over = {}) => ({
   ...over,
 });
 
-test('catalog: exactly the eleven roadmap views, fixed order, fresh copies', () => {
+test('catalog: exactly the thirteen roadmap views, fixed order, fresh copies', () => {
   const c = wv.catalog();
   assert.deepEqual(c.map(v => v.name), [
-    'conversations', 'tasks', 'memory', 'tools', 'files', 'workflows',
-    'settings', 'permissions', 'activity', 'models', 'integrations',
+    'conversations', 'tasks', 'memory', 'tools', 'files', 'databases',
+    'appdata', 'workflows', 'settings', 'permissions', 'activity',
+    'models', 'integrations',
   ]);
   assert.equal(c.find(v => v.name === 'conversations').wired, true);
   assert.equal(c.find(v => v.name === 'integrations').wired, true);
   for (const n of ['tasks', 'memory', 'tools', 'permissions', 'activity']) {
     assert.equal(c.find(v => v.name === n).wired, true);
   }
-  for (const n of ['files', 'workflows', 'settings', 'models']) {
+  for (const n of ['files', 'databases', 'appdata', 'workflows', 'settings', 'models']) {
     assert.equal(c.find(v => v.name === n).wired, false);
   }
   c.push({ name: 'rogue' });
   c[0].name = 'rogue';
   assert.equal(wv.catalog()[0].name, 'conversations');
-  assert.equal(wv.catalog().length, 11);
+  assert.equal(wv.catalog().length, 13);
 });
 
 test('resolve: one active view at a time, unknown refused', () => {

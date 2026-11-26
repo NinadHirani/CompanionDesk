@@ -82,14 +82,24 @@ test('search is a bounded case-insensitive substring match over string fields', 
   assert.equal(s.search('a'.repeat(101)).reason, 'query_too_long');
 });
 
-test('the three approved stores construct with their own prefixes and fields', () => {
+test('the five approved stores construct with their own prefixes and fields', () => {
   const files = store();
   const workflows = store({ name: 'workflows', prefix: 'w', enums: {}, fields: ['name', 'kind', 'state', 'updatedAt', 'detail'], types: { name: 'string', kind: 'string', state: 'string', updatedAt: 'number', detail: 'string' } });
   const models = store({ name: 'models', prefix: 'md', enums: {}, fields: ['name', 'kind', 'source', 'status', 'notes'], types: { name: 'string', kind: 'string', source: 'string', status: 'string', notes: 'string' } });
-  if (!files || !workflows || !models) return assert.ok(false, 'module missing');
+  const databases = store({ name: 'databases', prefix: 'db', enums: { kind: ['sqlite', 'json', 'other'], state: ['available', 'configured', 'unavailable'] }, fields: ['name', 'kind', 'state', 'updatedAt', 'detail'], types: { name: 'string', kind: 'string', state: 'string', updatedAt: 'number', detail: 'string' } });
+  const appdata = store({ name: 'appdata', prefix: 'ad', enums: { kind: ['kv', 'document', 'other'], state: ['active', 'archived'] }, fields: ['name', 'kind', 'state', 'updatedAt', 'detail'], types: { name: 'string', kind: 'string', state: 'string', updatedAt: 'number', detail: 'string' } });
+  if (!files || !workflows || !models || !databases || !appdata) return assert.ok(false, 'module missing');
   workflows.add({ name: 'nightly sync', kind: 'workflow', state: 'draft', updatedAt: 1, detail: 'syncs nightly' });
   models.add({ name: 'whisper-small', kind: 'stt', source: 'local', status: 'unavailable', notes: 'not downloaded' });
+  databases.add({ name: 'chat index', kind: 'sqlite', state: 'available', updatedAt: 1, detail: 'local sqlite file' });
+  appdata.add({ name: 'ui prefs', kind: 'kv', state: 'active', updatedAt: 1, detail: 'structured app data' });
   assert.equal(workflows.list()[0].id, 'w1');
   assert.equal(models.list()[0].id, 'md1');
+  assert.equal(databases.list()[0].id, 'db1');
+  assert.equal(appdata.list()[0].id, 'ad1');
+  assert.equal(databases.add({ name: 'bad', kind: 'redis', state: 'available', updatedAt: 2, detail: 'x' }).reason, 'value_not_allowed:kind');
+  assert.equal(appdata.add({ name: 'bad', kind: 'kv', state: 'frozen', updatedAt: 2, detail: 'x' }).reason, 'value_not_allowed:state');
   assert.equal(files.list().length, 0, 'every store starts empty: no auto-scan, no auto-exposure');
+  assert.equal(databases.list().length, 1, 'databases fills only through explicit app actions');
+  assert.equal(appdata.list().length, 1, 'appdata fills only through explicit app actions');
 });

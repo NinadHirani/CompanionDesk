@@ -164,6 +164,11 @@ const workspaceConnectorCatalog = createConnectorCatalog({ clock: () => Date.now
 const workspaceFilesStore = createWorkspaceStore({ clock: () => Date.now(), name: 'files', prefix: 'f', fields: ['name', 'path', 'kind', 'size', 'modifiedAt', 'source'], types: { name: 'string', path: 'string', kind: 'string', size: 'number', modifiedAt: 'number', source: 'string' }, enums: { kind: ['file', 'folder'], source: ['app_data', 'user_picked'] } });
 const workspaceWorkflowsStore = createWorkspaceStore({ clock: () => Date.now(), name: 'workflows', prefix: 'w', fields: ['name', 'kind', 'state', 'updatedAt', 'detail'], types: { name: 'string', kind: 'string', state: 'string', updatedAt: 'number', detail: 'string' }, enums: { kind: ['workflow', 'task'], state: ['draft', 'active', 'paused', 'done'] } });
 const workspaceModelsStore = createWorkspaceStore({ clock: () => Date.now(), name: 'models', prefix: 'md', fields: ['name', 'kind', 'source', 'status', 'notes'], types: { name: 'string', kind: 'string', source: 'string', status: 'string', notes: 'string' }, enums: { kind: ['llm', 'stt', 'tts', 'embedding'], source: ['local', 'cloud'], status: ['available', 'configured', 'unavailable'] } });
+// Gate 8 A continuation: local databases and structured app data. Same
+// contract as the other row stores: they start EMPTY and fill only
+// through explicit app actions, never background scans or auto-exposure.
+const workspaceDatabasesStore = createWorkspaceStore({ clock: () => Date.now(), name: 'databases', prefix: 'db', fields: ['name', 'kind', 'state', 'updatedAt', 'detail'], types: { name: 'string', kind: 'string', state: 'string', updatedAt: 'number', detail: 'string' }, enums: { kind: ['sqlite', 'json', 'other'], state: ['available', 'configured', 'unavailable'] } });
+const workspaceAppDataStore = createWorkspaceStore({ clock: () => Date.now(), name: 'appdata', prefix: 'ad', fields: ['name', 'kind', 'state', 'updatedAt', 'detail'], types: { name: 'string', kind: 'string', state: 'string', updatedAt: 'number', detail: 'string' }, enums: { kind: ['kv', 'document', 'other'], state: ['active', 'archived'] } });
 // Empty by design: a connector's credential reference lands here only
 // when a real credential store exists (a later Gate 2 step). Until then
 // every connect honestly refuses credential_ref_required, visibly.
@@ -184,6 +189,8 @@ const workspaceRows = createWorkspaceRows({
   activity: () => (agentAudit ? agentAudit.snapshot().entries : []),
   integrations: () => workspaceIntegrations.list(),
   files: () => workspaceFilesStore.list(),
+  databases: () => workspaceDatabasesStore.list(),
+  appdata: () => workspaceAppDataStore.list(),
   workflows: () => workspaceWorkflowsStore.list(),
   models: () => workspaceModelsStore.list(),
 });
