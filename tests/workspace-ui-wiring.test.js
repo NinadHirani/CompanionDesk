@@ -57,3 +57,14 @@ test('main wires the rows provider with the six owning sources and never registe
   assert.ok(mainSrc.includes("sensitive !== true"), 'sensitive memory rows filtered out');
   assert.ok(mainSrc.includes('CONNECTOR_CREDENTIAL_REFS'), 'credential refs map present');
 });
+
+test('main keeps the three Gate 8 stores and wires their providers; stores start empty', () => {
+  const mainSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'main.js'), 'utf8');
+  for (const name of ['workspaceFilesStore', 'workspaceWorkflowsStore', 'workspaceModelsStore']) {
+    assert.ok(mainSrc.includes('const ' + name + ' = createWorkspaceStore('), name + ' created');
+    assert.ok(mainSrc.includes('() => ' + name + '.list()'), name + ' provider wired');
+  }
+  const mod = require('../src/workspace-stores.js');
+  const fresh = mod.createWorkspaceStore({ clock: () => 0, name: 'files', prefix: 'f', fields: ['name'] });
+  assert.deepEqual(fresh.list(), []);
+});

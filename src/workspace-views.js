@@ -211,6 +211,54 @@
         return `${r.id} ${clip(r.name)} ${r.version} (${state})`;
       },
     },
+
+    // Gate 8 row stores (approved 26 Nov 2026): files/folders, workflow
+    // and task data, model/AI views. These schemas shape the three row
+    // stores main keeps; the stores start EMPTY and fill only through
+    // explicit app actions (no auto-scan, no auto-exposure, no model
+    // downloads).
+    files: {
+      fields: ['id', 'name', 'path', 'kind', 'size', 'modifiedAt', 'source'],
+      check(r) {
+        if (typeof r.id !== 'string' || !/^f\d+$/.test(r.id)) return false;
+        if (typeof r.name !== 'string' || r.name.length === 0 || r.name.length > MAX_TITLE) return false;
+        if (typeof r.path !== 'string' || r.path.length === 0 || r.path.length > MAX_TITLE) return false;
+        if (r.kind !== 'file' && r.kind !== 'folder') return false;
+        if (!Number.isSafeInteger(r.size) || r.size < 0) return false;
+        if (!Number.isSafeInteger(r.modifiedAt) || r.modifiedAt <= 0) return false;
+        if (r.source !== 'app_data' && r.source !== 'user_picked') return false;
+        return true;
+      },
+      line(r) { return `${r.id} ${clip(r.name)} (${r.kind}, ${r.size}B) ${clip(r.path)}`; },
+    },
+
+    workflows: {
+      fields: ['id', 'name', 'kind', 'state', 'updatedAt', 'detail'],
+      check(r) {
+        if (typeof r.id !== 'string' || !/^w\d+$/.test(r.id)) return false;
+        if (typeof r.name !== 'string' || r.name.length === 0 || r.name.length > MAX_TITLE) return false;
+        if (r.kind !== 'workflow' && r.kind !== 'task') return false;
+        if (['draft', 'active', 'paused', 'done'].indexOf(r.state) === -1) return false;
+        if (!Number.isSafeInteger(r.updatedAt) || r.updatedAt <= 0) return false;
+        if (typeof r.detail !== 'string' || r.detail.length > MAX_TITLE) return false;
+        return true;
+      },
+      line(r) { return `${r.id} ${clip(r.name)} (${r.kind}, ${r.state}) ${clip(r.detail)}`; },
+    },
+
+    models: {
+      fields: ['id', 'name', 'kind', 'source', 'status', 'notes'],
+      check(r) {
+        if (typeof r.id !== 'string' || !/^md\d+$/.test(r.id)) return false;
+        if (typeof r.name !== 'string' || r.name.length === 0 || r.name.length > MAX_TITLE) return false;
+        if (['llm', 'stt', 'tts', 'embedding'].indexOf(r.kind) === -1) return false;
+        if (r.source !== 'local' && r.source !== 'cloud') return false;
+        if (['available', 'configured', 'unavailable'].indexOf(r.status) === -1) return false;
+        if (typeof r.notes !== 'string' || r.notes.length > MAX_TITLE) return false;
+        return true;
+      },
+      line(r) { return `${r.id} ${clip(r.name)} (${r.kind}, ${r.source}, ${r.status})`; },
+    },
   };
 
   function view(name) {

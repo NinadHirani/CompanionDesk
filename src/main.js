@@ -64,6 +64,7 @@ const { SCHEDULING_TOOL_DEFINITION } = require('./agent-tool-scheduling');
 const { createReminderBook } = require('./agent-reminders');
 const { createAgentSurface } = require('./agent-surface');
 const { createWorkspaceRows } = require('./workspace-rows');
+const { createWorkspaceStore } = require('./workspace-stores');
 const { createConnectorCatalog } = require('./connectors');
 const { createIntegrationRegistry } = require('./integrations');
 const { createDeviceAccessCentre } = require('./device-access');
@@ -133,6 +134,14 @@ let agentSurface = null;
 const workspaceDeviceAccess = createDeviceAccessCentre({ clock: () => Date.now(), platform: process.platform });
 const workspaceIntegrations = createIntegrationRegistry({ clock: () => Date.now() });
 const workspaceConnectorCatalog = createConnectorCatalog({ clock: () => Date.now() });
+// Gate 8 row stores (approved 26 Nov 2026): files/workflows/models. They
+// start EMPTY and fill only through explicit app actions or user action;
+// nothing auto-scans the filesystem, nothing auto-exposes itself, and no
+// model downloads happen. In-memory this slice; persistence stays an
+// approved-scope follow-on.
+const workspaceFilesStore = createWorkspaceStore({ clock: () => Date.now(), name: 'files', prefix: 'f', fields: ['name', 'path', 'kind', 'size', 'modifiedAt', 'source'], types: { name: 'string', path: 'string', kind: 'string', size: 'number', modifiedAt: 'number', source: 'string' }, enums: { kind: ['file', 'folder'], source: ['app_data', 'user_picked'] } });
+const workspaceWorkflowsStore = createWorkspaceStore({ clock: () => Date.now(), name: 'workflows', prefix: 'w', fields: ['name', 'kind', 'state', 'updatedAt', 'detail'], types: { name: 'string', kind: 'string', state: 'string', updatedAt: 'number', detail: 'string' }, enums: { kind: ['workflow', 'task'], state: ['draft', 'active', 'paused', 'done'] } });
+const workspaceModelsStore = createWorkspaceStore({ clock: () => Date.now(), name: 'models', prefix: 'md', fields: ['name', 'kind', 'source', 'status', 'notes'], types: { name: 'string', kind: 'string', source: 'string', status: 'string', notes: 'string' }, enums: { kind: ['llm', 'stt', 'tts', 'embedding'], source: ['local', 'cloud'], status: ['available', 'configured', 'unavailable'] } });
 // Empty by design: a connector's credential reference lands here only
 // when a real credential store exists (a later Gate 2 step). Until then
 // every connect honestly refuses credential_ref_required, visibly.
@@ -152,6 +161,9 @@ const workspaceRows = createWorkspaceRows({
   permissions: () => workspaceDeviceAccess.list(),
   activity: () => (agentAudit ? agentAudit.snapshot().entries : []),
   integrations: () => workspaceIntegrations.list(),
+  files: () => workspaceFilesStore.list(),
+  workflows: () => workspaceWorkflowsStore.list(),
+  models: () => workspaceModelsStore.list(),
 });
 let agentRuntime = null;
 
