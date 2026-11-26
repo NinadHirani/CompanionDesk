@@ -59,6 +59,31 @@ function cloudRoutes() {
   ];
 }
 
+test('a streamed answer keeps its final unterminated line', async () => {
+  // The stream ends after a final NDJSON line that carries no trailing
+  // newline (a truncated connection, a proxy flush). An earlier token must
+  // not make the answer lose that last line.
+  const lines = [
+    JSON.stringify({ message: { content: 'Hello' } }) + '\n',
+    JSON.stringify({ message: { content: ' world' } }),
+  ];
+  const body = {
+    getReader() {
+      let i = 0;
+      return { read: async () => (i < lines.length ? { done: false, value: new TextEncoder().encode(lines[i++]) } : { done: true, value: undefined }) };
+    },
+  };
+  let sent;
+  const ai = createAi({
+    fetchImpl: mockFetch([['/api/chat', (opts) => { sent = JSON.parse(opts.body); return { ok: true, body }; }]]),
+  });
+  const tokens = [];
+  const full = await ai.chat({ system: 'sys', prompt: 'hi', onToken: (t) => tokens.push(t) });
+  assert.equal(full, 'Hello world');
+  assert.deepEqual(tokens, ['Hello', ' world']);
+  assert.equal(sent.model, 'llama3.2:latest');
+});
+
 test('complete is local-only: even with a key and cloud enabled it never calls the cloud', async () => {
   let cloudCalled = 0;
   const routes = cloudRoutes();

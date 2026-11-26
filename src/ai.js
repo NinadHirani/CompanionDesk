@@ -181,7 +181,10 @@
             } catch { /* partial line: ignore */ }
           }
         }
-        return full || consume(buffer);
+        // Flush whatever the connection ended with: an unterminated final
+        // line still belongs to the answer, even when tokens already arrived.
+        const tail = consume(buffer);
+        return full + tail;
       }
       return consume(await res.text());
     }
