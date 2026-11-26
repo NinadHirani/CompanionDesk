@@ -271,6 +271,7 @@
     const res = await api.settings_save(payload);
     if (res.ok) { fillSettings(res.settings); msg.textContent = 'Saved.'; msg.className = 'hint'; UI.today.refresh(); }
     else { msg.textContent = UI.friendlyError(res.error); msg.className = 'hint error'; }
+  });
 
   // M6 slice 4: wake word session controls. The settings checkbox saves the
   // gate; Start/Pause/Resume/Stop drive the session itself and every action
@@ -327,7 +328,6 @@
     });
   }
   if (F.wakeStatus) refreshWakeStatus();
-  });
 
   // ---- provider status (read on demand; no polling, no cloud probing) ----
   const PS = {
