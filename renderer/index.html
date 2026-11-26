@@ -14,6 +14,7 @@
       <button data-view="ask">Ask</button>
       <button data-view="grades">Grades</button>
       <button data-view="about">About me</button>
+      <button data-view="workspace">Workspace</button>
     </nav>
     <button id="ai-status" class="status" type="button" aria-live="polite">Checking local model</button>
     <span class="spacer"></span>
@@ -271,6 +272,20 @@
   </main>
 
   <!-- First run -->
+  <!-- Workspace (Gate 3, 26 Nov 2026): the workspace-views catalog with
+       the connector settings section. Read-only rows; connector actions
+       happen only on explicit clicks. -->
+  <main id="view-workspace" class="narrow view" hidden aria-labelledby="ws-h">
+    <h2 id="ws-h">Workspace</h2>
+    <div class="controls">
+      <select id="ws-view" aria-label="Workspace view"></select>
+      <button id="ws-refresh" class="primary">Refresh</button>
+    </div>
+    <div id="ws-status" role="status" aria-live="polite"></div>
+    <div id="ws-rows"></div>
+    <div id="ws-connectors" class="card"></div>
+  </main>
+
   <main id="view-onboarding" class="narrow view" hidden>
     <section class="card">
       <p class="hint" id="ob-progress" role="status" aria-live="polite"></p>
@@ -303,6 +318,8 @@
   <script src="../src/memory-view.js"></script>
   <script src="memory-panel.js"></script>
   <script src="schedules-panel.js"></script>
+  <script src="../src/workspace-views.js"></script>
+  <script src="workspace-panel.js"></script>
   <script src="boot.js"></script>
 </body>
 </html>

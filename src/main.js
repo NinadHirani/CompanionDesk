@@ -63,6 +63,10 @@ const { createRunEntry } = require('./agent-run-entry');
 const { SCHEDULING_TOOL_DEFINITION } = require('./agent-tool-scheduling');
 const { createReminderBook } = require('./agent-reminders');
 const { createAgentSurface } = require('./agent-surface');
+const { createWorkspaceRows } = require('./workspace-rows');
+const { createConnectorCatalog } = require('./connectors');
+const { createIntegrationRegistry } = require('./integrations');
+const { createDeviceAccessCentre } = require('./device-access');
 const { createSchedulerSurface } = require('./scheduler-surface');
 const { createAgentRuntime, createAgentStack } = require('./agent-runtime');
 const { createAgentPersistence } = require('./agent-persistence');
@@ -122,6 +126,33 @@ function runDisplayDelivery() {
 }
 let agentReminders = null;
 let agentSurface = null;
+// Gate 3/8 workspace surface (approved by Ninad on 26 Nov 2026): the
+// app-level stores the workspace views mirror. The device access centre
+// and the integration registry start EMPTY and stay empty until the user
+// grants or registers something: no auto-exposure, no auto-connection.
+const workspaceDeviceAccess = createDeviceAccessCentre({ clock: () => Date.now(), platform: process.platform });
+const workspaceIntegrations = createIntegrationRegistry({ clock: () => Date.now() });
+const workspaceConnectorCatalog = createConnectorCatalog({ clock: () => Date.now() });
+// Empty by design: a connector's credential reference lands here only
+// when a real credential store exists (a later Gate 2 step). Until then
+// every connect honestly refuses credential_ref_required, visibly.
+const CONNECTOR_CREDENTIAL_REFS = new Map();
+// The rows provider: each wired view's owning rows, projected to exactly
+// what the workspace-views schema accepts. Sensitive memory rows never
+// reach the workspace view (the memory panel's per-search consent governs
+// them; M4 defines any wider treatment).
+const workspaceRows = createWorkspaceRows({
+  conversations: () => chatHistory.listConversations(db),
+  tasks: () => (agentReminders ? agentReminders.list() : []),
+  memory: () => {
+    const r = P.itemsMemory(ctx());
+    return (r && r.ok === true) ? r.items.filter((it) => it && it.sensitive !== true) : [];
+  },
+  tools: () => (agentRegistry ? agentRegistry.list() : []),
+  permissions: () => workspaceDeviceAccess.list(),
+  activity: () => (agentAudit ? agentAudit.snapshot().entries : []),
+  integrations: () => workspaceIntegrations.list(),
+});
 let agentRuntime = null;
 
 function vaultDir() {
@@ -983,6 +1014,25 @@ app.whenReady().then(async () => {
   } catch (e) {
     console.error('[agent] read-only surface unavailable:', e && e.message);
   }
+
+  // Gate 3/8 workspace surface (approved by Ninad on 26 Nov 2026): the
+  // wired views' rows through the pure rows provider, and the connector
+  // catalog's lifecycle controls. Every connector action exists only as a
+  // response to an explicit renderer click: main builds userInitiated
+  // here, so nothing can connect, disconnect, revoke or readmit without a
+  // real gesture. Nothing auto-connects; the catalog itself still refuses
+  // any action lacking the user flag. No credential store exists yet, so
+  // every connect honestly refuses credential_ref_required.
+  ipcMain.handle('workspace:rows', async (_e, name) => workspaceRows.rows(typeof name === 'string' ? name : ''));
+  ipcMain.handle('workspace:connectors', async () => workspaceConnectorCatalog.list().map((e) => Object.assign({}, e, { state: workspaceConnectorCatalog.state(e.id) || 'discovered' })));
+  ipcMain.handle('workspace:connectorConnect', async (_e, id, scopes) => {
+    if (typeof id !== 'string' || id.length === 0) return { ok: false, reason: 'bad_request' };
+    const clean = Array.isArray(scopes) ? scopes.filter((x) => typeof x === 'string') : [];
+    return workspaceConnectorCatalog.connect(id, { userInitiated: true, scopes: clean, credentialRef: CONNECTOR_CREDENTIAL_REFS.get(id) });
+  });
+  ipcMain.handle('workspace:connectorDisconnect', async (_e, id) => (typeof id === 'string' && id.length > 0 ? workspaceConnectorCatalog.disconnect(id, { userInitiated: true }) : { ok: false, reason: 'bad_request' }));
+  ipcMain.handle('workspace:connectorRevoke', async (_e, id) => (typeof id === 'string' && id.length > 0 ? workspaceConnectorCatalog.revoke(id, { userInitiated: true }) : { ok: false, reason: 'bad_request' }));
+  ipcMain.handle('workspace:connectorReadmit', async (_e, id) => (typeof id === 'string' && id.length > 0 ? workspaceConnectorCatalog.readmit(id, { userInitiated: true }) : { ok: false, reason: 'bad_request' }));
   // M5 slice 1: start the proactive delivery loop only after the surfaces
   // are registered. With no schedules and delivery off by default it is
   // inert: the first fire happens only for a schedule the user created.

@@ -16,11 +16,11 @@
     return `${n} ${word}${n === 1 ? '' : 's'}`;
   }
 
-  const views = ['today', 'ask', 'grades', 'about', 'onboarding'];
+  const views = ['today', 'ask', 'grades', 'about', 'workspace', 'onboarding'];
   const hooks = {};
 
   function show(name) {
-    for (const v of views) document.getElementById(`view-${v}`).hidden = v !== name;
+    for (const v of views) { const sec = document.getElementById(`view-${v}`); if (sec) sec.hidden = v !== name; }
     for (const b of document.querySelectorAll('#tabs button')) {
       b.classList.toggle('active', b.dataset.view === name);
       // The section tabs are buttons, not a tablist: the open section is

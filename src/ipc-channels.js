@@ -113,6 +113,18 @@ const IPC_CHANNELS = Object.freeze([
   'notifications:read',
   'reminders:read',
   'notifications:ack',
+
+  // Gate 3/8 workspace surface (approved 26 Nov 2026): the workspace
+  // views' rows plus the connector catalog's lifecycle controls. The rows
+  // channel is read-only; every connector action is main-built
+  // userInitiated from an explicit renderer click and the policy core
+  // still refuses anything lacking it. No auto-connect, no auto-exposure.
+  'workspace:rows',
+  'workspace:connectors',
+  'workspace:connectorConnect',
+  'workspace:connectorDisconnect',
+  'workspace:connectorRevoke',
+  'workspace:connectorReadmit',
 ]);
 
 // Messages main may PUSH to a window (streaming tokens and the like). The

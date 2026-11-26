@@ -271,5 +271,12 @@
     return { ok: true, view: name, lines, shown: lines.length, skipped, total: records.length };
   }
 
-  return { MAX_DISPLAY, catalog, resolve, shape };
+  // Field list of a wired view's schema (for providers that must project
+  // owning rows to exactly what the schema accepts); null when unwired.
+  function fields(name) {
+    const schema = SCHEMAS[name];
+    return schema ? schema.fields.slice() : null;
+  }
+
+  return { MAX_DISPLAY, catalog, resolve, shape, fields };
 });

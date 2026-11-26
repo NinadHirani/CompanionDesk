@@ -109,6 +109,12 @@ const IPC_CHANNELS = [
   'notifications:read',
   'reminders:read',
   'notifications:ack',
+  'workspace:rows',
+  'workspace:connectors',
+  'workspace:connectorConnect',
+  'workspace:connectorDisconnect',
+  'workspace:connectorRevoke',
+  'workspace:connectorReadmit',
 ];
 
 // Messages main may push to this window. Mirrors IPC_EVENTS in ipc-channels.js.
