@@ -969,6 +969,11 @@ app.whenReady().then(async () => {
     preloadPath: path.join(__dirname, 'preload.js'),
     htmlPath: path.join(__dirname, '..', 'renderer', 'overlay.html'),
     iconPath: path.join(__dirname, '..', 'build', 'icon.png'),
+    // M8 slice 4: the companion remembers where the user moved and resized
+    // it. Bounds live in the settings table as a JSON string; the pure
+    // validator in companion-window-state.js refuses anything unusable.
+    loadSavedBounds: () => db.getSetting('companion_window_bounds', ''),
+    saveBounds: (json) => db.setSetting('companion_window_bounds', json),
   });
   lockDownPermissions();
   registerIpc();

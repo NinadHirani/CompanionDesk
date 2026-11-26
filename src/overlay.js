@@ -3,15 +3,52 @@
 // The companion overlay: a small always-on-top window summoned by a global
 // shortcut. It is created hidden at start so showing it is instant, hidden
 // from screen capture where the OS allows, and independent of the dashboard.
-// Electron-only; the maths and validation live in overlay-layout.js and
+// M8 slice 4: the window is movable and resizable, and the last user
+// placement is remembered across restarts. Electron-only; the maths and
+// validation live in overlay-layout.js, companion-window-state.js and
 // hotkey.js so they can be tested without it.
 
 const { BrowserWindow, globalShortcut, screen } = require('electron');
 const { overlayBounds, DEFAULT_SIZE } = require('./overlay-layout');
+const { restoreBounds, captureBounds } = require('./companion-window-state');
 
-function createOverlayController({ preloadPath, htmlPath, iconPath }) {
+const SAVE_DEBOUNCE_MS = 250;
+
+function createOverlayController({ preloadPath, htmlPath, iconPath, loadSavedBounds, saveBounds }) {
   let win = null;
   let registered = null; // the accelerator currently held, or null
+  // remembered: a saved placement or a user move/resize is in charge of the
+  // window position. Until then the window keeps the old behaviour of
+  // appearing on the display the cursor is on, so nothing changes for a
+  // user who never drags the companion.
+  let remembered = false;
+  let placing = false; // a programmatic setBounds is in flight, not a user move
+  let saveTimer = null;
+
+  function boundsWorkAreas() {
+    try { return screen.getAllDisplays().map((d) => d.workArea); } catch { return null; }
+  }
+
+  function persistBounds() {
+    saveTimer = null;
+    if (!saveBounds || !win || win.isDestroyed()) return;
+    const clean = captureBounds(win.getBounds());
+    if (!clean) return;
+    try { saveBounds(JSON.stringify(clean)); } catch { /* a failed save keeps this session's placement only */ }
+  }
+
+  function schedulePersistBounds() {
+    if (placing || !saveBounds) return;
+    remembered = true;
+    if (saveTimer) clearTimeout(saveTimer);
+    saveTimer = setTimeout(persistBounds, SAVE_DEBOUNCE_MS);
+  }
+
+  function applyBounds(bounds) {
+    if (!win || win.isDestroyed() || !bounds) return;
+    placing = true;
+    try { win.setBounds(bounds); } finally { placing = false; }
+  }
 
   function ensure() {
     if (win && !win.isDestroyed()) return win;
@@ -19,7 +56,9 @@ function createOverlayController({ preloadPath, htmlPath, iconPath }) {
       ...DEFAULT_SIZE,
       show: false,
       frame: false,
-      resizable: false,
+      resizable: true,
+      minWidth: 240,
+      minHeight: 160,
       minimizable: false,
       maximizable: false,
       fullscreenable: false,
@@ -33,6 +72,20 @@ function createOverlayController({ preloadPath, htmlPath, iconPath }) {
     // Keep the overlay itself out of screenshots and screen sharing (macOS, Windows).
     win.setContentProtection(true);
     win.loadFile(htmlPath);
+    // Bring back the last user placement, clamped fail-closed into a real
+    // display (an unplugged monitor folds the window onto the nearest one).
+    // Anything unusable keeps the default placement below.
+    if (loadSavedBounds) {
+      try {
+        const restored = restoreBounds(loadSavedBounds(), boundsWorkAreas());
+        if (restored) { applyBounds(restored); remembered = true; }
+      } catch { /* a failing settings read never blocks the overlay */ }
+    }
+    win.on('move', schedulePersistBounds);
+    win.on('resize', schedulePersistBounds);
+    win.on('close', () => {
+      if (saveTimer) { clearTimeout(saveTimer); persistBounds(); }
+    });
     win.on('closed', () => { win = null; });
     return win;
   }
@@ -45,8 +98,11 @@ function createOverlayController({ preloadPath, htmlPath, iconPath }) {
   // (used after a screenshot hid it).
   function show({ reset = true } = {}) {
     const w = ensure();
-    const display = screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
-    w.setBounds(overlayBounds(display.workArea));
+    if (!remembered) {
+      const display = screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
+      applyBounds(overlayBounds(display.workArea));
+      remembered = true;
+    }
     w.setAlwaysOnTop(true, 'floating');
     try { w.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true }); } catch { /* not supported everywhere */ }
     w.show();

@@ -194,6 +194,10 @@ input:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); 
 
 /* ---- overlay ---- */
 body.overlay { display: flex; flex-direction: column; height: 100vh; padding: 12px 14px; gap: 8px; overflow: hidden; }
+/* The companion window is movable: a slim strip along the top edge is the
+   drag handle (it sits inside the padding, so nothing clickable loses area).
+   Everything below it stays clickable. Browsers ignore app-region. */
+body.overlay::before { content: ''; position: fixed; top: 0; left: 0; right: 0; height: 10px; -webkit-app-region: drag; }
 .ov-top { display: flex; gap: 8px; }
 .ov-top input { font-size: 15px; padding: 9px 10px; }
 .ov-answer { flex: 1; overflow-y: auto; white-space: pre-wrap; line-height: 1.5; overflow-wrap: anywhere; }
