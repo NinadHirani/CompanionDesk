@@ -123,29 +123,40 @@
     document.getElementById('ob-finish').textContent = 'Skip the rest';
   }
 
+  // One answer at a time: two activations in the same tick (a double-click
+  // on Next, Enter plus Next, or Next plus Skip) must not both resume, or
+  // the question is answered twice and the next one is skipped.
+  let submitInFlight = false;
+
   async function submit(skip) {
-    disarmFinish();
-    const q = questions[index];
-    // Past the last question the only pending step is the completion
-    // itself: a crash there must be retried as a completion, never as a
-    // phantom answer to a question that no longer exists.
-    if (!q) { await finish(); return; }
-    if (!skip) {
-      let res;
-      try {
-        res = await api.onboarding_answer({ id: q.id, answer: currentAnswer() });
-      } catch (e) {
-        // A bridge or transport crash must not strand the interview: the
-        // failure is reported in place, the answer stays in the field and
-        // the question stays put for a retry.
-        msg.textContent = UI.friendlyError('bad_request');
-        return;
-      }
-      if (!res.ok) { msg.textContent = UI.friendlyError(res.error); return; }
+    if (submitInFlight) return;
+    submitInFlight = true;
+    try {
+        disarmFinish();
+        const q = questions[index];
+        // Past the last question the only pending step is the completion
+        // itself: a crash there must be retried as a completion, never as a
+        // phantom answer to a question that no longer exists.
+        if (!q) { await finish(); return; }
+        if (!skip) {
+          let res;
+          try {
+            res = await api.onboarding_answer({ id: q.id, answer: currentAnswer() });
+          } catch (e) {
+            // A bridge or transport crash must not strand the interview: the
+            // failure is reported in place, the answer stays in the field and
+            // the question stays put for a retry.
+            msg.textContent = UI.friendlyError('bad_request');
+            return;
+          }
+          if (!res.ok) { msg.textContent = UI.friendlyError(res.error); return; }
+        }
+        index += 1;
+        if (index >= questions.length) await finish();
+        else renderQuestion();
+    } finally {
+      submitInFlight = false;
     }
-    index += 1;
-    if (index >= questions.length) await finish();
-    else renderQuestion();
   }
 
   nextBtn.addEventListener('click', () => submit(false));
