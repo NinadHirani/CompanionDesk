@@ -41,23 +41,30 @@ broad, but nothing is activated automatically. Implemented 26 Nov 2026
 evening as src/connectors.js (pure policy core, 12 red-first tests,
 AUTO_CONNECT false, unregistered in main.js, nothing connected).
 Connecting a real service still needs a named service and an explicit
-per-connector activation by Ninad.
+per-connector activation by Ninad. FOLLOW-ON APPROVED (26 Nov 2026 late
+evening): commit 25990f5 accepted; proceed with the connector settings
+UI and its integration within this approved scope (management UI for
+the lifecycle, still nothing activated without his choice).
 
-## 3. Workspace renderer UI for the six wired views
+## 3. Workspace renderer UI -- RESOLVED (26 Nov 2026 late evening)
 
-The schemas are landed; no renderer surface shows them yet. Building the UI
-touches overlay.js, main.js and index.html, which sit in the m84 closed set,
-so this needs you to reopen those files for this specific work. Decision:
-(a) approve the UI build with the m84 files reopened for it, or (b) keep
-the views schema-only.
+Ninad approved (a) FULL: implement the Workspace UI end to end --
+functional interactions, responsive layouts, settings, wiring to the
+existing architecture -- with the scoped renderer paths (overlay.js,
+main.js, index.html) reopened for exactly this work. The m84 float
+toggle's verified behavior in those files stays untouched; its existing
+tests keep guarding it. Unwired views render an honest not-wired state.
 
-## 4. file_write registration (Gate 2)
+## 4. file_write / filesystem access (Gate 2) -- RESOLVED (26 Nov 2026 late evening)
 
-The file-output gate (3j.13, D-F1/F2/F3) is implemented and tested but NOT
-registered or wired; the production registry carries exactly one tool,
-schedule_create. Decision: (a) register file_write with the root unset by
-default (the enable step, mirroring the schedule_create approval), or
-(b) keep it unregistered.
+Ninad chose C, the broader path: filesystem access is authorized wherever
+the OS allows it, implemented with safeguards -- the real target path is
+always visible before any action, overwrite and delete require explicit
+confirmation, the OS sandbox and permissions are respected and never
+bypassed, and nothing destructive ever happens silently. Registration
+mirrors the schedule_create enable step (guardrails tested); any scoped
+root starts unset by default. Implemented as the file-access policy core
+plus its Gate 2 enable step.
 
 ## 5. M7 capture engine (deferred item 4)
 
@@ -79,12 +86,14 @@ provenance, the fail-closed persistSensitive refusal surfaced verbatim, and
 consent-gated retrieval with the budget and matched-terms header. No
 on-disk sensitive format was created and none is proposed.
 
-## 8. Workspace row stores for files, workflows, models
+## 8. Workspace row stores -- RESOLVED (26 Nov 2026 late evening)
 
-Those three views have no owning row store yet, so they cannot be wired;
-building the stores is new subsystem design (what each view should hold).
-Decision: (a) pick what each should show and approve the build, or (b)
-leave them unwired.
+Ninad approved (a) FULL extensible support: owning row stores for
+files/folders, local databases, structured app data, workflow/task data,
+model/AI views, and searchable/index views. Configurable permissions; NO
+auto-exposure and NO auto-connection. The stores are pure, bounded,
+fail-closed rows their views mirror exactly; schemas in
+src/workspace-views.js wire once the stores exist.
 
 Not on this sheet: the wake-word lane stays closed per the owner's standing
 closure; reopening it is always the owner's call and no question about it is
