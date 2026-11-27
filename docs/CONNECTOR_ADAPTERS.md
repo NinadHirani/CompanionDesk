@@ -306,3 +306,35 @@ checks, declarations, the registry-parity set extended, keyless connect
 (no ref, invalid ref refused, valid ref accepted), the engine running
 public actions with no credential reader, and the connect gate still
 refusing an unscoped or non-user-initiated connect. Suite 1491/1491.
+
+## Batch 8 (27 Nov 2026): Open-Meteo weather + OpenStreetMap Nominatim
+
+Two more keyless public adapters on the batch 7 `public` authShape. Both
+catalog rows already existed as definition-only entries and were upgraded
+in place.
+
+- **Open-Meteo** (`weather.read`): `get_current_weather` and
+  `get_daily_forecast`, both taking strict decimal coordinates
+  (latitude within +/-90, longitude within +/-180, no exponent form,
+  re-serialized from the parsed number so the URL can only ever carry a
+  plain number). Forecast days capped at 16 (default 7).
+- **OpenStreetMap** (`places.read`): Nominatim `search_places` (query,
+  limit capped at 50, default 10) and `reverse_geocode` (same strict
+  coordinate validation). Every call sends the descriptive User-Agent
+  the Nominatim usage policy requires; the policy's one-request-per-
+  second limit is documented on the catalog row rather than silently
+  ignored. No API key exists to request, and none is asked for.
+
+Provider terms honored in documentation and headers: Open-Meteo is free
+for non-commercial use within its daily fair-use quota; Nominatim's
+polite-use rules live on the catalog row. Nothing auto-connects, no
+write actions exist, no external side effects beyond the reads
+themselves, and no user-controlled host: both adapters pin their own
+API hosts.
+
+Tests: coordinate validation (bounds, non-numeric, exponent form,
+missing required params), limit caps, no Authorization header,
+descriptive User-Agent on Nominatim, declarations, the registry-parity
+set extended, keyless runs behind the connect gate, and the
+definition-only counts updated (147 curated+expanded, 143 expanded-only).
+Suite 1494/1494.

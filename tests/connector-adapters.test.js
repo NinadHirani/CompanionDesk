@@ -12,7 +12,7 @@ const assert = require('node:assert');
 const adapters = require('../src/connector-adapters.js');
 const { createConnectorCatalog } = require('../src/connectors.js');
 
-const IMPLEMENTED = ['anthropic', 'arxiv', 'crossref', 'discord', 'github', 'gmail', 'google-calendar', 'google-drive', 'google-gemini', 'huggingface', 'microsoft-calendar', 'microsoft-onedrive', 'microsoft-outlook', 'notion', 'openai', 'openalex', 'slack', 'telegram'];
+const IMPLEMENTED = ['anthropic', 'arxiv', 'crossref', 'discord', 'github', 'gmail', 'google-calendar', 'google-drive', 'google-gemini', 'huggingface', 'microsoft-calendar', 'microsoft-onedrive', 'microsoft-outlook', 'notion', 'open-meteo', 'openai', 'openalex', 'openstreetmap', 'slack', 'telegram'];
 const OAUTH = ['gmail', 'google-calendar', 'google-drive', 'microsoft-calendar', 'microsoft-onedrive', 'microsoft-outlook'];
 
 test('the adapter registry covers exactly the implemented catalog entries', () => {
@@ -460,5 +460,42 @@ test('the three research adapters are read-only under declared scopes', () => {
       assert.equal(a.kind, 'read_only', pair[0] + '.' + a.id + ' is a read');
       assert.equal(a.scope, pair[1]);
     }
+  }
+});
+
+// ---- batch 8 (27 Nov 2026): Open-Meteo weather + OSM Nominatim, keyless ----
+
+test('open-meteo reads validate coordinates and build plain public GETs', () => {
+  const r = adapters.buildRequest('open-meteo', 'get_current_weather', { latitude: '22.3039', longitude: '70.8022' });
+  assert.equal(r.ok, true);
+  assert.equal(r.request.method, 'GET');
+  assert.equal(r.request.url, 'https://api.open-meteo.com/v1/forecast?latitude=22.3039&longitude=70.8022&current=temperature_2m,weather_code,wind_speed_10m');
+  assert.equal(r.request.headers.Authorization, undefined, 'no credential rides a public call');
+  const f = adapters.buildRequest('open-meteo', 'get_daily_forecast', { latitude: '-33.9', longitude: '151.2', days: '5' });
+  assert.equal(f.request.url, 'https://api.open-meteo.com/v1/forecast?latitude=-33.9&longitude=151.2&daily=temperature_2m_max,temperature_2m_min,precipitation_sum,weather_code&forecast_days=5');
+  for (const bad of [{ latitude: '91', longitude: '10' }, { latitude: 'abc', longitude: '10' }, { latitude: '1e5', longitude: '10' }]) {
+    assert.equal(adapters.buildRequest('open-meteo', 'get_current_weather', bad).reason, 'param_invalid');
+  }
+  assert.equal(adapters.buildRequest('open-meteo', 'get_current_weather', { latitude: '', longitude: '10' }).reason, 'param_missing');
+  assert.equal(adapters.buildRequest('open-meteo', 'get_daily_forecast', { latitude: '1', longitude: '1', days: '17' }).reason, 'param_invalid');
+  assert.equal(adapters.validateOnly('open-meteo', 'get_current_weather', { latitude: '1', longitude: '2' }), null, 'validateOnly needs no credential');
+});
+
+test('openstreetmap Nominatim reads validate params and cap results', () => {
+  const s = adapters.buildRequest('openstreetmap', 'search_places', { query: 'Rajkot' });
+  assert.equal(s.ok, true);
+  assert.equal(s.request.url, 'https://nominatim.openstreetmap.org/search?q=Rajkot&format=jsonv2&limit=10');
+  assert.ok(s.request.headers['User-Agent'].indexOf('CompanionDesk') === 0, 'a descriptive User-Agent rides every Nominatim call');
+  const rev = adapters.buildRequest('openstreetmap', 'reverse_geocode', { latitude: '22.3039', longitude: '70.8022' });
+  assert.equal(rev.request.url, 'https://nominatim.openstreetmap.org/reverse?lat=22.3039&lon=70.8022&format=jsonv2');
+  assert.equal(adapters.buildRequest('openstreetmap', 'search_places', { query: 'q', limit: '99' }).reason, 'param_invalid');
+  assert.equal(adapters.buildRequest('openstreetmap', 'reverse_geocode', { latitude: '-95', longitude: '10' }).reason, 'param_invalid');
+  for (const a of adapters.listActions('openstreetmap')) {
+    assert.equal(a.kind, 'read_only');
+    assert.equal(a.scope, 'places.read');
+  }
+  for (const a of adapters.listActions('open-meteo')) {
+    assert.equal(a.kind, 'read_only');
+    assert.equal(a.scope, 'weather.read');
   }
 });

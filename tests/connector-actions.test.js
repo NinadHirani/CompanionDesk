@@ -383,3 +383,15 @@ test('the connect gate still holds for public connectors: no scopes, no run', as
   assert.equal(catalog.connect('arxiv', {}).reason, 'requires_user_action');
   assert.equal((await engine.run('arxiv', 'get_paper', { id: '2310.1' })).reason, 'not_connected');
 });
+
+// ---- batch 8 (27 Nov 2026): weather and map reads run keyless behind the gate ----
+
+test('open-meteo and openstreetmap reads run with no credential once connected', async () => {
+  const { catalog, engine } = makeEngine(async () => ({ status: 200, body: '{}' }), null);
+  assert.equal((await engine.run('open-meteo', 'get_current_weather', { latitude: '1', longitude: '2' })).reason, 'not_connected');
+  assert.equal(catalog.connect('open-meteo', { userInitiated: true, scopes: ['weather.read'] }).ok, true);
+  assert.equal((await engine.run('open-meteo', 'get_current_weather', { latitude: '1', longitude: '2' })).ok, true);
+  assert.equal(catalog.connect('openstreetmap', { userInitiated: true, scopes: ['places.read'] }).ok, true);
+  assert.equal((await engine.run('openstreetmap', 'search_places', { query: 'Rajkot' })).ok, true);
+  assert.equal((await engine.run('openstreetmap', 'reverse_geocode', { latitude: '22.3', longitude: '70.8' })).ok, true);
+});

@@ -97,6 +97,17 @@
 
   function bearerHeader(token) { return { Authorization: 'Bearer ' + token }; }
 
+  // Batch 8 (27 Nov 2026): strict decimal coordinates for the public
+  // weather and geocoding adapters. Plain decimal form only (no
+  // exponent), bounded, re-serialized from the parsed number so the URL
+  // can never carry anything but a plain number.
+  function validCoordinate(raw, bound) {
+    if (typeof raw !== 'string' || !/^-?\d{1,3}(\.\d{1,8})?$/.test(raw)) return null;
+    const n = parseFloat(raw);
+    if (!isFinite(n) || Math.abs(n) > bound) return null;
+    return String(n);
+  }
+
   function jsonHeaders(extra) {
     return Object.assign({ 'Content-Type': 'application/json' }, extra || {});
   }
@@ -419,6 +430,52 @@
           const okShape = /^W[0-9]{1,15}$/.test(p.work_id) || /^(doi:)?10\.[0-9]{4,9}\/[A-Za-z0-9._()\-\/]+$/.test(p.work_id);
           if (!okShape) return { error: 'param_invalid' };
           return { method: 'GET', url: 'https://api.openalex.org/works/' + encodeURIComponent(p.work_id), headers: this.buildHeaders(), body: null };
+        } },
+    ],
+  };
+
+  ADAPTERS['open-meteo'] = {
+    id: 'open-meteo', name: 'Open-Meteo', authShape: 'public', setupRequired: false,
+    setupNote: 'no account or key needed: the Open-Meteo API is public and free for non-commercial use; keep within its fair-use daily quota',
+    buildHeaders: function () { return { 'User-Agent': 'CompanionDesk', Accept: 'application/json' }; },
+    actions: [
+      { id: 'get_current_weather', label: 'Read current weather at coordinates', scope: 'weather.read', kind: 'read_only',
+        params: [{ name: 'latitude', required: true, maxLength: 12 }, { name: 'longitude', required: true, maxLength: 12 }],
+        build: function (p) {
+          const lat = validCoordinate(p.latitude, 90), lon = validCoordinate(p.longitude, 180);
+          if (lat === null || lon === null) return { error: 'param_invalid' };
+          return { method: 'GET', url: 'https://api.open-meteo.com/v1/forecast?latitude=' + lat + '&longitude=' + lon + '&current=temperature_2m,weather_code,wind_speed_10m', headers: this.buildHeaders(), body: null };
+        } },
+      { id: 'get_daily_forecast', label: 'Read the daily forecast at coordinates', scope: 'weather.read', kind: 'read_only',
+        params: [{ name: 'latitude', required: true, maxLength: 12 }, { name: 'longitude', required: true, maxLength: 12 }, { name: 'days', required: false, maxLength: 2 }],
+        build: function (p) {
+          const lat = validCoordinate(p.latitude, 90), lon = validCoordinate(p.longitude, 180);
+          if (lat === null || lon === null) return { error: 'param_invalid' };
+          const days = optionalInt(p, 'days', 7);
+          if (days === null || days > 16) return { error: 'param_invalid' };
+          return { method: 'GET', url: 'https://api.open-meteo.com/v1/forecast?latitude=' + lat + '&longitude=' + lon + '&daily=temperature_2m_max,temperature_2m_min,precipitation_sum,weather_code&forecast_days=' + days, headers: this.buildHeaders(), body: null };
+        } },
+    ],
+  };
+
+  ADAPTERS.openstreetmap = {
+    id: 'openstreetmap', name: 'OpenStreetMap', authShape: 'public', setupRequired: false,
+    setupNote: 'no account or key needed: Nominatim is public; its usage policy requires a descriptive User-Agent (this build sends one) and at most one request per second',
+    buildHeaders: function () { return { 'User-Agent': 'CompanionDesk/1.0 (https://github.com/NinadHirani/CompanionDesk)', Accept: 'application/json' }; },
+    actions: [
+      { id: 'search_places', label: 'Search places by name (Nominatim)', scope: 'places.read', kind: 'read_only',
+        params: [{ name: 'query', required: true, maxLength: 200 }, { name: 'limit', required: false, maxLength: 2 }],
+        build: function (p) {
+          const limit = optionalInt(p, 'limit', 10);
+          if (limit === null || limit > 50) return { error: 'param_invalid' };
+          return { method: 'GET', url: 'https://nominatim.openstreetmap.org/search?q=' + encodeURIComponent(p.query) + '&format=jsonv2&limit=' + limit, headers: this.buildHeaders(), body: null };
+        } },
+      { id: 'reverse_geocode', label: 'Look up the place at coordinates', scope: 'places.read', kind: 'read_only',
+        params: [{ name: 'latitude', required: true, maxLength: 12 }, { name: 'longitude', required: true, maxLength: 12 }],
+        build: function (p) {
+          const lat = validCoordinate(p.latitude, 90), lon = validCoordinate(p.longitude, 180);
+          if (lat === null || lon === null) return { error: 'param_invalid' };
+          return { method: 'GET', url: 'https://nominatim.openstreetmap.org/reverse?lat=' + lat + '&lon=' + lon + '&format=jsonv2', headers: this.buildHeaders(), body: null };
         } },
     ],
   };
