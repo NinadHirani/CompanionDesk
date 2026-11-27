@@ -12,7 +12,7 @@ const assert = require('node:assert');
 const adapters = require('../src/connector-adapters.js');
 const { createConnectorCatalog } = require('../src/connectors.js');
 
-const IMPLEMENTED = ['anthropic', 'brave-search', 'arxiv', 'airtable', 'coda', 'circleci', 'crossref', 'discord', 'docker-hub', 'github', 'gitlab', 'gmail', 'google-calendar', 'google-docs', 'google-sheets', 'google-drive', 'google-gemini', 'huggingface', 'internet-archive', 'jira', 'mailgun', 'postmark', 'sendgrid', 'linear', 'microsoft-calendar', 'microsoft-onedrive', 'microsoft-excel', 'microsoft-outlook', 'microsoft-teams', 'microsoft-word', 'musicbrainz', 'notion', 'npm', 'open-meteo', 'openai', 'openalex', 'openlibrary', 'openstreetmap', 'pypi', 'slack', 'tavily', 'telegram', 'trello', 'todoist', 'wikimedia'];
+const IMPLEMENTED = ['anthropic', 'brave-search', 'arxiv', 'airtable', 'coda', 'circleci', 'crossref', 'discord', 'docker-hub', 'github', 'gitlab', 'gmail', 'google-calendar', 'google-docs', 'google-sheets', 'google-drive', 'google-gemini', 'huggingface', 'internet-archive', 'jira', 'mailgun', 'postmark', 'sendgrid', 'linear', 'microsoft-calendar', 'microsoft-onedrive', 'microsoft-excel', 'microsoft-outlook', 'microsoft-teams', 'microsoft-word', 'musicbrainz', 'notion', 'npm', 'open-meteo', 'openai', 'openalex', 'openlibrary', 'openstreetmap', 'pypi', 'render', 'slack', 'supabase', 'tavily', 'telegram', 'trello', 'todoist', 'wikimedia'];
 const OAUTH = ['gmail', 'google-calendar', 'google-drive', 'microsoft-calendar', 'microsoft-onedrive', 'microsoft-outlook'];
 
 test('the adapter registry covers exactly the implemented catalog entries', () => {
@@ -1153,5 +1153,41 @@ test('postmark builds server-token bounce reads with strict validation and no se
   for (const a of adapters.listActions('postmark')) {
     assert.equal(a.kind, 'read_only', 'postmark send is not implemented');
     assert.equal(a.scope, 'bounces.read');
+  }
+});
+
+// ---- batch 28 (27 Nov 2026): render + supabase read-only adapters ----
+
+test('render builds bearer service reads with strict validation and no writes', () => {
+  const ls = adapters.buildRequest('render', 'list_services', { limit: '100' }, 'r-key');
+  assert.equal(ls.ok, true);
+  assert.equal(ls.request.url, 'https://api.render.com/v1/services?limit=100');
+  assert.equal(ls.request.headers.Authorization, 'Bearer r-key');
+  const gs = adapters.buildRequest('render', 'get_service', { service_id: 'srv-abc123' }, 'r-key');
+  assert.equal(gs.ok, true);
+  assert.equal(gs.request.url, 'https://api.render.com/v1/services/srv-abc123');
+  assert.equal(adapters.buildRequest('render', 'get_service', { service_id: 's v' }, 'r-key').reason, 'param_invalid', 'space in service id');
+  assert.equal(adapters.buildRequest('render', 'get_service', {}, 'r-key').reason, 'param_missing', 'service id required');
+  assert.equal(adapters.buildRequest('render', 'list_services', { limit: '101' }, 'r-key').reason, 'param_invalid', 'limit above the cap');
+  for (const a of adapters.listActions('render')) {
+    assert.equal(a.kind, 'read_only', 'render is read-only');
+    assert.equal(a.scope, 'services.read');
+  }
+});
+
+test('supabase builds bearer project reads with strict validation and no writes', () => {
+  const lp = adapters.buildRequest('supabase', 'list_projects', { limit: '100' }, 'sb-key');
+  assert.equal(lp.ok, true);
+  assert.equal(lp.request.url, 'https://api.supabase.com/v1/projects?offset=0&limit=100');
+  assert.equal(lp.request.headers.Authorization, 'Bearer sb-key');
+  const gp = adapters.buildRequest('supabase', 'get_project', { project_ref: 'abcdefghijklmnopqrst' }, 'sb-key');
+  assert.equal(gp.ok, true);
+  assert.equal(gp.request.url, 'https://api.supabase.com/v1/projects/abcdefghijklmnopqrst');
+  assert.equal(adapters.buildRequest('supabase', 'get_project', { project_ref: 'ABC XYZ' }, 'sb-key').reason, 'param_invalid', 'uppercase and space in ref');
+  assert.equal(adapters.buildRequest('supabase', 'get_project', {}, 'sb-key').reason, 'param_missing', 'project ref required');
+  assert.equal(adapters.buildRequest('supabase', 'list_projects', { limit: '101' }, 'sb-key').reason, 'param_invalid', 'limit above the cap');
+  for (const a of adapters.listActions('supabase')) {
+    assert.equal(a.kind, 'read_only', 'supabase is read-only');
+    assert.equal(a.scope, 'tables.read');
   }
 });

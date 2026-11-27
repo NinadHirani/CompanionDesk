@@ -582,3 +582,14 @@ Actions:
 The credentials are the user's own keys/tokens pasted into the app vault. No send, no writes anywhere; the adapters expose only the read actions above.
 
 Tests: adapter build/validation per mailer (date and bucket validation, basic-auth header shape, numeric-id validation, caps, read-only sweeps), engine gates (each refuses before connect and rides its credential on a read; Mailgun's header asserted against the computed Basic value). Catalog count pins: 126 still-definition-only expanded rows, 130 definition-only total.
+## Batch 28 (27 Nov 2026): Render, Supabase
+
+Upgraded two developer connectors to key-bound READ-ONLY adapters (each `auth: api_key`, `authShape: token`).
+
+Actions:
+- Render (pinned `api.render.com/v1`, Bearer): `list_services` limit 1-100; `get_service` by id (charset-validated).
+- Supabase (pinned `api.supabase.com/v1`, Bearer management token): `list_projects` limit 1-100 with offset 0; `get_project` by ref (lowercase alnum + dash only).
+
+The credentials are the user's own keys pasted into the app vault. No writes, no deploys, no restarts, no table reads of user data, no key retrieval anywhere.
+
+Tests: adapter build/validation per connector (charset rejects, id requirements, limit caps, read-only sweeps), engine gates (each refuses before connect and rides its credential on a read). Catalog count pins: 124 still-definition-only expanded rows, 128 definition-only total.

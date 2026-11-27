@@ -157,6 +157,48 @@
     ],
   };
 
+  ADAPTERS.render = {
+    id: 'render', name: 'Render', authShape: 'token', setupRequired: false,
+    setupNote: 'create a read-scope API key at dashboard.render.com/u/me/settings#api-keys and paste it; your key is stored only in the app vault, never requested or shown in chat',
+    buildHeaders: function (token) { return { Authorization: 'Bearer ' + token, 'User-Agent': 'CompanionDesk' }; },
+    actions: [
+      { id: 'list_services', label: 'List your Render services (capped)', scope: 'services.read', kind: 'read_only',
+        params: [{ name: 'limit', required: false, maxLength: 3 }],
+        build: function (p, token) {
+          const limit = optionalInt(p, 'limit', 20);
+          if (limit === null || limit < 1 || limit > 100) return { error: 'param_invalid' };
+          return { method: 'GET', url: 'https://api.render.com/v1/services?limit=' + limit, headers: this.buildHeaders(token), body: null };
+        } },
+      { id: 'get_service', label: 'Read one Render service by id', scope: 'services.read', kind: 'read_only',
+        params: [{ name: 'service_id', required: true, maxLength: 80 }],
+        build: function (p, token) {
+          if (!/^[A-Za-z0-9-]+$/.test(p.service_id)) return { error: 'param_invalid' };
+          return { method: 'GET', url: 'https://api.render.com/v1/services/' + encodeURIComponent(p.service_id), headers: this.buildHeaders(token), body: null };
+        } },
+    ],
+  };
+
+  ADAPTERS.supabase = {
+    id: 'supabase', name: 'Supabase', authShape: 'token', setupRequired: false,
+    setupNote: 'create a management API token at supabase.com/dashboard/account/tokens and paste it; your token is stored only in the app vault, never requested or shown in chat',
+    buildHeaders: function (token) { return { Authorization: 'Bearer ' + token, 'User-Agent': 'CompanionDesk' }; },
+    actions: [
+      { id: 'list_projects', label: 'List your Supabase projects (capped)', scope: 'tables.read', kind: 'read_only',
+        params: [{ name: 'limit', required: false, maxLength: 3 }],
+        build: function (p, token) {
+          const limit = optionalInt(p, 'limit', 25);
+          if (limit === null || limit < 1 || limit > 100) return { error: 'param_invalid' };
+          return { method: 'GET', url: 'https://api.supabase.com/v1/projects?offset=0&limit=' + limit, headers: this.buildHeaders(token), body: null };
+        } },
+      { id: 'get_project', label: 'Read one Supabase project by ref', scope: 'tables.read', kind: 'read_only',
+        params: [{ name: 'project_ref', required: true, maxLength: 60 }],
+        build: function (p, token) {
+          if (!/^[a-z0-9-]+$/.test(p.project_ref)) return { error: 'param_invalid' };
+          return { method: 'GET', url: 'https://api.supabase.com/v1/projects/' + encodeURIComponent(p.project_ref), headers: this.buildHeaders(token), body: null };
+        } },
+    ],
+  };
+
   ADAPTERS.sendgrid = {
     id: 'sendgrid', name: 'SendGrid', authShape: 'token', setupRequired: false,
     setupNote: 'create a read-scope API key at app.sendgrid.com/settings/api_keys and paste it; your key is stored only in the app vault, never requested or shown in chat',

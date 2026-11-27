@@ -787,3 +787,19 @@ test('sendgrid, mailgun and postmark refuse before connect and ride their creden
     else { assert.equal(seen.headers[header], 'Bearer mailer-tok', id + ' credential rides the header'); }
   }
 });
+
+// ---- batch 28 (27 Nov 2026): render + supabase credential gates ----
+
+test('render and supabase refuse before connect and ride their credentials on reads', async () => {
+  let seen = null;
+  const transport = async (req) => { seen = req; return { status: 200, body: JSON.stringify([]) }; };
+  const { catalog, engine } = makeEngine(transport, 'dev-tok');
+  for (const [id, action, scope] of [['render', 'list_services', 'services.read'], ['supabase', 'list_projects', 'tables.read']]) {
+    assert.equal((await engine.run(id, action, {})).reason, 'not_connected', id + ' refuses before connect');
+    const c = catalog.connect(id, { userInitiated: true, scopes: [scope], credentialRef: 'vault:' + id + '-cred' });
+    assert.equal(c.ok, true, id + ' connects');
+    const r = await engine.run(id, action, {});
+    assert.equal(r.ok, true, id + ' reads with a credential');
+    assert.ok(seen.headers.Authorization.indexOf('dev-tok') > 0, id + ' credential rides the header');
+  }
+});
