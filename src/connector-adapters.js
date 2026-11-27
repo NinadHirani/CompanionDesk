@@ -157,6 +157,35 @@
     ],
   };
 
+  ADAPTERS['google-maps'] = {
+    id: 'google-maps', name: 'Google Maps Platform', authShape: 'token', setupRequired: false,
+    setupNote: 'paste a Google Maps Platform REST API key from console.cloud.google.com (Geocoding API enabled); it is stored only in the app vault, never requested or shown in chat',
+    actions: [
+      { id: 'geocode_address', label: 'Geocode one address with Google Maps (capped)', scope: 'places.read', kind: 'read_only',
+        params: [{ name: 'address', required: true, maxLength: 200 }],
+        build: function (p, token) {
+          if (!p.address) return { error: 'param_missing' };
+          if (p.address.length > 200) return { error: 'param_invalid' };
+          return { method: 'GET', url: 'https://maps.googleapis.com/maps/api/geocode/json?address=' + encodeURIComponent(p.address) + '&key=' + encodeURIComponent(token), body: null, urlContainsSecret: true };
+        } },
+    ],
+  };
+
+  ADAPTERS.mapbox = {
+    id: 'mapbox', name: 'Mapbox', authShape: 'token', setupRequired: false,
+    setupNote: 'paste a Mapbox access token from account.mapbox.com; it is stored only in the app vault, never requested or shown in chat',
+    actions: [
+      { id: 'get_driving_route', label: 'Get a Mapbox driving route between two points (capped)', scope: 'directions.read', kind: 'read_only',
+        params: [{ name: 'origin', required: true, maxLength: 40 }, { name: 'destination', required: true, maxLength: 40 }],
+        build: function (p, token) {
+          const coord = /^-?\d{1,3}(\.\d+)?,-?\d{1,3}(\.\d+)?$/;
+          if (!p.origin || !p.destination) return { error: 'param_missing' };
+          if (!coord.test(p.origin) || !coord.test(p.destination)) return { error: 'param_invalid' };
+          return { method: 'GET', url: 'https://api.mapbox.com/directions/v5/mapbox/driving/' + encodeURIComponent(p.origin) + ';' + encodeURIComponent(p.destination) + '?access_token=' + encodeURIComponent(token), body: null, urlContainsSecret: true };
+        } },
+    ],
+  };
+
   ADAPTERS['stability-ai'] = {
     id: 'stability-ai', name: 'Stability AI', authShape: 'token', setupRequired: false,
     setupNote: 'paste a Stability AI API key from platform.stability.ai/account/keys; it is stored only in the app vault, never requested or shown in chat',

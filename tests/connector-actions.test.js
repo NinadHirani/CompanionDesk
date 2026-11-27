@@ -982,3 +982,22 @@ test('stability-ai and elevenlabs refuse before connect and ride their credentia
     assert.ok(Object.values(seen.headers).some(function (v) { return String(v).indexOf('acct-tok') >= 0; }), id + ' credential rides the headers');
   }
 });
+
+// ---- batch 40 (27 Nov 2026): google-maps + mapbox credential gates ----
+
+test('google-maps and mapbox refuse before connect and ride their credentials on reads', async () => {
+  let seen = null;
+  const transport = async (req) => { seen = req; return { status: 200, body: JSON.stringify([]) }; };
+  const { catalog, engine } = makeEngine(transport, 'maps-tok');
+  for (const [id, action, params, scope] of [
+    ['google-maps', 'geocode_address', { address: 'Rajkot' }, 'places.read'],
+    ['mapbox', 'get_driving_route', { origin: '70.80,22.30', destination: '72.57,23.02' }, 'directions.read'],
+  ]) {
+    assert.equal((await engine.run(id, action, params)).reason, 'not_connected', id + ' refuses before connect');
+    const c = catalog.connect(id, { userInitiated: true, scopes: [scope], credentialRef: 'vault:' + id + '-cred' });
+    assert.equal(c.ok, true, id + ' connects');
+    const r = await engine.run(id, action, params);
+    assert.equal(r.ok, true, id + ' reads with a credential');
+    assert.ok(seen.url.indexOf('maps-tok') >= 0, id + ' credential rides the URL');
+  }
+});

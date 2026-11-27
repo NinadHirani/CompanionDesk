@@ -12,7 +12,7 @@ const assert = require('node:assert');
 const adapters = require('../src/connector-adapters.js');
 const { createConnectorCatalog } = require('../src/connectors.js');
 
-const IMPLEMENTED = ['anthropic', 'brave-search', 'arxiv', 'airtable', 'coda', 'circleci', 'cloudflare', 'crossref', 'digitalocean', 'discord', 'docker-hub', 'github', 'gitlab', 'gmail', 'heroku', 'google-calendar', 'google-docs', 'google-sheets', 'google-drive', 'google-gemini', 'huggingface', 'internet-archive', 'jira', 'mailgun', 'postmark', 'sendgrid', 'linear', 'microsoft-calendar', 'microsoft-onedrive', 'microsoft-excel', 'microsoft-outlook', 'microsoft-teams', 'microsoft-word', 'musicbrainz', 'notion', 'npm', 'open-meteo', 'openai', 'openalex', 'openlibrary', 'openstreetmap', 'pypi', 'render', 'slack', 'supabase', 'sentry', 'pagerduty', 'tmdb', 'unsplash', 'new-relic', 'pinecone', 'pexels', 'kaggle', 'stripe', 'groq', 'cohere', 'xai', 'mistral', 'openrouter', 'replicate', 'together-ai', 'stability-ai', 'elevenlabs', 'tavily', 'telegram', 'trello', 'todoist', 'wikimedia'];
+const IMPLEMENTED = ['anthropic', 'brave-search', 'arxiv', 'airtable', 'coda', 'circleci', 'cloudflare', 'crossref', 'digitalocean', 'discord', 'docker-hub', 'github', 'gitlab', 'gmail', 'heroku', 'google-calendar', 'google-docs', 'google-sheets', 'google-drive', 'google-gemini', 'huggingface', 'internet-archive', 'jira', 'mailgun', 'postmark', 'sendgrid', 'linear', 'microsoft-calendar', 'microsoft-onedrive', 'microsoft-excel', 'microsoft-outlook', 'microsoft-teams', 'microsoft-word', 'musicbrainz', 'notion', 'npm', 'open-meteo', 'openai', 'openalex', 'openlibrary', 'openstreetmap', 'pypi', 'render', 'slack', 'supabase', 'sentry', 'pagerduty', 'tmdb', 'unsplash', 'new-relic', 'pinecone', 'pexels', 'kaggle', 'stripe', 'groq', 'cohere', 'xai', 'mistral', 'openrouter', 'replicate', 'together-ai', 'stability-ai', 'elevenlabs', 'google-maps', 'mapbox', 'tavily', 'telegram', 'trello', 'todoist', 'wikimedia'];
 const OAUTH = ['gmail', 'google-calendar', 'google-drive', 'microsoft-calendar', 'microsoft-onedrive', 'microsoft-outlook'];
 
 test('the adapter registry covers exactly the implemented catalog entries', () => {
@@ -1507,5 +1507,31 @@ test('stability-ai and elevenlabs build keyed account reads with no sends and no
       assert.notEqual(a.scope, 'images.generate', id + ' image generation never implemented');
       assert.notEqual(a.scope, 'speech.send', id + ' speech never implemented');
     }
+  }
+});
+
+// ---- batch 40 (27 Nov 2026): google-maps + mapbox key-in-URL reads ----
+
+test('google-maps builds keyed geocode reads with strict validation and no writes', () => {
+  const ge = adapters.buildRequest('google-maps', 'geocode_address', { address: 'Ambika Park, Rajkot' }, 'gmaps-key');
+  assert.equal(ge.ok, true);
+  assert.equal(ge.request.url, 'https://maps.googleapis.com/maps/api/geocode/json?address=Ambika%20Park%2C%20Rajkot&key=gmaps-key');
+  assert.equal(adapters.buildRequest('google-maps', 'geocode_address', {}, 'gmaps-key').reason, 'param_missing', 'address required');
+  assert.equal(adapters.buildRequest('google-maps', 'geocode_address', { address: 'x'.repeat(201) }, 'gmaps-key').reason, 'param_invalid', 'address above the cap');
+  for (const a of adapters.listActions('google-maps')) {
+    assert.equal(a.kind, 'read_only', 'google-maps is read-only');
+    assert.equal(a.scope, 'places.read');
+  }
+});
+
+test('mapbox builds keyed driving-route reads with strict validation and no writes', () => {
+  const dr = adapters.buildRequest('mapbox', 'get_driving_route', { origin: '70.80,22.30', destination: '72.57,23.02' }, 'mb-tok');
+  assert.equal(dr.ok, true);
+  assert.equal(dr.request.url, 'https://api.mapbox.com/directions/v5/mapbox/driving/70.80%2C22.30;72.57%2C23.02?access_token=mb-tok');
+  assert.equal(adapters.buildRequest('mapbox', 'get_driving_route', {}, 'mb-tok').reason, 'param_missing', 'origin and destination required');
+  assert.equal(adapters.buildRequest('mapbox', 'get_driving_route', { origin: 'Rajkot', destination: '72.57,23.02' }, 'mb-tok').reason, 'param_invalid', 'origin must be lon,lat');
+  for (const a of adapters.listActions('mapbox')) {
+    assert.equal(a.kind, 'read_only', 'mapbox is read-only');
+    assert.equal(a.scope, 'directions.read');
   }
 });

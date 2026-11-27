@@ -719,3 +719,14 @@ Actions:
 The credentials are the user's own keys pasted into the app vault.
 
 Tests: adapter build/validation (one-action pins, header shapes, read-only sweeps, sends never present), engine gates (each refuses before connect and rides its credential on a read). Catalog count pins: 103 still-definition-only expanded rows, 107 definition-only total.
+## Batch 40 (27 Nov 2026): Google Maps Platform, Mapbox
+
+Upgraded two maps connectors to key-bound READ-ONLY adapters (each `auth: api_key`, `authShape: token`). Both ride the key in the request URL (the providers' GET shape), so no headers are built for them.
+
+Actions:
+- Google Maps Platform (pinned `maps.googleapis.com/maps/api`): `geocode_address` (address required maxLength 200, key as the `key` query param). No routes, no places searches, no writes.
+- Mapbox (pinned `api.mapbox.com/directions`): `get_driving_route` between two `lon,lat` points (both required, strict coordinate validation, token as the `access_token` query param).
+
+The credentials are the user's own keys pasted into the app vault.
+
+Tests: adapter build/validation (required params, caps, coordinate-format reject, exact built URLs, read-only sweeps), engine gates (each refuses before connect and its credential rides the request URL). Catalog count pins: 101 still-definition-only expanded rows, 105 definition-only total.
