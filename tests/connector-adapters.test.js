@@ -12,7 +12,7 @@ const assert = require('node:assert');
 const adapters = require('../src/connector-adapters.js');
 const { createConnectorCatalog } = require('../src/connectors.js');
 
-const IMPLEMENTED = ['anthropic', 'brave-search', 'arxiv', 'airtable', 'coda', 'circleci', 'crossref', 'discord', 'docker-hub', 'github', 'gitlab', 'gmail', 'heroku', 'google-calendar', 'google-docs', 'google-sheets', 'google-drive', 'google-gemini', 'huggingface', 'internet-archive', 'jira', 'mailgun', 'postmark', 'sendgrid', 'linear', 'microsoft-calendar', 'microsoft-onedrive', 'microsoft-excel', 'microsoft-outlook', 'microsoft-teams', 'microsoft-word', 'musicbrainz', 'notion', 'npm', 'open-meteo', 'openai', 'openalex', 'openlibrary', 'openstreetmap', 'pypi', 'render', 'slack', 'supabase', 'tavily', 'telegram', 'trello', 'todoist', 'wikimedia'];
+const IMPLEMENTED = ['anthropic', 'brave-search', 'arxiv', 'airtable', 'coda', 'circleci', 'crossref', 'discord', 'docker-hub', 'github', 'gitlab', 'gmail', 'heroku', 'google-calendar', 'google-docs', 'google-sheets', 'google-drive', 'google-gemini', 'huggingface', 'internet-archive', 'jira', 'mailgun', 'postmark', 'sendgrid', 'linear', 'microsoft-calendar', 'microsoft-onedrive', 'microsoft-excel', 'microsoft-outlook', 'microsoft-teams', 'microsoft-word', 'musicbrainz', 'notion', 'npm', 'open-meteo', 'openai', 'openalex', 'openlibrary', 'openstreetmap', 'pypi', 'render', 'slack', 'supabase', 'sentry', 'pagerduty', 'tavily', 'telegram', 'trello', 'todoist', 'wikimedia'];
 const OAUTH = ['gmail', 'google-calendar', 'google-drive', 'microsoft-calendar', 'microsoft-onedrive', 'microsoft-outlook'];
 
 test('the adapter registry covers exactly the implemented catalog entries', () => {
@@ -1212,5 +1212,42 @@ test('heroku builds v3-accept bearer app reads with strict validation and no wri
   for (const a of adapters.listActions('heroku')) {
     assert.equal(a.kind, 'read_only', 'heroku is read-only');
     assert.equal(a.scope, 'apps.read');
+  }
+});
+
+// ---- batch 30 (27 Nov 2026): sentry + pagerduty read-only adapters ----
+
+test('sentry builds bearer issue reads with strict validation and no writes', () => {
+  const li = adapters.buildRequest('sentry', 'list_org_issues', { org_slug: 'acme-corp', count: '100' }, 'sn-tok');
+  assert.equal(li.ok, true);
+  assert.equal(li.request.url, 'https://sentry.io/api/0/organizations/acme-corp/issues/?count=100');
+  assert.equal(li.request.headers.Authorization, 'Bearer sn-tok');
+  const gi = adapters.buildRequest('sentry', 'get_issue', { org_slug: 'acme-corp', issue_id: '1234567890' }, 'sn-tok');
+  assert.equal(gi.ok, true);
+  assert.equal(gi.request.url, 'https://sentry.io/api/0/organizations/acme-corp/issues/1234567890/');
+  assert.equal(adapters.buildRequest('sentry', 'list_org_issues', { org_slug: 'Acme Corp' }, 'sn-tok').reason, 'param_invalid', 'uppercase and space in slug');
+  assert.equal(adapters.buildRequest('sentry', 'list_org_issues', { org_slug: 'acme-corp', count: '101' }, 'sn-tok').reason, 'param_invalid', 'count above the cap');
+  assert.equal(adapters.buildRequest('sentry', 'get_issue', { org_slug: 'acme-corp', issue_id: 'x!y' }, 'sn-tok').reason, 'param_invalid', 'bad issue id');
+  assert.equal(adapters.buildRequest('sentry', 'get_issue', { org_slug: 'acme-corp' }, 'sn-tok').reason, 'param_missing', 'issue id required');
+  for (const a of adapters.listActions('sentry')) {
+    assert.equal(a.kind, 'read_only', 'sentry is read-only');
+    assert.equal(a.scope, 'events.read');
+  }
+});
+
+test('pagerduty builds token-accept incident reads with strict validation and no writes', () => {
+  const li = adapters.buildRequest('pagerduty', 'list_incidents', { limit: '25' }, 'pd-key');
+  assert.equal(li.ok, true);
+  assert.equal(li.request.url, 'https://api.pagerduty.com/incidents?limit=25&offset=0');
+  assert.equal(li.request.headers.Authorization, 'Token token=pd-key');
+  assert.equal(li.request.headers.Accept, 'application/vnd.pagerduty+json;version=2');
+  const gi = adapters.buildRequest('pagerduty', 'get_incident', { incident_id: 'PT4KHLZ' }, 'pd-key');
+  assert.equal(gi.ok, true);
+  assert.equal(gi.request.url, 'https://api.pagerduty.com/incidents/PT4KHLZ');
+  assert.equal(adapters.buildRequest('pagerduty', 'get_incident', { incident_id: 'PT-4' }, 'pd-key').reason, 'param_invalid', 'dash in incident id');
+  assert.equal(adapters.buildRequest('pagerduty', 'list_incidents', { limit: '26' }, 'pd-key').reason, 'param_invalid', 'limit above the cap');
+  for (const a of adapters.listActions('pagerduty')) {
+    assert.equal(a.kind, 'read_only', 'pagerduty is read-only');
+    assert.equal(a.scope, 'incidents.read');
   }
 });

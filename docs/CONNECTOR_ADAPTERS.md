@@ -607,3 +607,14 @@ The credential is the user's own API token pasted into the app vault. No writes,
 Jenkins stays definition-only deliberately: it is self-hostable, so it has no single pinned host; an adapter for it would need each user's own server address, a different setup shape.
 
 Tests: adapter build/validation (v3 Accept header, charset rejects, id requirement, limit cap, read-only sweep), engine gate (refuses before connect, credential rides the header). Catalog count pins: 123 still-definition-only expanded rows, 127 definition-only total.
+## Batch 30 (27 Nov 2026): Sentry, PagerDuty
+
+Upgraded two monitoring connectors to token-bound READ-ONLY adapters (each `auth: api_key`, `authShape: token`).
+
+Actions:
+- Sentry (pinned `sentry.io/api/0`, Bearer): `list_org_issues` for an organization you name (lowercase slug, count 1-100); `get_issue` by id (charset-validated).
+- PagerDuty (pinned `api.pagerduty.com`, `Token token=` auth plus `Accept: application/vnd.pagerduty+json;version=2`): `list_incidents` limit 1-25 from offset 0; `get_incident` by id (charset-validated).
+
+The credentials are the user's own tokens pasted into the app vault. No writes, no resolving/muting, no acknowledges/resolutions anywhere.
+
+Tests: adapter build/validation per connector (slug and id charset rejects, required params, caps, header shapes, read-only sweeps), engine gates (each refuses before connect and rides its credential on a read). Catalog count pins: 121 still-definition-only expanded rows, 125 definition-only total.

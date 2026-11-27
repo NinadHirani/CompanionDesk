@@ -157,6 +157,50 @@
     ],
   };
 
+  ADAPTERS.sentry = {
+    id: 'sentry', name: 'Sentry', authShape: 'token', setupRequired: false,
+    setupNote: 'create an auth token at sentry.io/settings/account/api/auth-tokens and paste it; your token is stored only in the app vault, never requested or shown in chat',
+    buildHeaders: function (token) { return { Authorization: 'Bearer ' + token, 'User-Agent': 'CompanionDesk' }; },
+    actions: [
+      { id: 'list_org_issues', label: 'Read recent issues for a Sentry organization (capped)', scope: 'events.read', kind: 'read_only',
+        params: [{ name: 'org_slug', required: true, maxLength: 100 }, { name: 'count', required: false, maxLength: 3 }],
+        build: function (p, token) {
+          if (!/^[a-z0-9-]+$/.test(p.org_slug)) return { error: 'param_invalid' };
+          const count = optionalInt(p, 'count', 25);
+          if (count === null || count < 1 || count > 100) return { error: 'param_invalid' };
+          return { method: 'GET', url: 'https://sentry.io/api/0/organizations/' + encodeURIComponent(p.org_slug) + '/issues/?count=' + count, headers: this.buildHeaders(token), body: null };
+        } },
+      { id: 'get_issue', label: 'Read one Sentry issue by id', scope: 'events.read', kind: 'read_only',
+        params: [{ name: 'org_slug', required: true, maxLength: 100 }, { name: 'issue_id', required: true, maxLength: 64 }],
+        build: function (p, token) {
+          if (!/^[a-z0-9-]+$/.test(p.org_slug)) return { error: 'param_invalid' };
+          if (!/^[A-Za-z0-9]+$/.test(p.issue_id)) return { error: 'param_invalid' };
+          return { method: 'GET', url: 'https://sentry.io/api/0/organizations/' + encodeURIComponent(p.org_slug) + '/issues/' + encodeURIComponent(p.issue_id) + '/', headers: this.buildHeaders(token), body: null };
+        } },
+    ],
+  };
+
+  ADAPTERS.pagerduty = {
+    id: 'pagerduty', name: 'PagerDuty', authShape: 'token', setupRequired: false,
+    setupNote: 'create a general-access REST API key at app.pagerduty.com/settings/api_keys and paste it; your key is stored only in the app vault, never requested or shown in chat',
+    buildHeaders: function (token) { return { Authorization: 'Token token=' + token, Accept: 'application/vnd.pagerduty+json;version=2', 'User-Agent': 'CompanionDesk' }; },
+    actions: [
+      { id: 'list_incidents', label: 'Read recent PagerDuty incidents (capped)', scope: 'incidents.read', kind: 'read_only',
+        params: [{ name: 'limit', required: false, maxLength: 2 }],
+        build: function (p, token) {
+          const limit = optionalInt(p, 'limit', 25);
+          if (limit === null || limit < 1 || limit > 25) return { error: 'param_invalid' };
+          return { method: 'GET', url: 'https://api.pagerduty.com/incidents?limit=' + limit + '&offset=0', headers: this.buildHeaders(token), body: null };
+        } },
+      { id: 'get_incident', label: 'Read one PagerDuty incident by id', scope: 'incidents.read', kind: 'read_only',
+        params: [{ name: 'incident_id', required: true, maxLength: 80 }],
+        build: function (p, token) {
+          if (!/^[A-Za-z0-9]+$/.test(p.incident_id)) return { error: 'param_invalid' };
+          return { method: 'GET', url: 'https://api.pagerduty.com/incidents/' + encodeURIComponent(p.incident_id), headers: this.buildHeaders(token), body: null };
+        } },
+    ],
+  };
+
   ADAPTERS.heroku = {
     id: 'heroku', name: 'Heroku', authShape: 'token', setupRequired: false,
     setupNote: 'create an API token at dashboard.heroku.com/account/applications and paste it; your token is stored only in the app vault, never requested or shown in chat',
