@@ -950,3 +950,19 @@ test('mistral and openrouter refuse before connect and ride their credentials on
     assert.ok(seen.headers.Authorization.indexOf('mr-tok') > 0, id + ' credential rides the header');
   }
 });
+
+// ---- batch 38 (27 Nov 2026): replicate + together-ai credential gates ----
+
+test('replicate and together-ai refuse before connect and ride their credentials on reads', async () => {
+  let seen = null;
+  const transport = async (req) => { seen = req; return { status: 200, body: JSON.stringify([]) }; };
+  const { catalog, engine } = makeEngine(transport, 'rp-tok');
+  for (const [id, action, scope] of [['replicate', 'list_models', 'models.read'], ['together-ai', 'list_models', 'models.read']]) {
+    assert.equal((await engine.run(id, action, {})).reason, 'not_connected', id + ' refuses before connect');
+    const c = catalog.connect(id, { userInitiated: true, scopes: [scope], credentialRef: 'vault:' + id + '-cred' });
+    assert.equal(c.ok, true, id + ' connects');
+    const r = await engine.run(id, action, {});
+    assert.equal(r.ok, true, id + ' reads with a credential');
+    assert.ok(seen.headers.Authorization.indexOf('rp-tok') > 0, id + ' credential rides the header');
+  }
+});

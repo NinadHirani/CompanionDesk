@@ -697,3 +697,14 @@ Actions:
 The credentials are the user's own keys pasted into the app vault.
 
 Tests: adapter build/validation (one-action pins, header shapes, read-only sweeps, completions never present), engine gates (each refuses before connect and rides its credential on a read). Catalog count pins: 107 still-definition-only expanded rows, 111 definition-only total.
+## Batch 38 (27 Nov 2026): Replicate, Together AI
+
+Upgraded two ai_cloud connectors to token-bound READ-ONLY adapters (each `auth: api_key`, `authShape: token`).
+
+Actions:
+- Replicate (pinned `api.replicate.com/v1`, Bearer): `list_models` only (your account's models). The `predictions.send` scope is never requested and nothing is run on a model.
+- Together AI (pinned `api.together.xyz/v1`, Bearer): `list_models` only. The `completions.send` scope is never requested and nothing is sent to a model.
+
+The credentials are the user's own keys pasted into the app vault.
+
+Tests: adapter build/validation (one-action pins, header shapes, read-only sweeps, sends never present), engine gates (each refuses before connect and rides its credential on a read). Catalog count pins: 105 still-definition-only expanded rows, 109 definition-only total.

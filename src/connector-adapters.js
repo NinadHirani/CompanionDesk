@@ -157,6 +157,32 @@
     ],
   };
 
+  ADAPTERS.replicate = {
+    id: 'replicate', name: 'Replicate', authShape: 'token', setupRequired: false,
+    setupNote: 'paste a Replicate API token from replicate.com/account/api-tokens; it is stored only in the app vault, never requested or shown in chat',
+    buildHeaders: function (token) { return { Authorization: 'Bearer ' + token, 'User-Agent': 'CompanionDesk' }; },
+    actions: [
+      { id: 'list_models', label: 'List the Replicate models in your account', scope: 'models.read', kind: 'read_only',
+        params: [],
+        build: function (p, token) {
+          return { method: 'GET', url: 'https://api.replicate.com/v1/models', headers: this.buildHeaders(token), body: null };
+        } },
+    ],
+  };
+
+  ADAPTERS['together-ai'] = {
+    id: 'together-ai', name: 'Together AI', authShape: 'token', setupRequired: false,
+    setupNote: 'paste a Together AI API key from api.together.ai; it is stored only in the app vault, never requested or shown in chat',
+    buildHeaders: function (token) { return { Authorization: 'Bearer ' + token, 'User-Agent': 'CompanionDesk' }; },
+    actions: [
+      { id: 'list_models', label: 'List the Together AI models your key can use', scope: 'models.read', kind: 'read_only',
+        params: [],
+        build: function (p, token) {
+          return { method: 'GET', url: 'https://api.together.xyz/v1/models', headers: this.buildHeaders(token), body: null };
+        } },
+    ],
+  };
+
   ADAPTERS.mistral = {
     id: 'mistral', name: 'Mistral AI', authShape: 'token', setupRequired: false,
     setupNote: 'paste a Mistral API key from console.mistral.ai; it is stored only in the app vault, never requested or shown in chat',
