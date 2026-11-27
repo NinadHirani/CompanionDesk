@@ -593,3 +593,17 @@ Actions:
 The credentials are the user's own keys pasted into the app vault. No writes, no deploys, no restarts, no table reads of user data, no key retrieval anywhere.
 
 Tests: adapter build/validation per connector (charset rejects, id requirements, limit caps, read-only sweeps), engine gates (each refuses before connect and rides its credential on a read). Catalog count pins: 124 still-definition-only expanded rows, 128 definition-only total.
+## Batch 29 (27 Nov 2026): Heroku
+
+Upgraded Heroku to a token-bound READ-ONLY adapter (`auth: api_key`, `authShape: token`).
+
+Actions (pinned `api.heroku.com`, Bearer plus the Heroku API v3 `Accept: application/vnd.heroku+json; version=3` header):
+- `list_apps` limit 1-100;
+- `get_app` by name or id (charset-validated);
+- `get_app_dynos` for one app.
+
+The credential is the user's own API token pasted into the app vault. No writes, no scaling, no restarts, no config changes anywhere.
+
+Jenkins stays definition-only deliberately: it is self-hostable, so it has no single pinned host; an adapter for it would need each user's own server address, a different setup shape.
+
+Tests: adapter build/validation (v3 Accept header, charset rejects, id requirement, limit cap, read-only sweep), engine gate (refuses before connect, credential rides the header). Catalog count pins: 123 still-definition-only expanded rows, 127 definition-only total.

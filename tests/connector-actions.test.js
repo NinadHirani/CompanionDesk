@@ -803,3 +803,17 @@ test('render and supabase refuse before connect and ride their credentials on re
     assert.ok(seen.headers.Authorization.indexOf('dev-tok') > 0, id + ' credential rides the header');
   }
 });
+
+// ---- batch 29 (27 Nov 2026): heroku credential gate ----
+
+test('heroku refuses before connect and rides its credential on reads', async () => {
+  let seen = null;
+  const transport = async (req) => { seen = req; return { status: 200, body: JSON.stringify([]) }; };
+  const { catalog, engine } = makeEngine(transport, 'heroku-tok');
+  assert.equal((await engine.run('heroku', 'list_apps', {})).reason, 'not_connected');
+  const c = catalog.connect('heroku', { userInitiated: true, scopes: ['apps.read'], credentialRef: 'vault:heroku-cred' });
+  assert.equal(c.ok, true, 'heroku connects');
+  const r = await engine.run('heroku', 'list_apps', {});
+  assert.equal(r.ok, true, 'heroku reads with a credential');
+  assert.equal(seen.headers.Authorization, 'Bearer heroku-tok', 'credential rides the header');
+});

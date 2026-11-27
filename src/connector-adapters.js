@@ -157,6 +157,33 @@
     ],
   };
 
+  ADAPTERS.heroku = {
+    id: 'heroku', name: 'Heroku', authShape: 'token', setupRequired: false,
+    setupNote: 'create an API token at dashboard.heroku.com/account/applications and paste it; your token is stored only in the app vault, never requested or shown in chat',
+    buildHeaders: function (token) { return { Authorization: 'Bearer ' + token, Accept: 'application/vnd.heroku+json; version=3', 'User-Agent': 'CompanionDesk' }; },
+    actions: [
+      { id: 'list_apps', label: 'List your Heroku apps (capped)', scope: 'apps.read', kind: 'read_only',
+        params: [{ name: 'limit', required: false, maxLength: 3 }],
+        build: function (p, token) {
+          const limit = optionalInt(p, 'limit', 50);
+          if (limit === null || limit < 1 || limit > 100) return { error: 'param_invalid' };
+          return { method: 'GET', url: 'https://api.heroku.com/apps?limit=' + limit, headers: this.buildHeaders(token), body: null };
+        } },
+      { id: 'get_app', label: 'Read one Heroku app by name or id', scope: 'apps.read', kind: 'read_only',
+        params: [{ name: 'app_id', required: true, maxLength: 80 }],
+        build: function (p, token) {
+          if (!/^[A-Za-z0-9-]+$/.test(p.app_id)) return { error: 'param_invalid' };
+          return { method: 'GET', url: 'https://api.heroku.com/apps/' + encodeURIComponent(p.app_id), headers: this.buildHeaders(token), body: null };
+        } },
+      { id: 'get_app_dynos', label: 'Read the dyno list of one Heroku app', scope: 'apps.read', kind: 'read_only',
+        params: [{ name: 'app_id', required: true, maxLength: 80 }],
+        build: function (p, token) {
+          if (!/^[A-Za-z0-9-]+$/.test(p.app_id)) return { error: 'param_invalid' };
+          return { method: 'GET', url: 'https://api.heroku.com/apps/' + encodeURIComponent(p.app_id) + '/dynos', headers: this.buildHeaders(token), body: null };
+        } },
+    ],
+  };
+
   ADAPTERS.render = {
     id: 'render', name: 'Render', authShape: 'token', setupRequired: false,
     setupNote: 'create a read-scope API key at dashboard.render.com/u/me/settings#api-keys and paste it; your key is stored only in the app vault, never requested or shown in chat',

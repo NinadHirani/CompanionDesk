@@ -12,7 +12,7 @@ const assert = require('node:assert');
 const adapters = require('../src/connector-adapters.js');
 const { createConnectorCatalog } = require('../src/connectors.js');
 
-const IMPLEMENTED = ['anthropic', 'brave-search', 'arxiv', 'airtable', 'coda', 'circleci', 'crossref', 'discord', 'docker-hub', 'github', 'gitlab', 'gmail', 'google-calendar', 'google-docs', 'google-sheets', 'google-drive', 'google-gemini', 'huggingface', 'internet-archive', 'jira', 'mailgun', 'postmark', 'sendgrid', 'linear', 'microsoft-calendar', 'microsoft-onedrive', 'microsoft-excel', 'microsoft-outlook', 'microsoft-teams', 'microsoft-word', 'musicbrainz', 'notion', 'npm', 'open-meteo', 'openai', 'openalex', 'openlibrary', 'openstreetmap', 'pypi', 'render', 'slack', 'supabase', 'tavily', 'telegram', 'trello', 'todoist', 'wikimedia'];
+const IMPLEMENTED = ['anthropic', 'brave-search', 'arxiv', 'airtable', 'coda', 'circleci', 'crossref', 'discord', 'docker-hub', 'github', 'gitlab', 'gmail', 'heroku', 'google-calendar', 'google-docs', 'google-sheets', 'google-drive', 'google-gemini', 'huggingface', 'internet-archive', 'jira', 'mailgun', 'postmark', 'sendgrid', 'linear', 'microsoft-calendar', 'microsoft-onedrive', 'microsoft-excel', 'microsoft-outlook', 'microsoft-teams', 'microsoft-word', 'musicbrainz', 'notion', 'npm', 'open-meteo', 'openai', 'openalex', 'openlibrary', 'openstreetmap', 'pypi', 'render', 'slack', 'supabase', 'tavily', 'telegram', 'trello', 'todoist', 'wikimedia'];
 const OAUTH = ['gmail', 'google-calendar', 'google-drive', 'microsoft-calendar', 'microsoft-onedrive', 'microsoft-outlook'];
 
 test('the adapter registry covers exactly the implemented catalog entries', () => {
@@ -1189,5 +1189,28 @@ test('supabase builds bearer project reads with strict validation and no writes'
   for (const a of adapters.listActions('supabase')) {
     assert.equal(a.kind, 'read_only', 'supabase is read-only');
     assert.equal(a.scope, 'tables.read');
+  }
+});
+
+// ---- batch 29 (27 Nov 2026): heroku read-only apps adapter ----
+
+test('heroku builds v3-accept bearer app reads with strict validation and no writes', () => {
+  const la = adapters.buildRequest('heroku', 'list_apps', { limit: '100' }, 'h-tok');
+  assert.equal(la.ok, true);
+  assert.equal(la.request.url, 'https://api.heroku.com/apps?limit=100');
+  assert.equal(la.request.headers.Authorization, 'Bearer h-tok');
+  assert.equal(la.request.headers.Accept, 'application/vnd.heroku+json; version=3');
+  const ga = adapters.buildRequest('heroku', 'get_app', { app_id: 'my-app-1' }, 'h-tok');
+  assert.equal(ga.ok, true);
+  assert.equal(ga.request.url, 'https://api.heroku.com/apps/my-app-1');
+  const gd = adapters.buildRequest('heroku', 'get_app_dynos', { app_id: 'my-app-1' }, 'h-tok');
+  assert.equal(gd.ok, true);
+  assert.equal(gd.request.url, 'https://api.heroku.com/apps/my-app-1/dynos');
+  assert.equal(adapters.buildRequest('heroku', 'get_app', { app_id: 'a b' }, 'h-tok').reason, 'param_invalid', 'space in app id');
+  assert.equal(adapters.buildRequest('heroku', 'get_app', {}, 'h-tok').reason, 'param_missing', 'app id required');
+  assert.equal(adapters.buildRequest('heroku', 'list_apps', { limit: '101' }, 'h-tok').reason, 'param_invalid', 'limit above the cap');
+  for (const a of adapters.listActions('heroku')) {
+    assert.equal(a.kind, 'read_only', 'heroku is read-only');
+    assert.equal(a.scope, 'apps.read');
   }
 });
