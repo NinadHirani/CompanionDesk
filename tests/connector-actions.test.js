@@ -1001,3 +1001,22 @@ test('google-maps and mapbox refuse before connect and ride their credentials on
     assert.ok(seen.url.indexOf('maps-tok') >= 0, id + ' credential rides the URL');
   }
 });
+
+// ---- batch 41 (27 Nov 2026): deepgram + assemblyai credential gates ----
+
+test('deepgram and assemblyai refuse before connect and ride their credentials on reads', async () => {
+  let seen = null;
+  const transport = async (req) => { seen = req; return { status: 200, body: JSON.stringify([]) }; };
+  const { catalog, engine } = makeEngine(transport, 'speech-tok');
+  for (const [id, action, params, scope] of [
+    ['deepgram', 'list_projects', {}, 'usage.read'],
+    ['assemblyai', 'list_transcripts', { limit: '50' }, 'transcripts.read'],
+  ]) {
+    assert.equal((await engine.run(id, action, params)).reason, 'not_connected', id + ' refuses before connect');
+    const c = catalog.connect(id, { userInitiated: true, scopes: [scope], credentialRef: 'vault:' + id + '-cred' });
+    assert.equal(c.ok, true, id + ' connects');
+    const r = await engine.run(id, action, params);
+    assert.equal(r.ok, true, id + ' reads with a credential');
+    assert.ok(seen.headers.Authorization.indexOf('speech-tok') >= 0, id + ' credential rides the Authorization header');
+  }
+});

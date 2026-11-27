@@ -157,6 +157,36 @@
     ],
   };
 
+  ADAPTERS.deepgram = {
+    id: 'deepgram', name: 'Deepgram', authShape: 'token', setupRequired: false,
+    setupNote: 'paste a Deepgram API key from console.deepgram.com; it is stored only in the app vault, never requested or shown in chat',
+    actions: [
+      { id: 'list_projects', label: 'List Deepgram projects (capped)', scope: 'usage.read', kind: 'read_only',
+        params: [],
+        build: function (p, token) {
+          return { method: 'GET', url: 'https://api.deepgram.com/v1/projects', headers: { Authorization: 'Token ' + token }, body: null, urlContainsSecret: false };
+        } },
+    ],
+  };
+
+  ADAPTERS.assemblyai = {
+    id: 'assemblyai', name: 'AssemblyAI', authShape: 'token', setupRequired: false,
+    setupNote: 'paste an AssemblyAI API key from app.assemblyai.com; it is stored only in the app vault, never requested or shown in chat',
+    actions: [
+      { id: 'list_transcripts', label: 'List AssemblyAI transcripts (capped)', scope: 'transcripts.read', kind: 'read_only',
+        params: [{ name: 'limit', required: false, maxLength: 3 }],
+        build: function (p, token) {
+          let url = 'https://api.assemblyai.com/v2/transcripts';
+          if (p.limit !== undefined && p.limit !== '') {
+            const n = String(p.limit);
+            if (!/^\d+$/.test(n) || parseInt(n, 10) < 1 || parseInt(n, 10) > 100) return { error: 'param_invalid' };
+            url += '?limit=' + n;
+          }
+          return { method: 'GET', url: url, headers: { Authorization: 'Bearer ' + token }, body: null, urlContainsSecret: false };
+        } },
+    ],
+  };
+
   ADAPTERS['google-maps'] = {
     id: 'google-maps', name: 'Google Maps Platform', authShape: 'token', setupRequired: false,
     setupNote: 'paste a Google Maps Platform REST API key from console.cloud.google.com (Geocoding API enabled); it is stored only in the app vault, never requested or shown in chat',

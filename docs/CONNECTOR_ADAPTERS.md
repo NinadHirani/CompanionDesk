@@ -730,3 +730,14 @@ Actions:
 The credentials are the user's own keys pasted into the app vault.
 
 Tests: adapter build/validation (required params, caps, coordinate-format reject, exact built URLs, read-only sweeps), engine gates (each refuses before connect and its credential rides the request URL). Catalog count pins: 101 still-definition-only expanded rows, 105 definition-only total.
+## Batch 41 (27 Nov 2026): Deepgram, AssemblyAI
+
+Upgraded two speech connectors to key-bound READ-ONLY adapters (each `auth: api_key`, `authShape: token`).
+
+Actions:
+- Deepgram (pinned `api.deepgram.com/v1`): `list_projects` (Bearer `Token <key>` header). No transcription submission ever.
+- AssemblyAI (pinned `api.assemblyai.com/v2`): `list_transcripts` (Bearer header, optional limit 1-100). No transcription submission ever.
+
+The credentials are the user's own keys pasted into the app vault.
+
+Tests: adapter build/validation (exact URLs, limit bounds, read-only sweeps), engine gates (each refuses before connect and its credential rides the Authorization header). Catalog count pins: 99 still-definition-only expanded rows, 103 definition-only total.

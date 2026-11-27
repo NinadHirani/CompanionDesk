@@ -12,7 +12,7 @@ const assert = require('node:assert');
 const adapters = require('../src/connector-adapters.js');
 const { createConnectorCatalog } = require('../src/connectors.js');
 
-const IMPLEMENTED = ['anthropic', 'brave-search', 'arxiv', 'airtable', 'coda', 'circleci', 'cloudflare', 'crossref', 'digitalocean', 'discord', 'docker-hub', 'github', 'gitlab', 'gmail', 'heroku', 'google-calendar', 'google-docs', 'google-sheets', 'google-drive', 'google-gemini', 'huggingface', 'internet-archive', 'jira', 'mailgun', 'postmark', 'sendgrid', 'linear', 'microsoft-calendar', 'microsoft-onedrive', 'microsoft-excel', 'microsoft-outlook', 'microsoft-teams', 'microsoft-word', 'musicbrainz', 'notion', 'npm', 'open-meteo', 'openai', 'openalex', 'openlibrary', 'openstreetmap', 'pypi', 'render', 'slack', 'supabase', 'sentry', 'pagerduty', 'tmdb', 'unsplash', 'new-relic', 'pinecone', 'pexels', 'kaggle', 'stripe', 'groq', 'cohere', 'xai', 'mistral', 'openrouter', 'replicate', 'together-ai', 'stability-ai', 'elevenlabs', 'google-maps', 'mapbox', 'tavily', 'telegram', 'trello', 'todoist', 'wikimedia'];
+const IMPLEMENTED = ['anthropic', 'brave-search', 'arxiv', 'airtable', 'coda', 'circleci', 'cloudflare', 'crossref', 'digitalocean', 'discord', 'docker-hub', 'github', 'gitlab', 'gmail', 'heroku', 'google-calendar', 'google-docs', 'google-sheets', 'google-drive', 'google-gemini', 'huggingface', 'internet-archive', 'jira', 'mailgun', 'postmark', 'sendgrid', 'linear', 'microsoft-calendar', 'microsoft-onedrive', 'microsoft-excel', 'microsoft-outlook', 'microsoft-teams', 'microsoft-word', 'musicbrainz', 'notion', 'npm', 'open-meteo', 'openai', 'openalex', 'openlibrary', 'openstreetmap', 'pypi', 'render', 'slack', 'supabase', 'sentry', 'pagerduty', 'tmdb', 'unsplash', 'new-relic', 'pinecone', 'pexels', 'kaggle', 'stripe', 'groq', 'cohere', 'xai', 'mistral', 'openrouter', 'replicate', 'together-ai', 'stability-ai', 'elevenlabs', 'google-maps', 'mapbox', 'deepgram', 'assemblyai', 'tavily', 'telegram', 'trello', 'todoist', 'wikimedia'];
 const OAUTH = ['gmail', 'google-calendar', 'google-drive', 'microsoft-calendar', 'microsoft-onedrive', 'microsoft-outlook'];
 
 test('the adapter registry covers exactly the implemented catalog entries', () => {
@@ -1533,5 +1533,35 @@ test('mapbox builds keyed driving-route reads with strict validation and no writ
   for (const a of adapters.listActions('mapbox')) {
     assert.equal(a.kind, 'read_only', 'mapbox is read-only');
     assert.equal(a.scope, 'directions.read');
+  }
+});
+
+// ---- batch 41 (27 Nov 2026): deepgram + assemblyai bearer reads ----
+
+test('deepgram builds bearer project reads and never transcribes', () => {
+  const r = adapters.buildRequest('deepgram', 'list_projects', {}, 'dg-key');
+  assert.equal(r.ok, true);
+  assert.equal(r.request.url, 'https://api.deepgram.com/v1/projects');
+  assert.equal(r.request.headers.Authorization, 'Token dg-key');
+  for (const a of adapters.listActions('deepgram')) {
+    assert.equal(a.kind, 'read_only', 'deepgram is read-only');
+    assert.equal(a.scope, 'usage.read');
+  }
+});
+
+test('assemblyai builds bearer transcript reads with strict limit validation and never transcribes', () => {
+  const r = adapters.buildRequest('assemblyai', 'list_transcripts', {}, 'aa-key');
+  assert.equal(r.ok, true);
+  assert.equal(r.request.url, 'https://api.assemblyai.com/v2/transcripts');
+  assert.equal(r.request.headers.Authorization, 'Bearer aa-key');
+  const capped = adapters.buildRequest('assemblyai', 'list_transcripts', { limit: '50' }, 'aa-key');
+  assert.equal(capped.ok, true);
+  assert.equal(capped.request.url, 'https://api.assemblyai.com/v2/transcripts?limit=50');
+  assert.equal(adapters.buildRequest('assemblyai', 'list_transcripts', { limit: '101' }, 'aa-key').reason, 'param_invalid', 'limit above the cap');
+  assert.equal(adapters.buildRequest('assemblyai', 'list_transcripts', { limit: '0' }, 'aa-key').reason, 'param_invalid', 'limit below 1');
+  assert.equal(adapters.buildRequest('assemblyai', 'list_transcripts', { limit: 'abc' }, 'aa-key').reason, 'param_invalid', 'limit must be numeric');
+  for (const a of adapters.listActions('assemblyai')) {
+    assert.equal(a.kind, 'read_only', 'assemblyai is read-only');
+    assert.equal(a.scope, 'transcripts.read');
   }
 });
