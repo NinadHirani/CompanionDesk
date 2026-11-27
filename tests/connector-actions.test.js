@@ -286,3 +286,35 @@ test('a bad parameter set refuses before any approval is consumed', async () => 
   const good = await engine.run('github', 'create_issue', { owner: 'o', repo: 'r', title: 'T' }, { approvalId: a.approvalId });
   assert.equal(good.ok, true, 'the SAME approval still works after the invalid run was refused');
 });
+
+// ---- batch 4 (27 Nov 2026): calendar write gates on create_event ----
+
+test('calendar create_event needs a single-use approval and the approval opens exactly one event', async () => {
+  const cred = '{"client_id":"c","access_token":"at"}';
+  const { catalog, engine } = makeEngine(async () => ({ status: 201, body: '{"id":"ev1"}' }), cred);
+  catalog.connect('google-calendar', { userInitiated: true, scopes: ['events.read', 'events.write'], credentialRef: 'vault:gcal-cred' });
+  const p = { summary: 'Focus block', start: '2026-12-01T10:00:00Z', end: '2026-12-01T11:00:00Z' };
+  assert.equal((await engine.run('google-calendar', 'create_event', p)).reason, 'approval_required', 'write without an approval refuses');
+  const a = catalog.approve('google-calendar', 'events.write', { userInitiated: true });
+  const r1 = await engine.run('google-calendar', 'create_event', p, { approvalId: a.approvalId });
+  assert.equal(r1.ok, true, 'the approved write runs once');
+  assert.equal((await engine.run('google-calendar', 'create_event', p, { approvalId: a.approvalId })).reason, 'approval_required', 'the spent approval is dead');
+});
+
+test('calendar create_event still refuses when not connected or the scope was not granted', async () => {
+  const { catalog, engine } = makeEngine(async () => { throw new Error('must not be called'); }, '{"client_id":"c","access_token":"at"}');
+  const p = { subject: 'x', start: '2026-12-01T10:00:00Z', end: '2026-12-01T11:00:00Z' };
+  assert.equal((await engine.run('microsoft-calendar', 'create_event', p)).reason, 'not_connected');
+  catalog.connect('microsoft-calendar', { userInitiated: true, scopes: ['events.read'], credentialRef: 'vault:ms-cal-cred' });
+  assert.equal((await engine.run('microsoft-calendar', 'create_event', p)).reason, 'scope_not_granted', 'write scope was not granted at connect');
+});
+
+test('a bad event parameter set refuses before any approval is consumed', async () => {
+  const { catalog, engine } = makeEngine(async () => ({ status: 201, body: '{}' }), '{"client_id":"c","access_token":"at"}');
+  catalog.connect('google-calendar', { userInitiated: true, scopes: ['events.write'], credentialRef: 'vault:gcal-cred' });
+  const a = catalog.approve('google-calendar', 'events.write', { userInitiated: true });
+  const bad = await engine.run('google-calendar', 'create_event', { summary: 'x', start: '2026-12-01T10:00:00Z' }, { approvalId: a.approvalId });
+  assert.equal(bad.reason, 'param_missing', 'missing end refuses before the transport');
+  const good = await engine.run('google-calendar', 'create_event', { summary: 'x', start: '2026-12-01T10:00:00Z', end: '2026-12-01T11:00:00Z' }, { approvalId: a.approvalId });
+  assert.equal(good.ok, true, 'the SAME approval still works after the invalid run was refused');
+});

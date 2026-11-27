@@ -157,3 +157,13 @@ test('run never passes an approvalId for a write action', async () => {
   const ro = eng.runs[0].runOpts;
   assert.ok(!ro || ro.approvalId === undefined, 'the tool never mints or passes an approval');
 });
+
+test('run never passes an approvalId for a calendar write either', async () => {
+  const eng = fakeEngine({ ok: false, reason: 'approval_required' });
+  const { tool } = stackWithEngine(eng);
+  const r = await tool.execute({ action: 'run', connector_id: 'google-calendar', action_id: 'create_event', params: { summary: 'x', start: '2026-12-01T10:00:00Z', end: '2026-12-01T11:00:00Z' } });
+  assert.equal(r.ok, false);
+  assert.equal(r.reason, 'approval_required', 'surfaced verbatim for calendar writes');
+  const ro = eng.runs[0].runOpts;
+  assert.ok(!ro || ro.approvalId === undefined, 'the tool never mints or passes an approval');
+});

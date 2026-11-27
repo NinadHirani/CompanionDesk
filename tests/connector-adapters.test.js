@@ -265,3 +265,45 @@ test('validateOnly checks params without parsing any credential', () => {
   assert.equal(adapters.validateOnly('github', 'create_issue', { owner: 'o', repo: 'r', title: 'x'.repeat(201) }), 'param_invalid', 'over-length title refuses');
   assert.equal(adapters.validateOnly('github', 'create_issue', { owner: 'o', repo: 'r', title: 'T' }), null, 'valid params pass with NO credential at all');
 });
+
+// ---- batch 4 (27 Nov 2026): calendar create_event write parity ----
+
+test('google-calendar create_event builds a safe create-only POST', () => {
+  const cred = JSON.stringify({ client_id: 'c', access_token: 'at' });
+  const r = adapters.buildRequest('google-calendar', 'create_event', { summary: 'Focus block', start: '2026-12-01T10:00:00Z', end: '2026-12-01T11:00:00Z' }, cred);
+  assert.equal(r.ok, true);
+  assert.equal(r.request.method, 'POST');
+  assert.equal(r.request.url, 'https://www.googleapis.com/calendar/v3/calendars/primary/events');
+  const body = JSON.parse(r.request.body);
+  assert.equal(body.summary, 'Focus block');
+  assert.equal(body.start.dateTime, '2026-12-01T10:00:00Z');
+  assert.equal(body.end.dateTime, '2026-12-01T11:00:00Z');
+  assert.equal(body.description, undefined, 'create-only: no fields beyond the declared params');
+  assert.equal(adapters.buildRequest('google-calendar', 'create_event', { summary: 'x', start: 'bad', end: '2026-12-01T11:00:00Z' }, cred).reason, 'param_invalid');
+  assert.equal(adapters.buildRequest('google-calendar', 'create_event', { start: '2026-12-01T10:00:00Z', end: '2026-12-01T11:00:00Z' }, cred).reason, 'param_missing');
+});
+
+test('microsoft-calendar create_event builds a safe create-only POST pinned to UTC', () => {
+  const cred = JSON.stringify({ client_id: 'c', access_token: 'at' });
+  const r = adapters.buildRequest('microsoft-calendar', 'create_event', { subject: 'Standup', start: '2026-12-02T09:00:00Z', end: '2026-12-02T09:30:00Z' }, cred);
+  assert.equal(r.ok, true);
+  assert.equal(r.request.method, 'POST');
+  assert.equal(r.request.url, 'https://graph.microsoft.com/v1.0/me/events');
+  const body = JSON.parse(r.request.body);
+  assert.equal(body.subject, 'Standup');
+  assert.equal(body.start.timeZone, 'UTC');
+  assert.equal(body.end.timeZone, 'UTC');
+  assert.equal(adapters.buildRequest('microsoft-calendar', 'create_event', { subject: 'x', start: 'bad', end: '2026-12-02T09:30:00Z' }, cred).reason, 'param_invalid');
+  assert.equal(adapters.buildRequest('microsoft-calendar', 'create_event', { subject: 'x', start: '2026-12-02T09:00:00Z' }, cred).reason, 'param_missing');
+});
+
+test('both calendar providers declare create_event identically as a gated write', () => {
+  for (const id of ['google-calendar', 'microsoft-calendar']) {
+    const a = adapters.listActions(id).find((x) => x.id === 'create_event');
+    assert.ok(a, id + ' exposes create_event');
+    assert.equal(a.kind, 'write');
+    assert.equal(a.scope, 'events.write');
+    assert.equal(a.params.filter((p) => p.required).length, 3);
+    assert.equal(adapters.validateOnly(id, 'create_event', {}), 'param_missing', 'validateOnly works with no credential at all');
+  }
+});

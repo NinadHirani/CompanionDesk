@@ -180,3 +180,30 @@ write-kind two-step confirm with confirmWrite. Suite 1465/1465 green.
 
 Still the user's: real credentials, own OAuth clients, actual
 connections, per-connector activation, and device validation.
+
+## Batch 4 (27 Nov 2026): calendar create_event write parity
+
+Verified both calendar adapters already carry the same gated write the
+other providers got in batch 3, with nothing new to build: Google
+Calendar and Microsoft Calendar each expose `create_event` as kind
+write on scope events.write, behind the per-action approval and the
+panel's two-step confirm, and their OAuth sign-ins already request the
+write access (calendar.events / Calendars.ReadWrite). Both build
+create-only POSTs (Google: /calendars/primary/events; Microsoft:
+/me/events, times pinned to UTC) with no update or delete actions
+anywhere. No other calendar provider has an implemented adapter
+(Cal.com is definition-only), so no further calendar writes were added.
+
+This lane stays strictly on the external-provider connector adapters;
+the app's ICS/calendar-generator files remain closed and untouched.
+
+Docs: CONNECTOR_CATALOG.md rows already say "read and write actions ...
+per-action approval" for both providers from batch 3.
+
+Tests added: create-only build shapes for both providers (URL, JSON
+body, UTC pinning, invalid/missing datetimes), identical write
+declarations across both providers, validateOnly with no credential,
+write approval lifecycle on a calendar event (refuse, run once, dead),
+scope/connected refusals for events.write, param refusal before
+approval burn, the AI tool never passing an approvalId for a calendar
+write, and the panel's calendar-write two-step confirm. Suite 1471/1471.

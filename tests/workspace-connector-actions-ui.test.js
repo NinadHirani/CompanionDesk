@@ -88,6 +88,15 @@ function bridgeStub(overrides) {
   return bridge;
 }
 
+const CONNECTED_GCAL = {
+  id: 'google-calendar', name: 'Google Calendar', state: 'connected', hasCredential: true, integrationImplemented: true,
+  costNote: 'Free with a Google account', limits: 'API quotas', tokenState: 'ok',
+  scopes: [{ name: 'events.read', class: 'read_only' }, { name: 'events.write', class: 'write' }],
+  actions: [
+    { id: 'list_events', label: 'List upcoming events on the primary calendar', scope: 'events.read', kind: 'read_only', params: [] },
+    { id: 'create_event', label: 'Create an event on the primary calendar', scope: 'events.write', kind: 'write', params: [{ name: 'summary', required: true }, { name: 'start', required: true }, { name: 'end', required: true }] },
+  ],
+};
 const CONNECTED_GITHUB = {
   id: 'github', name: 'GitHub', state: 'connected', hasCredential: true, integrationImplemented: true,
   costNote: 'Free tier', limits: 'Rate limits', tokenState: 'ok',
@@ -262,5 +271,32 @@ test('a write action follows the same two-step confirm as sends', async () => {
     assert.equal(a.actionId, 'create_issue');
     assert.deepEqual(a.params, { owner: 'NinadHirani', repo: 'CompanionDesk', title: 'Test issue' });
     assert.equal(a.runOpts.confirmWrite, true, 'the confirm click is the per-action approval gesture for writes too');
+  } finally { uninstallDom(); }
+});
+
+test('a calendar write follows the same two-step confirm as other writes', async () => {
+  installDom();
+  try {
+    const bridge = bridgeStub({ connectors: [CONNECTED_GCAL] });
+    const P = await loadPanel();
+    P.mount({ api: bridge, initialView: 'conversations' });
+    const box = global.document.getElementById('ws-connectors');
+    const runBtn = await until(() => findBtn(box, /^Run: Create an event on the primary calendar$/)) && findBtn(box, /^Run: Create an event on the primary calendar$/);
+    runBtn.handlers.click[0]();
+    await sleep(20);
+    assert.equal(bridge.__calls.action.length, 0, 'no call from the first click');
+    const confirmBtn = findBtn(box, /^Confirm run$/);
+    assert.ok(confirmBtn, 'the write confirm step exists');
+    const inputs = deepChildren(box, []).filter((c) => c.tagName === 'input' && /create_event /.test(c.attrs['aria-label'] || ''));
+    assert.equal(inputs.length, 3, 'one labelled input per required parameter');
+    inputs[0].value = 'Deep work';
+    inputs[1].value = '2026-12-01T10:00:00Z';
+    inputs[2].value = '2026-12-01T11:00:00Z';
+    confirmBtn.handlers.click[0]();
+    await until(() => bridge.__calls.action.length === 1);
+    const a = bridge.__calls.action[0];
+    assert.equal(a.actionId, 'create_event');
+    assert.deepEqual(a.params, { summary: 'Deep work', start: '2026-12-01T10:00:00Z', end: '2026-12-01T11:00:00Z' });
+    assert.equal(a.runOpts.confirmWrite, true, 'the confirm click is the per-action approval gesture for calendar writes too');
   } finally { uninstallDom(); }
 });
