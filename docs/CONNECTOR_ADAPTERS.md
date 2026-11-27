@@ -664,3 +664,14 @@ Actions:
 The credentials are the user's own keys pasted into the app vault. Kaggle's `notebooks.write` scope is never requested and nothing is uploaded anywhere.
 
 Tests: adapter build/validation per connector (caps, numeric-id reject, required query, computed Basic value assertion for Kaggle, read-only sweeps), engine gates (each refuses before connect and rides its credential on a read; per-action params kept strict so undeclared params fail). Catalog count pins: 113 still-definition-only expanded rows, 117 definition-only total.
+## Batch 35 (27 Nov 2026): Stripe, Groq
+
+Upgraded two connectors to token-bound READ-ONLY adapters (each `auth: api_key`, `authShape: token`).
+
+Actions:
+- Stripe (pinned `api.stripe.com/v1`, Bearer; the setup note steers the user to a RESTRICTED key with charges read access): `list_charges` (limit 1-100, default 25); `get_charge` by id (charset-validated `[A-Za-z0-9_]+`). No refunds, no captures, no payouts, no account changes.
+- Groq (pinned `api.groq.com/openai/v1`, Bearer): `list_models` only. The `completions.send` scope is never requested and nothing is sent to a model.
+
+The credentials are the user's own keys pasted into the app vault.
+
+Tests: adapter build/validation per connector (caps, id reject, required param, header shapes, read-only sweeps, the one-action Groq pin), engine gates (each refuses before connect and rides its credential on a read). Catalog count pins: 111 still-definition-only expanded rows, 115 definition-only total.

@@ -157,6 +157,40 @@
     ],
   };
 
+  ADAPTERS.stripe = {
+    id: 'stripe', name: 'Stripe', authShape: 'token', setupRequired: false,
+    setupNote: 'paste a Stripe RESTRICTED API key with charges read access from dashboard.stripe.com/apikeys; it is stored only in the app vault, never requested or shown in chat',
+    buildHeaders: function (token) { return { Authorization: 'Bearer ' + token, 'User-Agent': 'CompanionDesk' }; },
+    actions: [
+      { id: 'list_charges', label: 'List recent Stripe charges (capped)', scope: 'charges.read', kind: 'read_only',
+        params: [{ name: 'limit', required: false, maxLength: 3 }],
+        build: function (p, token) {
+          const limit = optionalInt(p, 'limit', 25);
+          if (limit === null || limit < 1 || limit > 100) return { error: 'param_invalid' };
+          return { method: 'GET', url: 'https://api.stripe.com/v1/charges?limit=' + limit, headers: this.buildHeaders(token), body: null };
+        } },
+      { id: 'get_charge', label: 'Read one Stripe charge by id', scope: 'charges.read', kind: 'read_only',
+        params: [{ name: 'charge_id', required: true, maxLength: 64 }],
+        build: function (p, token) {
+          if (!/^[A-Za-z0-9_]+$/.test(p.charge_id)) return { error: 'param_invalid' };
+          return { method: 'GET', url: 'https://api.stripe.com/v1/charges/' + encodeURIComponent(p.charge_id), headers: this.buildHeaders(token), body: null };
+        } },
+    ],
+  };
+
+  ADAPTERS.groq = {
+    id: 'groq', name: 'Groq', authShape: 'token', setupRequired: false,
+    setupNote: 'paste a Groq API key from console.groq.com/keys; it is stored only in the app vault, never requested or shown in chat',
+    buildHeaders: function (token) { return { Authorization: 'Bearer ' + token, 'User-Agent': 'CompanionDesk' }; },
+    actions: [
+      { id: 'list_models', label: 'List the Groq models your key can use', scope: 'models.read', kind: 'read_only',
+        params: [],
+        build: function (p, token) {
+          return { method: 'GET', url: 'https://api.groq.com/openai/v1/models', headers: this.buildHeaders(token), body: null };
+        } },
+    ],
+  };
+
   ADAPTERS.pexels = {
     id: 'pexels', name: 'Pexels', authShape: 'token', setupRequired: false,
     setupNote: 'paste your Pexels API key from pexels.com/api; it is stored only in the app vault, never requested or shown in chat',

@@ -12,7 +12,7 @@ const assert = require('node:assert');
 const adapters = require('../src/connector-adapters.js');
 const { createConnectorCatalog } = require('../src/connectors.js');
 
-const IMPLEMENTED = ['anthropic', 'brave-search', 'arxiv', 'airtable', 'coda', 'circleci', 'cloudflare', 'crossref', 'digitalocean', 'discord', 'docker-hub', 'github', 'gitlab', 'gmail', 'heroku', 'google-calendar', 'google-docs', 'google-sheets', 'google-drive', 'google-gemini', 'huggingface', 'internet-archive', 'jira', 'mailgun', 'postmark', 'sendgrid', 'linear', 'microsoft-calendar', 'microsoft-onedrive', 'microsoft-excel', 'microsoft-outlook', 'microsoft-teams', 'microsoft-word', 'musicbrainz', 'notion', 'npm', 'open-meteo', 'openai', 'openalex', 'openlibrary', 'openstreetmap', 'pypi', 'render', 'slack', 'supabase', 'sentry', 'pagerduty', 'tmdb', 'unsplash', 'new-relic', 'pinecone', 'pexels', 'kaggle', 'tavily', 'telegram', 'trello', 'todoist', 'wikimedia'];
+const IMPLEMENTED = ['anthropic', 'brave-search', 'arxiv', 'airtable', 'coda', 'circleci', 'cloudflare', 'crossref', 'digitalocean', 'discord', 'docker-hub', 'github', 'gitlab', 'gmail', 'heroku', 'google-calendar', 'google-docs', 'google-sheets', 'google-drive', 'google-gemini', 'huggingface', 'internet-archive', 'jira', 'mailgun', 'postmark', 'sendgrid', 'linear', 'microsoft-calendar', 'microsoft-onedrive', 'microsoft-excel', 'microsoft-outlook', 'microsoft-teams', 'microsoft-word', 'musicbrainz', 'notion', 'npm', 'open-meteo', 'openai', 'openalex', 'openlibrary', 'openstreetmap', 'pypi', 'render', 'slack', 'supabase', 'sentry', 'pagerduty', 'tmdb', 'unsplash', 'new-relic', 'pinecone', 'pexels', 'kaggle', 'stripe', 'groq', 'tavily', 'telegram', 'trello', 'todoist', 'wikimedia'];
 const OAUTH = ['gmail', 'google-calendar', 'google-drive', 'microsoft-calendar', 'microsoft-onedrive', 'microsoft-outlook'];
 
 test('the adapter registry covers exactly the implemented catalog entries', () => {
@@ -1390,5 +1390,37 @@ test('kaggle builds basic-auth dataset reads with strict validation and no write
   for (const a of adapters.listActions('kaggle')) {
     assert.equal(a.kind, 'read_only', 'kaggle is read-only');
     assert.equal(a.scope, 'datasets.read');
+  }
+});
+
+// ---- batch 35 (27 Nov 2026): stripe + groq read-only adapters ----
+
+test('stripe builds bearer charge reads with strict validation and no writes', () => {
+  const lc = adapters.buildRequest('stripe', 'list_charges', { limit: '100' }, 'sk-tok');
+  assert.equal(lc.ok, true);
+  assert.equal(lc.request.url, 'https://api.stripe.com/v1/charges?limit=100');
+  assert.equal(lc.request.headers.Authorization, 'Bearer sk-tok');
+  const gc = adapters.buildRequest('stripe', 'get_charge', { charge_id: 'ch_3AbC123' }, 'sk-tok');
+  assert.equal(gc.ok, true);
+  assert.equal(gc.request.url, 'https://api.stripe.com/v1/charges/ch_3AbC123');
+  assert.equal(adapters.buildRequest('stripe', 'get_charge', {}, 'sk-tok').reason, 'param_missing', 'charge id required');
+  assert.equal(adapters.buildRequest('stripe', 'get_charge', { charge_id: 'ch;rm -rf' }, 'sk-tok').reason, 'param_invalid', 'bad charge id');
+  assert.equal(adapters.buildRequest('stripe', 'list_charges', { limit: '101' }, 'sk-tok').reason, 'param_invalid', 'limit above the cap');
+  for (const a of adapters.listActions('stripe')) {
+    assert.equal(a.kind, 'read_only', 'stripe is read-only');
+    assert.equal(a.scope, 'charges.read');
+  }
+});
+
+test('groq builds bearer model reads with no completions and no writes', () => {
+  const lm = adapters.buildRequest('groq', 'list_models', {}, 'gq-tok');
+  assert.equal(lm.ok, true);
+  assert.equal(lm.request.url, 'https://api.groq.com/openai/v1/models');
+  assert.equal(lm.request.headers.Authorization, 'Bearer gq-tok');
+  assert.equal(adapters.listActions('groq').length, 1, 'only the model read is implemented');
+  for (const a of adapters.listActions('groq')) {
+    assert.equal(a.kind, 'read_only', 'groq is read-only');
+    assert.equal(a.scope, 'models.read');
+    assert.notEqual(a.scope, 'completions.send', 'completions never implemented');
   }
 });

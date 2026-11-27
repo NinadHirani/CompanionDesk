@@ -902,3 +902,19 @@ test('pexels and kaggle refuse before connect and ride their credentials on read
     }
   }
 });
+
+// ---- batch 35 (27 Nov 2026): stripe + groq credential gates ----
+
+test('stripe and groq refuse before connect and ride their credentials on reads', async () => {
+  let seen = null;
+  const transport = async (req) => { seen = req; return { status: 200, body: JSON.stringify([]) }; };
+  const { catalog, engine } = makeEngine(transport, 'fin-tok');
+  for (const [id, action, scope] of [['stripe', 'list_charges', 'charges.read'], ['groq', 'list_models', 'models.read']]) {
+    assert.equal((await engine.run(id, action, {})).reason, 'not_connected', id + ' refuses before connect');
+    const c = catalog.connect(id, { userInitiated: true, scopes: [scope], credentialRef: 'vault:' + id + '-cred' });
+    assert.equal(c.ok, true, id + ' connects');
+    const r = await engine.run(id, action, {});
+    assert.equal(r.ok, true, id + ' reads with a credential');
+    assert.ok(seen.headers.Authorization.indexOf('fin-tok') > 0, id + ' credential rides the header');
+  }
+});
