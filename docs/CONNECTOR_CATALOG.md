@@ -25,13 +25,26 @@ Nothing auto-connects. The module constant AUTO_CONNECT is false, the catalog is
 | `internet-archive` | Internet Archive | reference | cloud | free_open_source | Free, non-profit archive | Upload throttling applies | metadata.read (read_only), items.upload (write) |
 | `openlibrary` | Open Library | reference | cloud | free_open_source | Free; Open Library is an open project | Polite-use rate limits | books.read (read_only) |
 | `wikimedia` | Wikimedia | reference | cloud | free_open_source | Free; Wikimedia APIs are open | Polite-use rate limits; a user agent is required | search.read (read_only) |
+| `discord` | Discord | messaging | cloud | free_tier | Free; the bot API is free with rate limits | Per-bot rate limits apply | guilds.read (read_only), message.send (send) |
+| `dropbox` | Dropbox | files | cloud | free_tier | Free basic plan with limited storage; paid plans beyond | Free tier API rate limits apply | files.read (read_only), files.write (write) |
 | `github` | GitHub | code | cloud | free_tier | Free for public repos; paid plans for private features | 5,000 REST requests per hour on the free tier | repos.read (read_only), issues.write (write) |
+| `gmail` | Gmail | messaging | cloud | free_tier | Free with a Google account; Workspace plans are paid | Per-user sending quotas apply | mail.read (read_only), mail.send (send) |
+| `google-calendar` | Google Calendar | calendar | cloud | free_tier | Free with a Google account | Free tier API rate limits apply | events.read (read_only), events.write (write) |
+| `google-drive` | Google Drive | files | cloud | free_tier | Free storage with a Google account; paid plans beyond | Per-project API quotas apply | files.read (read_only), files.write (write) |
 | `huggingface` | Hugging Face | ai_cloud | cloud | free_tier | Free tier; paid compute is optional | Free tier API rate limits apply | models.read (read_only), datasets.upload (write) |
+| `microsoft-onedrive` | Microsoft OneDrive | files | cloud | free_tier | Free storage with a Microsoft account; Microsoft 365 plans are paid | Free tier API throttling applies | files.read (read_only), files.write (write) |
+| `microsoft-outlook` | Microsoft Outlook | messaging | cloud | free_tier | Free with a Microsoft account; Microsoft 365 plans are paid | Free tier API throttling applies | mail.read (read_only), mail.send (send) |
+| `notion` | Notion | notes | cloud | free_tier | Free personal plan; paid plans for teams | Free tier API rate limits apply | pages.read (read_only), pages.write (write) |
 | `open-meteo` | Open-Meteo | weather | cloud | free_tier | Free for non-commercial use | Free tier daily API call quota | weather.read (read_only) |
+| `slack` | Slack | messaging | cloud | free_tier | Free tier with message-history limits; paid plans beyond | Free tier API rate limits apply | channels.read (read_only), message.send (send) |
+| `spotify` | Spotify | media | cloud | free_tier | Free tier; Premium unlocks full features | Free tier API rate limits apply | library.read (read_only), playback.control (write) |
+| `telegram` | Telegram | messaging | cloud | free_tier | Free; the bot API is free with rate limits | Per-bot rate limits apply | chats.read (read_only), message.send (send) |
+| `youtube` | YouTube | media | cloud | free_tier | Free; API quota applies per project | Per-project daily API quota | videos.read (read_only), videos.write (write) |
+| `zoom` | Zoom | meetings | cloud | free_tier | Free basic plan with meeting limits; paid plans beyond | Free tier API rate limits apply | meetings.read (read_only), meetings.write (write) |
 | `openai` | OpenAI | ai_cloud | cloud | paid | Paid per token; the API has no free tier | Model-dependent rate and token limits | models.read (read_only), completions.send (send) |
 | `twilio` | Twilio | messaging | cloud | paid | Paid per message or minute; trial credit only | Per-message and per-minute billing | messages.send (send) |
 
-Sorted free-first: local and self-hostable free/open-source entries first, free-tier cloud next, paid last. The catalog above carries 20 shipped entries; it is extensible only through reviewed registration (MAX_EXTRA additions, each validated and audited), never by inventing entries.
+Sorted free-first: local and self-hostable free/open-source entries first, free-tier cloud next, paid last. The catalog above carries 33 shipped entries: the 20-entry legacy tier (local-first and self-hostable first) plus a curated popular-provider tier (27 Nov 2026, Ninad's clarification): 13 mainstream cloud services (Slack, Discord, Notion, Dropbox, Google Drive/Gmail/Calendar, OneDrive/Outlook, Telegram, YouTube, Spotify, Zoom) listed as METADATA ONLY, each honestly marked integration not implemented, refused at authorizeCall even when connected, and visible in the panel with its real cost and limits. The catalog is extensible only through reviewed registration (MAX_EXTRA additions, each validated and audited) and these curated entries, never by inventing entries.
 
 Status 27 Nov 2026: shipped and documented, nothing connected, no credentials requested, no permissions granted. Naming a real service to activate and approving each per-connector activation remain the owner's calls.
 

@@ -210,6 +210,11 @@
         // connector ever claims a working integration.
         if (e.custom) {
           rowEl.appendChild(line('custom connector: ' + (e.readinessNote || 'integration not implemented in this build')));
+        } else if (e.readinessNote) {
+          // Curated popular-provider tier (27 Nov 2026): mainstream services
+          // are LISTED for discovery, never claimed to work; the honest
+          // label travels with the row the same way it does for customs.
+          rowEl.appendChild(line('integration not implemented: ' + e.readinessNote));
         }
         const state = e.state || 'discovered';
         const scopeNames = (Array.isArray(e.scopes) ? e.scopes : []).map((s) => s.name);

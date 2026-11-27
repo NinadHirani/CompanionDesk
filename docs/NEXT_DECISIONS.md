@@ -62,6 +62,25 @@ strict snapshot/restore pair on the catalog. No service is connected and
 no credential exists yet, so nothing is granted today.
 
 
+Follow-on (27 Nov 2026 ~17:35 IST, curated popular-provider tier, Ninad's
+clarification): Ninad wanted VISIBLE popular connector options, not only
+search/filter + custom. Verified the shipped catalog held 20 entries, all
+FOSS-leaning plus GitHub/Hugging Face/OpenAI/Twilio/Open-Meteo - Google,
+Microsoft, Slack, Discord, Notion and Dropbox were absent, so the catalog
+was too sparse on mainstream services. Added a curated popular-provider
+tier of 13 metadata-only built-in entries (Slack, Discord, Notion, Dropbox,
+Google Drive/Gmail/Google Calendar, OneDrive/Outlook, Telegram, YouTube,
+Spotify, Zoom), each with its real cost note, limits, auth shape and exact
+scopes, and each honestly marked integrationImplemented:false with a
+readiness note; authorizeCall now refuses any entry carrying that marker
+(integration_not_implemented), even when connected, so no popular entry can
+fake a working integration. Legacy built-ins keep their existing
+authorizeCall behavior (verified by test). Panel rows show the label the
+same way customs do; search/filter and the AI's list/describe surface pick
+the new entries up automatically. Catalog is 33 entries; connector-tool
+count test and the doc-sync test updated (docs/CONNECTOR_CATALOG.md table
+regenerated from the live catalog). Suite 1398 tests, selftest PASS.
+
 Follow-on (27 Nov 2026 evening, marketplace slice, same authorization):
 Ninad asked for a real Connector Catalog/Marketplace UI on main. Landed:
 the Connectors section gained a client-side search box and category filter,

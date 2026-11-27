@@ -588,3 +588,16 @@ test('a bridge without the custom-connector methods degrades honestly', async ()
     assert.ok(await until(() => statusText() === 'workspace: custom connectors unavailable in this build'));
   } finally { uninstallDom(); }
 });
+
+test('a curated popular-provider row carries the honest not-implemented label', async () => {
+  installDom();
+  try {
+    const connectors = [{ id: 'slack', name: 'Slack', state: 'discovered', costNote: 'Free tier with message-history limits', limits: 'Free tier API rate limits apply', scopes: [{ name: 'channels.read', class: 'read_only' }], readinessNote: 'definition only: no integration actions are implemented for Slack in this build' }];
+    const bridge = marketplaceBridge({ connectors });
+    const P = await loadPanel();
+    P.mount({ api: bridge, initialView: 'tasks' });
+    const box = global.document.getElementById('ws-connectors');
+    assert.ok(await until(() => deepText(box).includes('integration not implemented: definition only: no integration actions are implemented for Slack in this build')), 'the honest label travels with the row');
+    assert.strictEqual(bridge.__calls.connect.length, 0, 'nothing connects by being listed');
+  } finally { uninstallDom(); }
+});

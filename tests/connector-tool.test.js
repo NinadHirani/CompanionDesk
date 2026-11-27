@@ -32,7 +32,7 @@ test('list returns the catalog with live states and the open requests', async ()
   s.requests.request('rss', { reason: 'needs feeds' });
   const out = await s.tool.execute({ action: 'list' });
   assert.equal(out.ok, true);
-  assert.equal(out.connectors.length, 20, 'the shipped catalog');
+  assert.equal(out.connectors.length, 33, 'the shipped catalog (20 legacy + 13 curated popular providers)');
   assert.equal(out.connectors.find((c) => c.id === 'rss').state, 'discovered');
   assert.equal(out.requests.length, 1);
 });
