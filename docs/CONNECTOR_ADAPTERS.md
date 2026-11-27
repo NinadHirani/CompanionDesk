@@ -642,3 +642,14 @@ The credentials are the user's own keys pasted into the app vault. No writes any
 PostHog deliberately stays definition-only: it is self-hostable, so it has no single pinned host, the same setup-shape reasoning as Jenkins.
 
 Tests: adapter build/validation per connector (required query, numeric-id reject, page and per-page caps, percent-encoding, header shapes, read-only sweeps), engine gates (each refuses before connect and rides its credential on a read). Catalog count pins: 117 still-definition-only expanded rows, 121 definition-only total.
+## Batch 33 (27 Nov 2026): New Relic, Pinecone
+
+Upgraded two cloud connectors to token-bound READ-ONLY adapters (each `auth: api_key`, `authShape: token`).
+
+Actions:
+- New Relic (pinned `api.newrelic.com/v2`, `X-Api-Key` header): `list_applications` (per_page 1-100, page 1); `get_application` by numeric id (charset-validated). No data-in queries, no config changes.
+- Pinecone (pinned `api.pinecone.io`, `Api-Key` header plus a pinned `X-Pinecone-API-Version: 2025-01`): `list_indexes`; `get_index` by name (charset-validated `[a-z0-9-]`). No vector reads, no creates, no deletes.
+
+The credentials are the user's own keys pasted into the app vault.
+
+Tests: adapter build/validation per connector (caps, numeric-id reject, required param, header shapes including the pinned Pinecone version header, read-only sweeps), engine gates (each refuses before connect and rides its credential on a read). One test-side fix: the gate test's header check now uses a substring test over the header values instead of an array index bound. Catalog count pins: 115 still-definition-only expanded rows, 119 definition-only total.

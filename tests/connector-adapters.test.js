@@ -12,7 +12,7 @@ const assert = require('node:assert');
 const adapters = require('../src/connector-adapters.js');
 const { createConnectorCatalog } = require('../src/connectors.js');
 
-const IMPLEMENTED = ['anthropic', 'brave-search', 'arxiv', 'airtable', 'coda', 'circleci', 'cloudflare', 'crossref', 'digitalocean', 'discord', 'docker-hub', 'github', 'gitlab', 'gmail', 'heroku', 'google-calendar', 'google-docs', 'google-sheets', 'google-drive', 'google-gemini', 'huggingface', 'internet-archive', 'jira', 'mailgun', 'postmark', 'sendgrid', 'linear', 'microsoft-calendar', 'microsoft-onedrive', 'microsoft-excel', 'microsoft-outlook', 'microsoft-teams', 'microsoft-word', 'musicbrainz', 'notion', 'npm', 'open-meteo', 'openai', 'openalex', 'openlibrary', 'openstreetmap', 'pypi', 'render', 'slack', 'supabase', 'sentry', 'pagerduty', 'tmdb', 'unsplash', 'tavily', 'telegram', 'trello', 'todoist', 'wikimedia'];
+const IMPLEMENTED = ['anthropic', 'brave-search', 'arxiv', 'airtable', 'coda', 'circleci', 'cloudflare', 'crossref', 'digitalocean', 'discord', 'docker-hub', 'github', 'gitlab', 'gmail', 'heroku', 'google-calendar', 'google-docs', 'google-sheets', 'google-drive', 'google-gemini', 'huggingface', 'internet-archive', 'jira', 'mailgun', 'postmark', 'sendgrid', 'linear', 'microsoft-calendar', 'microsoft-onedrive', 'microsoft-excel', 'microsoft-outlook', 'microsoft-teams', 'microsoft-word', 'musicbrainz', 'notion', 'npm', 'open-meteo', 'openai', 'openalex', 'openlibrary', 'openstreetmap', 'pypi', 'render', 'slack', 'supabase', 'sentry', 'pagerduty', 'tmdb', 'unsplash', 'new-relic', 'pinecone', 'tavily', 'telegram', 'trello', 'todoist', 'wikimedia'];
 const OAUTH = ['gmail', 'google-calendar', 'google-drive', 'microsoft-calendar', 'microsoft-onedrive', 'microsoft-outlook'];
 
 test('the adapter registry covers exactly the implemented catalog entries', () => {
@@ -1319,5 +1319,41 @@ test('unsplash builds client-id photo reads with strict validation and no writes
   for (const a of adapters.listActions('unsplash')) {
     assert.equal(a.kind, 'read_only', 'unsplash is read-only');
     assert.equal(a.scope, 'photos.read');
+  }
+});
+
+// ---- batch 33 (27 Nov 2026): new-relic + pinecone read-only adapters ----
+
+test('new-relic builds x-api-key application reads with strict validation and no writes', () => {
+  const la = adapters.buildRequest('new-relic', 'list_applications', { per_page: '100' }, 'nr-tok');
+  assert.equal(la.ok, true);
+  assert.equal(la.request.url, 'https://api.newrelic.com/v2/applications.json?per_page=100&page=1');
+  assert.equal(la.request.headers['X-Api-Key'], 'nr-tok');
+  const ga = adapters.buildRequest('new-relic', 'get_application', { application_id: '4711' }, 'nr-tok');
+  assert.equal(ga.ok, true);
+  assert.equal(ga.request.url, 'https://api.newrelic.com/v2/applications/4711.json');
+  assert.equal(adapters.buildRequest('new-relic', 'get_application', {}, 'nr-tok').reason, 'param_missing', 'application id required');
+  assert.equal(adapters.buildRequest('new-relic', 'get_application', { application_id: 'app1' }, 'nr-tok').reason, 'param_invalid', 'non-numeric application id');
+  assert.equal(adapters.buildRequest('new-relic', 'list_applications', { per_page: '101' }, 'nr-tok').reason, 'param_invalid', 'per_page above the cap');
+  for (const a of adapters.listActions('new-relic')) {
+    assert.equal(a.kind, 'read_only', 'new-relic is read-only');
+    assert.equal(a.scope, 'metrics.read');
+  }
+});
+
+test('pinecone builds api-key index reads with strict validation and no writes', () => {
+  const li = adapters.buildRequest('pinecone', 'list_indexes', {}, 'pc-tok');
+  assert.equal(li.ok, true);
+  assert.equal(li.request.url, 'https://api.pinecone.io/indexes');
+  assert.equal(li.request.headers['Api-Key'], 'pc-tok');
+  assert.equal(li.request.headers['X-Pinecone-API-Version'], '2025-01');
+  const gi = adapters.buildRequest('pinecone', 'get_index', { index_name: 'prod-embeddings' }, 'pc-tok');
+  assert.equal(gi.ok, true);
+  assert.equal(gi.request.url, 'https://api.pinecone.io/indexes/prod-embeddings');
+  assert.equal(adapters.buildRequest('pinecone', 'get_index', {}, 'pc-tok').reason, 'param_missing', 'index name required');
+  assert.equal(adapters.buildRequest('pinecone', 'get_index', { index_name: 'Bad_Name' }, 'pc-tok').reason, 'param_invalid', 'bad index name');
+  for (const a of adapters.listActions('pinecone')) {
+    assert.equal(a.kind, 'read_only', 'pinecone is read-only');
+    assert.equal(a.scope, 'vectors.read');
   }
 });

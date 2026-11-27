@@ -157,6 +157,46 @@
     ],
   };
 
+  ADAPTERS['new-relic'] = {
+    id: 'new-relic', name: 'New Relic', authShape: 'token', setupRequired: false,
+    setupNote: 'create a User API key at one.newrelic.com/menu/My-Account/api-keys and paste it; your key is stored only in the app vault, never requested or shown in chat',
+    buildHeaders: function (token) { return { 'X-Api-Key': token, 'User-Agent': 'CompanionDesk' }; },
+    actions: [
+      { id: 'list_applications', label: 'List your New Relic applications (capped)', scope: 'metrics.read', kind: 'read_only',
+        params: [{ name: 'per_page', required: false, maxLength: 3 }],
+        build: function (p, token) {
+          const perPage = optionalInt(p, 'per_page', 25);
+          if (perPage === null || perPage < 1 || perPage > 100) return { error: 'param_invalid' };
+          return { method: 'GET', url: 'https://api.newrelic.com/v2/applications.json?per_page=' + perPage + '&page=1', headers: this.buildHeaders(token), body: null };
+        } },
+      { id: 'get_application', label: 'Read one New Relic application by id', scope: 'metrics.read', kind: 'read_only',
+        params: [{ name: 'application_id', required: true, maxLength: 20 }],
+        build: function (p, token) {
+          if (!/^\d{1,20}$/.test(p.application_id)) return { error: 'param_invalid' };
+          return { method: 'GET', url: 'https://api.newrelic.com/v2/applications/' + encodeURIComponent(p.application_id) + '.json', headers: this.buildHeaders(token), body: null };
+        } },
+    ],
+  };
+
+  ADAPTERS.pinecone = {
+    id: 'pinecone', name: 'Pinecone', authShape: 'token', setupRequired: false,
+    setupNote: 'paste a Pinecone API key from app.pinecone.io; it is stored only in the app vault, never requested or shown in chat',
+    buildHeaders: function (token) { return { 'Api-Key': token, 'X-Pinecone-API-Version': '2025-01', 'User-Agent': 'CompanionDesk' }; },
+    actions: [
+      { id: 'list_indexes', label: 'List your Pinecone indexes', scope: 'vectors.read', kind: 'read_only',
+        params: [],
+        build: function (p, token) {
+          return { method: 'GET', url: 'https://api.pinecone.io/indexes', headers: this.buildHeaders(token), body: null };
+        } },
+      { id: 'get_index', label: 'Read one Pinecone index by name', scope: 'vectors.read', kind: 'read_only',
+        params: [{ name: 'index_name', required: true, maxLength: 45 }],
+        build: function (p, token) {
+          if (!/^[a-z0-9-]+$/.test(p.index_name)) return { error: 'param_invalid' };
+          return { method: 'GET', url: 'https://api.pinecone.io/indexes/' + encodeURIComponent(p.index_name), headers: this.buildHeaders(token), body: null };
+        } },
+    ],
+  };
+
   ADAPTERS.tmdb = {
     id: 'tmdb', name: 'TMDB', authShape: 'token', setupRequired: false,
     setupNote: 'paste the v3 API read access token from themoviedb.org/settings/api; it is stored only in the app vault, never requested or shown in chat',

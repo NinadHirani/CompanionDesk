@@ -865,3 +865,19 @@ test('tmdb and unsplash refuse before connect and ride their credentials on read
     assert.ok(seen.headers.Authorization.indexOf('media-tok') > 0, id + ' credential rides the header');
   }
 });
+
+// ---- batch 33 (27 Nov 2026): new-relic + pinecone credential gates ----
+
+test('new-relic and pinecone refuse before connect and ride their credentials on reads', async () => {
+  let seen = null;
+  const transport = async (req) => { seen = req; return { status: 200, body: JSON.stringify([]) }; };
+  const { catalog, engine } = makeEngine(transport, 'mon-tok');
+  for (const [id, action, scope] of [['new-relic', 'list_applications', 'metrics.read'], ['pinecone', 'list_indexes', 'vectors.read']]) {
+    assert.equal((await engine.run(id, action, {})).reason, 'not_connected', id + ' refuses before connect');
+    const c = catalog.connect(id, { userInitiated: true, scopes: [scope], credentialRef: 'vault:' + id + '-cred' });
+    assert.equal(c.ok, true, id + ' connects');
+    const r = await engine.run(id, action, {});
+    assert.equal(r.ok, true, id + ' reads with a credential');
+    assert.ok(Object.values(seen.headers).some(function (v) { return String(v).indexOf('mon-tok') >= 0; }), id + ' credential rides the headers');
+  }
+});
