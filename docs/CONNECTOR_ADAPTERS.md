@@ -558,3 +558,15 @@ Actions (pinned to `coda.io/apis/v1`, Bearer token):
 The token is the user's own Coda API token pasted into the app vault. The write action is single-use approval gated by the policy engine (refused without an approval, dead after one use). No edits to existing docs, no deletes, no rows or table writes.
 
 Tests: adapter build/validation (9 assertions incl. charset reject, title requirement, limit cap), engine gates (not_connected refusal, credential rides the read, write refused without an approval, approved write runs once, spent approval is dead). Catalog count pins: 130 still-definition-only expanded rows, 134 definition-only total.
+## Batch 26 (27 Nov 2026): CircleCI
+
+Upgraded `circleci` from definition-only to a key-bound READ-ONLY adapter (`auth: api_key`, `authShape: token`).
+
+Actions (pinned to `circleci.com/api/v2`, auth rides the `Circle-Token` header):
+- `get_me` (read_only, `pipelines.read`): token check against the authenticated user.
+- `list_projects` (read_only, `pipelines.read`): your projects, page-size 1-100.
+- `get_pipeline` (read_only, `pipelines.read`): one pipeline by id (charset-validated).
+
+The token is the user's own CircleCI personal API token pasted into the app vault. The row declares no write scope, so there is no approval-gated action: the adapter is read-only end to end. No writes, no triggers, no cancels.
+
+Tests: adapter build/validation (7 assertions incl. charset reject, id requirement, limit cap, read-only sweep), engine gates (not_connected refusal, credential rides the Circle-Token header). Catalog count pins: 129 still-definition-only expanded rows, 133 definition-only total.

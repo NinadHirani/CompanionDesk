@@ -754,3 +754,18 @@ test('coda refuses before connect, reads with a credential, and gates its create
   assert.equal(w.ok, true);
   assert.equal((await engine.run('coda', 'create_doc', { title: 'y' }, { approvalId: a.approvalId })).reason, 'approval_required', 'the spent approval is dead');
 });
+
+// ---- batch 26 (27 Nov 2026): circleci credential gates ----
+
+test('circleci refuses before connect and reads with the credential in the Circle-Token header', async () => {
+  let seen = null;
+  const transport = async (req) => { seen = req; return { status: 200, body: JSON.stringify({ login: 'n' }) }; };
+  const { catalog, engine } = makeEngine(transport, 'cci-tok');
+  assert.equal((await engine.run('circleci', 'get_me', {})).reason, 'not_connected');
+  const c = catalog.connect('circleci', { userInitiated: true, scopes: ['pipelines.read'], credentialRef: 'vault:cci-cred' });
+  assert.equal(c.ok, true);
+  const r = await engine.run('circleci', 'get_me', {});
+  assert.equal(r.ok, true);
+  assert.equal(seen.url, 'https://circleci.com/api/v2/me');
+  assert.equal(seen.headers['Circle-Token'], 'cci-tok', 'the stored credential rides the read');
+});

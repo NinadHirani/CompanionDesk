@@ -12,7 +12,7 @@ const assert = require('node:assert');
 const adapters = require('../src/connector-adapters.js');
 const { createConnectorCatalog } = require('../src/connectors.js');
 
-const IMPLEMENTED = ['anthropic', 'brave-search', 'arxiv', 'airtable', 'coda', 'crossref', 'discord', 'docker-hub', 'github', 'gitlab', 'gmail', 'google-calendar', 'google-docs', 'google-sheets', 'google-drive', 'google-gemini', 'huggingface', 'internet-archive', 'jira', 'linear', 'microsoft-calendar', 'microsoft-onedrive', 'microsoft-excel', 'microsoft-outlook', 'microsoft-teams', 'microsoft-word', 'musicbrainz', 'notion', 'npm', 'open-meteo', 'openai', 'openalex', 'openlibrary', 'openstreetmap', 'pypi', 'slack', 'tavily', 'telegram', 'trello', 'todoist', 'wikimedia'];
+const IMPLEMENTED = ['anthropic', 'brave-search', 'arxiv', 'airtable', 'coda', 'circleci', 'crossref', 'discord', 'docker-hub', 'github', 'gitlab', 'gmail', 'google-calendar', 'google-docs', 'google-sheets', 'google-drive', 'google-gemini', 'huggingface', 'internet-archive', 'jira', 'linear', 'microsoft-calendar', 'microsoft-onedrive', 'microsoft-excel', 'microsoft-outlook', 'microsoft-teams', 'microsoft-word', 'musicbrainz', 'notion', 'npm', 'open-meteo', 'openai', 'openalex', 'openlibrary', 'openstreetmap', 'pypi', 'slack', 'tavily', 'telegram', 'trello', 'todoist', 'wikimedia'];
 const OAUTH = ['gmail', 'google-calendar', 'google-drive', 'microsoft-calendar', 'microsoft-onedrive', 'microsoft-outlook'];
 
 test('the adapter registry covers exactly the implemented catalog entries', () => {
@@ -1078,5 +1078,28 @@ test('coda builds bearer reads and a title-only create with strict validation', 
     if (a.id === 'create_doc') { assert.equal(a.scope, 'docs.write'); continue; }
     assert.equal(a.kind, 'read_only');
     assert.equal(a.scope, 'docs.read');
+  }
+});
+
+// ---- batch 26 (27 Nov 2026): circleci read-only adapter ----
+
+test('circleci builds Circle-Token reads with strict validation and no write actions', () => {
+  const me = adapters.buildRequest('circleci', 'get_me', {}, 'cci-key');
+  assert.equal(me.ok, true);
+  assert.equal(me.request.method, 'GET');
+  assert.equal(me.request.url, 'https://circleci.com/api/v2/me');
+  assert.equal(me.request.headers['Circle-Token'], 'cci-key');
+  const lp = adapters.buildRequest('circleci', 'list_projects', { limit: '100' }, 'cci-key');
+  assert.equal(lp.ok, true);
+  assert.equal(lp.request.url, 'https://circleci.com/api/v2/projects?page-size=100');
+  const gp = adapters.buildRequest('circleci', 'get_pipeline', { pipeline_id: 'abc-123' }, 'cci-key');
+  assert.equal(gp.ok, true);
+  assert.equal(gp.request.url, 'https://circleci.com/api/v2/pipeline/abc-123');
+  assert.equal(adapters.buildRequest('circleci', 'get_pipeline', { pipeline_id: 'a b' }, 'cci-key').reason, 'param_invalid', 'space in pipeline id');
+  assert.equal(adapters.buildRequest('circleci', 'get_pipeline', {}, 'cci-key').reason, 'param_missing', 'pipeline id required');
+  assert.equal(adapters.buildRequest('circleci', 'list_projects', { limit: '101' }, 'cci-key').reason, 'param_invalid', 'limit above the cap');
+  for (const a of adapters.listActions('circleci')) {
+    assert.equal(a.kind, 'read_only', 'circleci is read-only');
+    assert.equal(a.scope, 'pipelines.read');
   }
 });

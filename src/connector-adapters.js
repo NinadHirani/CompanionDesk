@@ -157,6 +157,32 @@
     ],
   };
 
+  ADAPTERS.circleci = {
+    id: 'circleci', name: 'CircleCI', authShape: 'token', setupRequired: false,
+    setupNote: 'create a personal API token at circleci.com/account/api and paste it; your token is stored only in the app vault, never requested or shown in chat',
+    buildHeaders: function (token) { return { 'Circle-Token': token, 'User-Agent': 'CompanionDesk' }; },
+    actions: [
+      { id: 'get_me', label: 'Check the CircleCI token works', scope: 'pipelines.read', kind: 'read_only',
+        params: [],
+        build: function (p, token) {
+          return { method: 'GET', url: 'https://circleci.com/api/v2/me', headers: this.buildHeaders(token), body: null };
+        } },
+      { id: 'list_projects', label: 'List your CircleCI projects (capped)', scope: 'pipelines.read', kind: 'read_only',
+        params: [{ name: 'limit', required: false, maxLength: 3 }],
+        build: function (p, token) {
+          const limit = optionalInt(p, 'limit', 25);
+          if (limit === null || limit < 1 || limit > 100) return { error: 'param_invalid' };
+          return { method: 'GET', url: 'https://circleci.com/api/v2/projects?page-size=' + limit, headers: this.buildHeaders(token), body: null };
+        } },
+      { id: 'get_pipeline', label: 'Read one CircleCI pipeline by id', scope: 'pipelines.read', kind: 'read_only',
+        params: [{ name: 'pipeline_id', required: true, maxLength: 80 }],
+        build: function (p, token) {
+          if (!/^[A-Za-z0-9-]+$/.test(p.pipeline_id)) return { error: 'param_invalid' };
+          return { method: 'GET', url: 'https://circleci.com/api/v2/pipeline/' + encodeURIComponent(p.pipeline_id), headers: this.buildHeaders(token), body: null };
+        } },
+    ],
+  };
+
   ADAPTERS.coda = {
     id: 'coda', name: 'Coda', authShape: 'token', setupRequired: false,
     setupNote: 'create an API token at coda.io/account and paste it; your token is stored only in the app vault, never requested or shown in chat',
