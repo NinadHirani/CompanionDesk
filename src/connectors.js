@@ -262,6 +262,52 @@
         return { id: e.id, name: e.name, category: e.category, hosting: e.hosting, selfHostable: e.hosting === 'self_hostable' || e.selfHostable === true, localFirst: e.hosting === 'local' || e.localFirst === true, costModel: e.costModel, auth: e.auth, costNote: e.costNote, limits: e.limits, classes: e.scopes.map(function (s) { return s.class; }), scopes: e.scopes.map(function (s) { return { name: s.name, class: s.class }; }) };
       },
       state: function (id) { return entry(id) ? (states.get(id) || 'discovered') : null; },
+      // Persistence (27 Nov 2026 AI-access decision: a connection is
+      // one-time and persistent until the user disconnects). snapshot()
+      // exports states and exact granted scopes only, never credential
+      // references; restore() validates strictly and fails closed: unknown
+      // ids, undeclared or duplicate scopes, grants without a connected
+      // state and connected states without grants are refused, not repaired.
+      snapshot: function () {
+        const out = { states: [], grants: [] };
+        for (const [id, st] of states) if (st !== 'discovered') out.states.push({ id: id, state: st });
+        for (const [id, sc] of grants) out.grants.push({ id: id, scopes: sc.slice() });
+        return out;
+      },
+      restore: function (snap) {
+        const problems = [];
+        if (!snap || !Array.isArray(snap.states) || !Array.isArray(snap.grants)) return { ok: false, problems: ['bad_snapshot'] };
+        if (snap.states.length > MAX_CONNECTIONS || snap.grants.length > MAX_CONNECTIONS) return { ok: false, problems: ['limit_reached'] };
+        for (const s of snap.states) {
+          if (!s || typeof s.id !== 'string' || !entry(s.id)) { problems.push('unknown_connector'); continue; }
+          if (['connected', 'disconnected', 'revoked'].indexOf(s.state) === -1) { problems.push('bad_state'); continue; }
+          states.set(s.id, s.state);
+        }
+        for (const g of snap.grants) {
+          const e = g && typeof g.id === 'string' ? entry(g.id) : null;
+          if (!e) { problems.push('unknown_connector'); continue; }
+          if (!Array.isArray(g.scopes) || g.scopes.length === 0) { problems.push('bad_scopes'); continue; }
+          const unique = [];
+          let bad = false;
+          for (const sc of g.scopes) {
+            if (typeof sc !== 'string' || !declaredScope(e, sc) || unique.indexOf(sc) !== -1) { bad = true; break; }
+            unique.push(sc);
+          }
+          if (bad) { problems.push('bad_scopes'); continue; }
+          if ((states.get(g.id) || 'discovered') !== 'connected') { problems.push('not_connected'); continue; }
+          grants.set(g.id, unique);
+        }
+        for (const [id, sc] of Array.from(grants)) {
+          if ((states.get(id) || 'discovered') !== 'connected') { problems.push('grant_without_connection'); grants.delete(id); }
+        }
+        for (const [id, st] of Array.from(states)) {
+          if (st === 'connected' && !grants.has(id)) { problems.push('connection_without_grants'); states.set(id, 'discovered'); }
+        }
+        for (const [id, st] of Array.from(states)) {
+          if (st !== 'discovered') pushAudit('restore', id, grants.get(id) || null);
+        }
+        return { ok: problems.length === 0, problems: problems };
+      },
       audit: function () { return auditLog.slice(); },
     };
   }

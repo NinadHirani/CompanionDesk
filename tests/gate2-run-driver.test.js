@@ -404,12 +404,15 @@ test('static guards: the driver stays pure, main wires it without registering to
   assert.equal(mainSrc.includes('createRunDriver('), true, 'main constructs the driver');
   assert.equal(mainSrc.includes('reconcileInterruptedRuns()'), true, 'main reconciles interrupted runs at startup');
   // Gate 2 enable step (26 Nov 2026, approved by Ninad), widened the same
-  // day by the Gate 4 approval: main registers EXACTLY TWO tools, the
-  // scheduling gate's and the file-access gate's definitions, nothing else.
+  // day by the Gate 4 approval and again on 27 Nov 2026 by the AI-access
+  // connector flow: main registers EXACTLY THREE tools, the scheduling
+  // gate's, the file-access gate's and the connector status/request
+  // tool's definitions, nothing else.
   const mainDefines = mainSrc.split('.define(').length - 1;
-  assert.equal(mainDefines, 2, 'exactly two registration literals, got ' + mainDefines);
+  assert.equal(mainDefines, 3, 'exactly three registration literals, got ' + mainDefines);
   assert.ok(mainSrc.includes('agentRegistry.define(SCHEDULING_TOOL_DEFINITION)'), 'the enable registers the scheduling gate definition');
   assert.ok(mainSrc.includes('agentRegistry.define(FILE_ACCESS_TOOL_DEFINITION)'), 'the enable registers the file-access gate definition');
+  assert.ok(mainSrc.includes('agentRegistry.define(CONNECTORS_TOOL_DEFINITION)'), 'the connector status/request tool is the third registration');
   assert.equal(strip(mainSrc).includes('requestRun('), false, 'no executable call site of requestRun in main');
   const preloadSrc = fs.readFileSync('src/preload.js', 'utf8');
   assert.equal(preloadSrc.includes('run-driver'), false);

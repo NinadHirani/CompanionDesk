@@ -2,7 +2,7 @@
 
 // Structural guard for the Gate 3 workspace wiring (26 Nov 2026): the
 // channel allowlist, its preload mirror, the section/tab/script in
-// renderer/index.html, the shared view switcher and main's six handlers
+// renderer/index.html, the shared view switcher and main's eight handlers
 // stay in step. Mirrors the repo's structural-guard pattern.
 
 const test = require('node:test');
@@ -17,9 +17,11 @@ const CHANNELS = [
   'workspace:connectorDisconnect',
   'workspace:connectorRevoke',
   'workspace:connectorReadmit',
+  'workspace:connectorRequests',
+  'workspace:connectorRequestResolve',
 ];
 
-test('the allowlist, preload mirror and main handlers carry exactly the six workspace channels', () => {
+test('the allowlist, preload mirror and main handlers carry exactly the eight workspace channels', () => {
   const channelsSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'ipc-channels.js'), 'utf8');
   const preloadSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'preload.js'), 'utf8');
   const mainSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'main.js'), 'utf8');

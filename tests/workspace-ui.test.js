@@ -275,3 +275,100 @@ test('the catalog select carries all thirteen catalog views in roadmap order', a
     assert.deepStrictEqual(labels, ['Conversations', 'Tasks', 'Memory', 'Tools', 'Files', 'Databases', 'App data', 'Workflows', 'Settings', 'Permissions', 'Activity', 'Models', 'Integrations']);
   } finally { uninstallDom(); }
 });
+
+// ---------------------------------------------------------------------------
+// Gate 2 AI-access connector flow (27 Nov 2026): the AI's connect requests
+// render in the Connectors section; approving one is an explicit click that
+// runs the SAME connect gate as the user's own pick; dismissing just
+// resolves the request. The optional bridge methods degrade gracefully.
+
+function requestBridge(overrides) {
+  const calls = { requests: [], resolve: [], connect: [] };
+  const base = bridgeStub(overrides || {});
+  base.workspace_connectorRequests = () => { calls.requests.push(1); return Promise.resolve((overrides && overrides.requests) || []); };
+  base.workspace_connectorRequestResolve = (id, decision) => { calls.resolve.push([id, decision]); return Promise.resolve((overrides && overrides.resolveResult) || { ok: true, status: decision, connectorId: 'rss' }); };
+  base.__req = calls;
+  return base;
+}
+
+const CATALOG_TWO = [
+  { id: 'rss', name: 'RSS feeds', state: 'discovered', costNote: 'Free; RSS feeds are open by design', limits: 'Bound by each feed publisher', scopes: [{ name: 'feed.read', class: 'read_only' }] },
+  { id: 'github', name: 'GitHub', state: 'discovered', costNote: 'Free for public repos', limits: '5,000 REST requests per hour', scopes: [{ name: 'repos.read', class: 'read_only' }, { name: 'issues.write', class: 'write' }] },
+];
+
+function connectorText() { return (global.document.getElementById('ws-connectors') || {}).children || []; }
+
+test('a pending AI request renders with its reason and approve/dismiss buttons', async () => {
+  installDom();
+  try {
+    const bridge = requestBridge({ connectors: CATALOG_TWO, requests: [{ id: 'cr-1', connectorId: 'rss', reason: 'the task needs feed reads', requestedAt: 1, status: 'pending', repeats: 0 }] });
+    const P = await loadPanel();
+    P.mount({ api: bridge, initialView: 'tasks' });
+    assert.ok(await until(() => connectorText().some((n) => /AI request for RSS feeds - the task needs feed reads/.test(n.textContent))));
+    const labels = connectorText().map((n) => n.textContent);
+    assert.ok(labels.some((t) => t === 'Approve request for RSS feeds'), 'approve button renders');
+    assert.ok(labels.some((t) => t === 'Dismiss request for RSS feeds'), 'dismiss button renders');
+    assert.equal(bridge.__req.requests.length, 1);
+  } finally { uninstallDom(); }
+});
+
+test('approving a request resolves it and then runs the SAME explicit connect gate', async () => {
+  installDom();
+  try {
+    const bridge = requestBridge({ connectors: CATALOG_TWO, requests: [{ id: 'cr-1', connectorId: 'rss', reason: 'needs feeds', requestedAt: 1, status: 'pending', repeats: 0 }], resolveResult: { ok: true, status: 'approved', connectorId: 'rss' } });
+    const P = await loadPanel();
+    P.mount({ api: bridge, initialView: 'tasks' });
+    assert.ok(await until(() => connectorText().some((n) => n.textContent === 'Approve request for RSS feeds')));
+    const approve = connectorText().find((n) => n.textContent === 'Approve request for RSS feeds');
+    approve.handlers.click[0]();
+    assert.ok(await until(() => bridge.__req.resolve.length === 1));
+    assert.deepEqual(bridge.__req.resolve[0], ['cr-1', 'approved']);
+    assert.ok(await until(() => bridge.__calls.connect.length === 1));
+    assert.deepEqual(bridge.__calls.connect[0], ['rss', ['feed.read']], 'the approved connect passes the declared scopes only');
+    assert.ok(await until(() => /connected \(AI request approved\)|connect refused/.test(statusText())));
+  } finally { uninstallDom(); }
+});
+
+test('dismissing a request only resolves it and never calls connect', async () => {
+  installDom();
+  try {
+    const bridge = requestBridge({ connectors: CATALOG_TWO, requests: [{ id: 'cr-2', connectorId: 'github', reason: 'repo read', requestedAt: 1, status: 'pending', repeats: 0 }], resolveResult: { ok: true, status: 'dismissed', connectorId: 'github' } });
+    const P = await loadPanel();
+    P.mount({ api: bridge, initialView: 'tasks' });
+    assert.ok(await until(() => connectorText().some((n) => n.textContent === 'Dismiss request for GitHub')));
+    const dismiss = connectorText().find((n) => n.textContent === 'Dismiss request for GitHub');
+    dismiss.handlers.click[0]();
+    assert.ok(await until(() => bridge.__req.resolve.length === 1));
+    assert.deepEqual(bridge.__req.resolve[0], ['cr-2', 'dismissed']);
+    assert.equal(bridge.__calls.connect.length, 0, 'a dismissal never connects');
+    assert.ok(await until(() => statusText() === 'workspace: request dismissed'));
+  } finally { uninstallDom(); }
+});
+
+test('a bridge without the optional request methods still renders the catalog', async () => {
+  installDom();
+  try {
+    const bridge = bridgeStub({ connectors: CATALOG_TWO });
+    const P = await loadPanel();
+    P.mount({ api: bridge, initialView: 'tasks' });
+    assert.ok(await until(() => connectorText().some((n) => /connector catalog: 2 shipped, 0 connected/.test(n.textContent))));
+    assert.equal(connectorText().some((n) => /AI request/.test(n.textContent)), false, 'no request rows invented');
+  } finally { uninstallDom(); }
+});
+
+test('a failed connect after approval surfaces the refusal verbatim and keeps the request', async () => {
+  installDom();
+  try {
+    const bridge = requestBridge({
+      connectors: CATALOG_TWO,
+      requests: [{ id: 'cr-3', connectorId: 'rss', reason: 'needs feeds', requestedAt: 1, status: 'pending', repeats: 0 }],
+      resolveResult: { ok: true, status: 'approved', connectorId: 'rss' },
+      connectResult: { ok: false, reason: 'credential_ref_required' },
+    });
+    const P = await loadPanel();
+    P.mount({ api: bridge, initialView: 'tasks' });
+    assert.ok(await until(() => connectorText().some((n) => n.textContent === 'Approve request for RSS feeds')));
+    connectorText().find((n) => n.textContent === 'Approve request for RSS feeds').handlers.click[0]();
+    assert.ok(await until(() => statusText() === 'workspace: connect refused: credential_ref_required'), 'the honest refusal, verbatim');
+  } finally { uninstallDom(); }
+});

@@ -46,6 +46,21 @@ evening): commit 25990f5 accepted; proceed with the connector settings
 UI and its integration within this approved scope (management UI for
 the lifecycle, still nothing activated without his choice).
 
+FOLLOW-ON APPROVED AND IMPLEMENTED (27 Nov 2026, ~4:45 PM IST): Ninad
+decided the Connectors section is accessible by BOTH the user and the AI;
+the AI may ask him to connect an app/website when a task requires it; a
+connection is one-time and persistent until he disconnects; he can
+disconnect/manage it. Implemented within the existing gates: the agent's
+connector_status tool (third registration) only lists states and raises a
+user-facing connect request (src/connector-requests.js, bounded queue, one
+open request per connector, resolve requires userInitiated); approving a
+request in the panel runs the SAME explicit connect gate as his own pick
+(exact declared scopes, credential reference), so AUTO_CONNECT stays false
+and a request is never a grant. Connections persist in the settings table
+(ids, states, exact scopes only, never credential material) through a new
+strict snapshot/restore pair on the catalog. No service is connected and
+no credential exists yet, so nothing is granted today.
+
 ## 3. Workspace renderer UI -- RESOLVED (26 Nov 2026 late evening)
 
 Settings-view wiring, owner hard stop (27 Nov 2026, 00:27 IST): Ninad ruled the settings view stays UNWIRED. Do not reopen settings.js (m84 checkpoint-closed) and do not create a new settings row-store category without owner approval. This closes the last renderer-wiring candidate; the five row-store views (files, databases, appdata, workflows, models) remain the complete wired set, exactly as the c94dbb4 slice shipped them.

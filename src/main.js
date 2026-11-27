@@ -62,6 +62,7 @@ const { createRunDriver } = require('./agent-run-driver');
 const { createRunEntry } = require('./agent-run-entry');
 const { SCHEDULING_TOOL_DEFINITION } = require('./agent-tool-scheduling');
 const { FILE_ACCESS_TOOL_DEFINITION, createFileAccessTool } = require('./agent-tool-file-access');
+const { CONNECTORS_TOOL_DEFINITION, createConnectorsTool } = require('./agent-tool-connectors');
 const fsPromises = require('fs').promises;
 // Gate 4 execution slice: the real io adapter the file-access executor runs
 // through. OS errors surface verbatim from these calls (code + message);
@@ -87,6 +88,7 @@ const { createAgentSurface } = require('./agent-surface');
 const { createWorkspaceRows } = require('./workspace-rows');
 const { createWorkspaceStore } = require('./workspace-stores');
 const { createConnectorCatalog } = require('./connectors');
+const { createConnectorRequestCenter } = require('./connector-requests');
 const { createIntegrationRegistry } = require('./integrations');
 const { createDeviceAccessCentre } = require('./device-access');
 const { createSchedulerSurface } = require('./scheduler-surface');
@@ -113,6 +115,7 @@ let wakeEngine = null;
 // main starts or advances a run in this slice.
 let agentRegistry = null;
 let agentFileAccess = null;
+let agentConnectors = null;
 let agentApprovals = null;
 let agentStop = null;
 let agentAudit = null;
@@ -173,6 +176,33 @@ const workspaceAppDataStore = createWorkspaceStore({ clock: () => Date.now(), na
 // when a real credential store exists (a later Gate 2 step). Until then
 // every connect honestly refuses credential_ref_required, visibly.
 const CONNECTOR_CREDENTIAL_REFS = new Map();
+// Gate 2 AI-access connector flow (approved by Ninad on 27 Nov 2026): the
+// request center behind the AI's ask. The agent tool can only RAISE a
+// user-facing connect request here; only an explicit renderer gesture
+// resolves one, and approval then runs the SAME explicit connect gate the
+// user's own pick runs (exact declared scopes, explicit user action,
+// credential reference). AUTO_CONNECT stays false and a request is never a
+// grant. Connections persist in the settings table so a connection lasts
+// until the user disconnects it; only ids, states, exact scopes and request
+// text are stored, never credential material.
+const workspaceConnectorRequests = createConnectorRequestCenter({ clock: () => Date.now(), exists: (id) => !!workspaceConnectorCatalog.describe(id) });
+function connectorPersistJson() {
+  return JSON.stringify({ catalog: workspaceConnectorCatalog.snapshot(), requests: workspaceConnectorRequests.snapshot() });
+}
+function saveConnectorState() {
+  try { db.setSetting('connector_catalog_state', connectorPersistJson()); } catch (e) { console.warn('[connectors] persist failed:', e && e.message); }
+}
+function restoreConnectorState() {
+  try {
+    const raw = db.getSetting('connector_catalog_state', '');
+    if (!raw) return;
+    const snap = JSON.parse(raw);
+    const c = workspaceConnectorCatalog.restore(snap && snap.catalog);
+    const r = workspaceConnectorRequests.restore(snap && snap.requests);
+    const probs = ((c && c.problems) || []).concat((r && r.problems) || []);
+    if (probs.length) console.warn('[connectors] restore problems:', probs.join('; '));
+  } catch (e) { console.warn('[connectors] restore failed:', e && e.message); }
+}
 // The rows provider: each wired view's owning rows, projected to exactly
 // what the workspace-views schema accepts. Sensitive memory rows never
 // reach the workspace view (the memory panel's per-search consent governs
@@ -332,6 +362,17 @@ async function init() {
       // (no silent destructive operations, no swallowed failures).
       agentRegistry.define(FILE_ACCESS_TOOL_DEFINITION);
       agentFileAccess = createFileAccessTool({ clock: () => Date.now(), io: workspaceFileIo });
+      // Gate 2 AI-access connector flow (approved by Ninad on 27 Nov
+      // 2026): the third registered tool. It only reads the connector
+      // catalog's states and raises a user-facing connect request the user
+      // must approve in the Workspace panel; it never connects, never
+      // grants a scope and never touches a credential, so the connector
+      // gates stay exactly as they are. Ordinary capability: no per-call
+      // approval is needed because nothing here changes connection state,
+      // and requestRun still has no caller so nothing executes in this
+      // build.
+      agentConnectors = createConnectorsTool({ clock: () => Date.now(), catalog: workspaceConnectorCatalog, requests: workspaceConnectorRequests });
+      agentRegistry.define(CONNECTORS_TOOL_DEFINITION);
       agentRegistry = stack.registry;
       agentApprovals = stack.approvals;
       agentStop = stack.emergencyStop;
@@ -1068,6 +1109,7 @@ app.whenReady().then(async () => {
     console.error('[agent] read-only surface unavailable:', e && e.message);
   }
 
+  restoreConnectorState();
   // Gate 3/8 workspace surface (approved by Ninad on 26 Nov 2026): the
   // wired views' rows through the pure rows provider, and the connector
   // catalog's lifecycle controls. Every connector action exists only as a
@@ -1081,11 +1123,20 @@ app.whenReady().then(async () => {
   ipcMain.handle('workspace:connectorConnect', async (_e, id, scopes) => {
     if (typeof id !== 'string' || id.length === 0) return { ok: false, reason: 'bad_request' };
     const clean = Array.isArray(scopes) ? scopes.filter((x) => typeof x === 'string') : [];
-    return workspaceConnectorCatalog.connect(id, { userInitiated: true, scopes: clean, credentialRef: CONNECTOR_CREDENTIAL_REFS.get(id) });
+    const r = workspaceConnectorCatalog.connect(id, { userInitiated: true, scopes: clean, credentialRef: CONNECTOR_CREDENTIAL_REFS.get(id) });
+    if (r && r.ok) saveConnectorState();
+    return r;
   });
-  ipcMain.handle('workspace:connectorDisconnect', async (_e, id) => (typeof id === 'string' && id.length > 0 ? workspaceConnectorCatalog.disconnect(id, { userInitiated: true }) : { ok: false, reason: 'bad_request' }));
-  ipcMain.handle('workspace:connectorRevoke', async (_e, id) => (typeof id === 'string' && id.length > 0 ? workspaceConnectorCatalog.revoke(id, { userInitiated: true }) : { ok: false, reason: 'bad_request' }));
-  ipcMain.handle('workspace:connectorReadmit', async (_e, id) => (typeof id === 'string' && id.length > 0 ? workspaceConnectorCatalog.readmit(id, { userInitiated: true }) : { ok: false, reason: 'bad_request' }));
+  ipcMain.handle('workspace:connectorDisconnect', async (_e, id) => { const r = (typeof id === 'string' && id.length > 0 ? workspaceConnectorCatalog.disconnect(id, { userInitiated: true }) : { ok: false, reason: 'bad_request' }); if (r && r.ok) saveConnectorState(); return r; });
+  ipcMain.handle('workspace:connectorRevoke', async (_e, id) => { const r = (typeof id === 'string' && id.length > 0 ? workspaceConnectorCatalog.revoke(id, { userInitiated: true }) : { ok: false, reason: 'bad_request' }); if (r && r.ok) saveConnectorState(); return r; });
+  ipcMain.handle('workspace:connectorReadmit', async (_e, id) => { const r = (typeof id === 'string' && id.length > 0 ? workspaceConnectorCatalog.readmit(id, { userInitiated: true }) : { ok: false, reason: 'bad_request' }); if (r && r.ok) saveConnectorState(); return r; });
+  ipcMain.handle('workspace:connectorRequests', async () => workspaceConnectorRequests.list());
+  ipcMain.handle('workspace:connectorRequestResolve', async (_e, requestId, decision) => {
+    if (typeof requestId !== 'string' || requestId.length === 0) return { ok: false, reason: 'bad_request' };
+    const r = workspaceConnectorRequests.resolve(requestId, { userInitiated: true, decision: typeof decision === 'string' ? decision : '' });
+    if (r && r.ok) saveConnectorState();
+    return r;
+  });
   // M5 slice 1: start the proactive delivery loop only after the surfaces
   // are registered. With no schedules and delivery off by default it is
   // inert: the first fire happens only for a schedule the user created.

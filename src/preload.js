@@ -115,6 +115,8 @@ const IPC_CHANNELS = [
   'workspace:connectorDisconnect',
   'workspace:connectorRevoke',
   'workspace:connectorReadmit',
+  'workspace:connectorRequests',
+  'workspace:connectorRequestResolve',
 ];
 
 // Messages main may push to this window. Mirrors IPC_EVENTS in ipc-channels.js.

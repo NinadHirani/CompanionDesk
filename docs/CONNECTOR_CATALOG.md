@@ -34,3 +34,5 @@ Nothing auto-connects. The module constant AUTO_CONNECT is false, the catalog is
 Sorted free-first: local and self-hostable free/open-source entries first, free-tier cloud next, paid last. The catalog above carries 20 shipped entries; it is extensible only through reviewed registration (MAX_EXTRA additions, each validated and audited), never by inventing entries.
 
 Status 27 Nov 2026: shipped and documented, nothing connected, no credentials requested, no permissions granted. Naming a real service to activate and approving each per-connector activation remain the owner's calls.
+
+The AI can also ASK for a connection (27 Nov 2026 decision): its connector_status tool lists the catalog's live states and may raise a user-facing connect request naming one catalog connector and a short reason. The request appears in the Workspace panel's Connectors section; approving it is an explicit click that runs the SAME connect gate as the user's own pick, dismissing it just resolves the request. A request is never a grant and nothing auto-connects.

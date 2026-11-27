@@ -114,6 +114,47 @@
       }
       const connectedCount = list.filter((e) => e && e.state === 'connected').length;
       connEl.appendChild(line('connector catalog: ' + list.length + ' shipped, ' + connectedCount + ' connected; connecting is always your explicit pick per connector'));
+      // Gate 2 AI-access connector flow (27 Nov 2026): the AI's connect
+      // requests render here. Approving is an explicit user click and it
+      // runs the SAME connect gate as the user's own pick; dismissing just
+      // resolves the request. The optional methods degrade gracefully: a
+      // bridge without them still renders the catalog.
+      const canRequests = typeof a.workspace_connectorRequests === 'function' && typeof a.workspace_connectorRequestResolve === 'function';
+      if (canRequests) {
+        let reqs;
+        try {
+          reqs = await a.workspace_connectorRequests();
+        } catch {
+          reqs = [];
+        }
+        const open = (Array.isArray(reqs) ? reqs : []).filter((r) => r && (r.status === 'pending' || r.status === 'approved'));
+        if (open.length) {
+          connEl.appendChild(line('AI connect requests: ' + open.length + ' open; approving is your explicit click and it runs the same connect gate as your own pick'));
+          for (const r of open) {
+            const entry = list.find((e) => e && e.id === r.connectorId);
+            const name = (entry && entry.name) || r.connectorId;
+            connEl.appendChild(line('AI request for ' + name + ' - ' + (r.reason || '') + ' - status: ' + r.status));
+            if (r.status === 'pending') {
+              connEl.appendChild(button('Approve request for ' + name, 'Approve request for ' + name, async () => {
+                const res = await a.workspace_connectorRequestResolve(r.id, 'approved');
+                if (res && res.ok) {
+                  const scopes = ((entry && Array.isArray(entry.scopes) ? entry.scopes : []) || []).map((s) => s.name);
+                  const cr = await a.workspace_connector_connect(r.connectorId, scopes);
+                  say(cr && cr.ok ? 'workspace: connector connected (AI request approved)' : 'workspace: connect refused: ' + ((cr && cr.reason) || 'unknown'));
+                } else {
+                  say('workspace: approval refused: ' + ((res && res.reason) || 'unknown'));
+                }
+                await renderConnectors(a);
+              }));
+              connEl.appendChild(button('Dismiss request for ' + name, 'Dismiss request for ' + name, async () => {
+                const res = await a.workspace_connectorRequestResolve(r.id, 'dismissed');
+                say(res && res.ok ? 'workspace: request dismissed' : 'workspace: dismiss refused: ' + ((res && res.reason) || 'unknown'));
+                await renderConnectors(a);
+              }));
+            }
+          }
+        }
+      }
       for (const e of list) {
         if (!e || typeof e !== 'object') continue;
         connEl.appendChild(line((e.name || e.id) + ' - ' + (e.state || 'discovered') + ' - ' + (e.costNote || '') + ' - ' + (e.limits || '')));

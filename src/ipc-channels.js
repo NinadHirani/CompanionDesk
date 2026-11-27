@@ -125,6 +125,12 @@ const IPC_CHANNELS = Object.freeze([
   'workspace:connectorDisconnect',
   'workspace:connectorRevoke',
   'workspace:connectorReadmit',
+  // Gate 2 AI-access connector flow (27 Nov 2026): the request center's
+  // user surface. list is read-only; resolve is main-built userInitiated
+  // from an explicit renderer click, and approval runs the SAME explicit
+  // connect gate as the user's own pick.
+  'workspace:connectorRequests',
+  'workspace:connectorRequestResolve',
 ]);
 
 // Messages main may PUSH to a window (streaming tokens and the like). The

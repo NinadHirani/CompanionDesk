@@ -20,6 +20,7 @@ const { createAgentStack } = require('../src/agent-runtime.js');
 const LocalDb = require('../src/db.js');
 const { SCHEDULING_TOOL_DEFINITION, createSchedulingTool, MAX_HORIZON_MS } = require('../src/agent-tool-scheduling.js');
 const { FILE_ACCESS_TOOL_DEFINITION, createFileAccessTool } = require('../src/agent-tool-file-access.js');
+const { CONNECTORS_TOOL_DEFINITION } = require('../src/agent-tool-connectors.js');
 const { createRunDriver, KINDS } = require('../src/agent-run-driver.js');
 
 const NOW = 1_700_000_000_000;
@@ -31,19 +32,23 @@ async function enabledStack() {
   const stack = createAgentStack({ db, clock: () => NOW });
   const loaded = stack.persistence.load();
   assert.equal(loaded.ok, true, 'world must load clean: ' + JSON.stringify(loaded.problems));
-  // The two registration literals, exactly as main.js performs them.
+  // The three registration literals, exactly as main.js performs them
+  // (the third is the Gate 2 AI-access connector flow, 27 Nov 2026).
   stack.registry.define(SCHEDULING_TOOL_DEFINITION);
   stack.registry.define(FILE_ACCESS_TOOL_DEFINITION);
+  stack.registry.define(CONNECTORS_TOOL_DEFINITION);
   const tool = createSchedulingTool({ book: stack.schedules, clock: () => NOW, audit: stack.durableAudit });
   return { db, stack, tool };
 }
 
-test('the enable registers exactly two tools in main and nothing else fires', () => {
+test('the enable registers exactly three tools in main and nothing else fires', () => {
   const main = fs.readFileSync('src/main.js', 'utf8');
   const defines = main.split('.define(').length - 1;
-  assert.equal(defines, 2, 'exactly two registration literals, got ' + defines);
+  assert.equal(defines, 3, 'exactly three registration literals, got ' + defines);
   assert.ok(main.includes('agentRegistry.define(SCHEDULING_TOOL_DEFINITION)'), 'it registers the scheduling gate definition');
   assert.ok(main.includes('agentRegistry.define(FILE_ACCESS_TOOL_DEFINITION)'), 'it registers the file-access gate definition');
+  assert.ok(main.includes('agentRegistry.define(CONNECTORS_TOOL_DEFINITION)'), 'it registers the connector status/request tool');
+  assert.ok(main.includes("require('./agent-tool-connectors')"), 'main requires the connector tool module');
   assert.ok(main.includes("require('./agent-tool-scheduling')"), 'main requires the tool module');
   assert.ok(main.includes("require('./agent-tool-file-access')"), 'main requires the file-access module');
   const strip = (t) => t.replace(/\/\/[^\n]*/g, '').replace(/\/\*[\s\S]*?\*\//g, '');
