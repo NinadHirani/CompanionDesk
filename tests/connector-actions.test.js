@@ -407,3 +407,28 @@ test('wikimedia and openlibrary reads run with no credential once connected', as
   assert.equal((await engine.run('openlibrary', 'search_books', { query: 'qaoa' })).ok, true);
   assert.equal((await engine.run('openlibrary', 'get_book', { identifier: '9780262033848' })).ok, true);
 });
+
+// ---- batch 10 (27 Nov 2026): brave-search and tavily gate + redaction ----
+
+test('brave-search and tavily refuse unconnected/unauthorized runs and redact secret-shaped text', async () => {
+  let seen = null;
+  const transport = async (req) => { seen = req; return { status: 200, body: JSON.stringify({ results: [], echo: 'api_key=sk-tavily-secret-42' }) }; };
+  const { catalog, engine } = makeEngine(transport, () => 'tvly-secret-key-9');
+  assert.equal((await engine.run('brave-search', 'web_search', { query: 'q' })).reason, 'not_connected');
+  assert.equal(catalog.connect('brave-search', { userInitiated: true, scopes: ['search.read'] }).reason, 'credential_ref_required');
+  const c = catalog.connect('brave-search', { userInitiated: true, scopes: ['search.read'], credentialRef: 'vault:brave-key' });
+  assert.equal(c.ok, true);
+  const r1 = await engine.run('brave-search', 'web_search', { query: 'quantum' });
+  assert.equal(r1.ok, true);
+  assert.equal(seen.headers['X-Subscription-Token'], 'tvly-secret-key-9');
+  assert.ok(seen.url.indexOf('tvly-secret-key') === -1, 'the vault key never appears in the request URL');
+  assert.ok(r1.data.echo.indexOf('sk-tavily-secret-42') === -1 && r1.data.echo.indexOf('REDACTED') !== -1, 'secret-shaped response text is redacted');
+  const c2 = catalog.connect('tavily', { userInitiated: true, scopes: ['search.read'], credentialRef: 'vault:tavily-key' });
+  assert.equal(c2.ok, true);
+  const r2 = await engine.run('tavily', 'web_search', { query: 'quantum' });
+  assert.equal(r2.ok, true);
+  assert.equal(seen.headers.Authorization, 'Bearer tvly-secret-key-9');
+  const second = makeEngine(async () => ({ status: 200, body: '{}' }), () => null);
+  assert.equal(second.catalog.connect('tavily', { userInitiated: true, scopes: ['search.read'], credentialRef: 'vault:k' }).ok, true);
+  assert.equal((await second.engine.run('tavily', 'web_search', { query: 'q' })).reason, 'credential_missing');
+});

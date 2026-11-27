@@ -367,3 +367,35 @@ validation (ISBN-10/13, OL...M, OL...W, traversal and junk refused),
 limit caps, missing params, no Authorization header, descriptive
 User-Agent, declarations, the registry-parity set extended, and keyless
 runs behind the connect gate. Suite 1497/1497.
+
+## Batch 10 (27 Nov 2026): Brave Search + Tavily key-auth web search
+
+Two practical web-search adapters on the existing `token` authShape.
+Both are new catalog entries (no prior rows existed); both are
+read-only single-action adapters.
+
+- **Brave Search** (`search.read`, API key): `web_search` (GET
+  api.search.brave.com/res/v1/web/search, count capped at 20, default
+  10). The key rides only in the `X-Subscription-Token` header; the URL
+  carries the encoded query and nothing credential-shaped.
+- **Tavily** (`search.read`, API key): `web_search` (POST
+  api.tavily.com/search with a JSON body of query + max_results,
+  max_results capped at 20, default 5). The key rides only in the
+  `Authorization: Bearer` header, never the URL or body.
+
+Both pin their API host as a build constant, so no user input can shape
+the request URL. Credentials flow through the existing vault path:
+connect requires a credentialRef, the engine resolves it at run time,
+no key is ever requested or echoed in chat, and audit entries keep
+carrying status only. Cost and limit notes are honest (free tier with
+a monthly allowance; paid plans beyond).
+
+Tests: request construction for both adapters (header placement, body
+shape, key never in URL/body), parameter validation (missing query,
+count/max_results caps), no-arbitrary-host SSRF checks with hostile
+query strings, the registry-parity set extended to both, and the gate
+ladder (not_connected before connect, credential_ref_required without
+a vault ref, credential_missing when connected but the vault is empty,
+and secret-shaped response text scrubbed to REDACTED). Catalog count
+pin 183 -> 185 and the category pin gains `search` (27 categories).
+Suite 1501/1501.

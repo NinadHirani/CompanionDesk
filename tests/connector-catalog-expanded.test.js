@@ -13,13 +13,13 @@ const { test } = require('node:test');
 const assert = require('node:assert');
 const { createConnectorCatalog } = require('../src/connectors.js');
 
-const EXPECTED_TOTAL = 183;
+const EXPECTED_TOTAL = 185; // batch 10: brave-search and tavily join
 const EXPECTED_DEFINITION_ONLY = 147; // definition-only curated + expanded after the 27 Nov adapter batch
 
 test('the catalog is the expanded set with no duplicate ids or names', () => {
   const c = createConnectorCatalog({});
   const l = c.list();
-  assert.equal(l.length, EXPECTED_TOTAL, 'legacy 20 + curated 13 + expanded 149 + microsoft-calendar');
+  assert.equal(l.length, EXPECTED_TOTAL, 'legacy 22 + curated 13 + expanded 149 + microsoft-calendar');
   const ids = l.map(e => e.id);
   assert.equal(new Set(ids).size, ids.length, 'no duplicate ids');
   const names = l.map(e => e.name.toLowerCase());
@@ -75,9 +75,9 @@ test('every definition-only entry is honestly labelled and refused at authorizeC
 test('the catalog covers the requested breadth of categories', () => {
   const c = createConnectorCatalog({});
   const cats = new Set(c.list().map(e => e.category));
-  const required = ['productivity', 'automation', 'email', 'messaging', 'meetings', 'calendar', 'developer', 'cloud', 'ai_cloud', 'ai_local', 'business', 'finance', 'analytics', 'media', 'social', 'education', 'reference', 'travel', 'maps', 'home', 'monitoring', 'notes', 'files', 'code', 'feeds', 'weather'];
+  const required = ['productivity', 'automation', 'email', 'messaging', 'meetings', 'calendar', 'developer', 'cloud', 'ai_cloud', 'ai_local', 'business', 'finance', 'analytics', 'media', 'social', 'education', 'reference', 'travel', 'maps', 'home', 'monitoring', 'notes', 'files', 'code', 'feeds', 'weather', 'search'];
   for (const cat of required) assert.ok(cats.has(cat), cat + ' present');
-  assert.equal(cats.size, 26, '26 distinct categories keep the filter list usable');
+  assert.equal(cats.size, 27, '27 distinct categories keep the filter list usable');
   for (const cat of cats) {
     assert.ok(c.list().filter(e => e.category === cat).length >= 1, cat + ' is non-empty');
   }

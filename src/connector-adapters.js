@@ -530,6 +530,36 @@
     ],
   };
 
+  ADAPTERS['brave-search'] = {
+    id: 'brave-search', name: 'Brave Search', authShape: 'token', setupRequired: false,
+    setupNote: 'paste your own API key from brave.com/search/api; the free tier has a monthly query allowance; your key is stored only in the app vault, never requested or shown in chat',
+    buildHeaders: function (token) { return { 'X-Subscription-Token': token, Accept: 'application/json', 'User-Agent': 'CompanionDesk' }; },
+    actions: [
+      { id: 'web_search', label: 'Search the web with Brave', scope: 'search.read', kind: 'read_only',
+        params: [{ name: 'query', required: true, maxLength: 200 }, { name: 'count', required: false, maxLength: 2 }],
+        build: function (p, token) {
+          const count = optionalInt(p, 'count', 10);
+          if (count === null || count < 1 || count > 20) return { error: 'param_invalid' };
+          return { method: 'GET', url: 'https://api.search.brave.com/res/v1/web/search?q=' + encodeURIComponent(p.query) + '&count=' + count, headers: this.buildHeaders(token), body: null };
+        } },
+    ],
+  };
+
+  ADAPTERS.tavily = {
+    id: 'tavily', name: 'Tavily', authShape: 'token', setupRequired: false,
+    setupNote: 'paste your own API key from app.tavily.com; the free tier includes a monthly credit allowance; your key is stored only in the app vault, never requested or shown in chat',
+    buildHeaders: function (token) { return { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json', 'User-Agent': 'CompanionDesk' }; },
+    actions: [
+      { id: 'web_search', label: 'Search the web with Tavily', scope: 'search.read', kind: 'read_only',
+        params: [{ name: 'query', required: true, maxLength: 200 }, { name: 'max_results', required: false, maxLength: 2 }],
+        build: function (p, token) {
+          const maxResults = optionalInt(p, 'max_results', 5);
+          if (maxResults === null || maxResults < 1 || maxResults > 20) return { error: 'param_invalid' };
+          return { method: 'POST', url: 'https://api.tavily.com/search', headers: this.buildHeaders(token), body: JSON.stringify({ query: p.query, max_results: maxResults }) };
+        } },
+    ],
+  };
+
   ADAPTERS['google-gemini'] = {
     id: 'google-gemini', name: 'Google Gemini', authShape: 'url_token', setupRequired: false,
     setupNote: 'paste your own API key from aistudio.google.com; the free tier has request limits',

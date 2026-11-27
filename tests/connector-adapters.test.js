@@ -12,7 +12,7 @@ const assert = require('node:assert');
 const adapters = require('../src/connector-adapters.js');
 const { createConnectorCatalog } = require('../src/connectors.js');
 
-const IMPLEMENTED = ['anthropic', 'arxiv', 'crossref', 'discord', 'github', 'gmail', 'google-calendar', 'google-drive', 'google-gemini', 'huggingface', 'microsoft-calendar', 'microsoft-onedrive', 'microsoft-outlook', 'notion', 'open-meteo', 'openai', 'openalex', 'openlibrary', 'openstreetmap', 'slack', 'telegram', 'wikimedia'];
+const IMPLEMENTED = ['anthropic', 'brave-search', 'arxiv', 'crossref', 'discord', 'github', 'gmail', 'google-calendar', 'google-drive', 'google-gemini', 'huggingface', 'microsoft-calendar', 'microsoft-onedrive', 'microsoft-outlook', 'notion', 'open-meteo', 'openai', 'openalex', 'openlibrary', 'openstreetmap', 'slack', 'tavily', 'telegram', 'wikimedia'];
 const OAUTH = ['gmail', 'google-calendar', 'google-drive', 'microsoft-calendar', 'microsoft-onedrive', 'microsoft-outlook'];
 
 test('the adapter registry covers exactly the implemented catalog entries', () => {
@@ -539,4 +539,50 @@ test('openlibrary search and book lookup validate identifiers', () => {
     assert.equal(a.kind, 'read_only');
     assert.equal(a.scope, 'search.read');
   }
+});
+
+// ---- batch 10 (27 Nov 2026): Brave Search + Tavily, key-auth reads ----
+
+test('brave search builds a pinned-host GET with the key only in headers', () => {
+  const s = adapters.buildRequest('brave-search', 'web_search', { query: 'qaoa vehicle routing' }, 'brv-test-key-123');
+  assert.equal(s.ok, true);
+  assert.equal(s.request.method, 'GET');
+  assert.equal(s.request.url, 'https://api.search.brave.com/res/v1/web/search?q=' + encodeURIComponent('qaoa vehicle routing') + '&count=10');
+  assert.equal(s.request.headers['X-Subscription-Token'], 'brv-test-key-123');
+  assert.ok(s.request.url.indexOf('brv-test-key') === -1, 'the key never rides the URL');
+  assert.equal(s.request.urlContainsSecret, false);
+  assert.equal(adapters.buildRequest('brave-search', 'web_search', { query: 'q', count: '99' }, 'k').reason, 'param_invalid');
+  assert.equal(adapters.buildRequest('brave-search', 'web_search', { query: 'q', count: '0' }, 'k').reason, 'param_invalid');
+  assert.equal(adapters.buildRequest('brave-search', 'web_search', {}, 'k').reason, 'param_missing');
+  assert.equal(adapters.validateOnly('brave-search', 'web_search', { query: 'x' }), null, 'validateOnly needs no credential');
+  const [a] = adapters.listActions('brave-search');
+  assert.equal(a.kind, 'read_only');
+  assert.equal(a.scope, 'search.read');
+});
+
+test('tavily builds a pinned POST with the key only in the Authorization header', () => {
+  const s = adapters.buildRequest('tavily', 'web_search', { query: 'quantum algorithms', max_results: '3' }, 'tvly-test-key-9');
+  assert.equal(s.ok, true);
+  assert.equal(s.request.method, 'POST');
+  assert.equal(s.request.url, 'https://api.tavily.com/search');
+  assert.equal(s.request.headers.Authorization, 'Bearer tvly-test-key-9');
+  const body = JSON.parse(s.request.body);
+  assert.deepEqual(body, { query: 'quantum algorithms', max_results: 3 });
+  assert.ok(s.request.body.indexOf('tvly-test-key') === -1, 'the key never rides the body');
+  assert.equal(adapters.buildRequest('tavily', 'web_search', { query: 'q', max_results: '99' }, 'k').reason, 'param_invalid');
+  assert.equal(adapters.buildRequest('tavily', 'web_search', { query: 'q' }, 'k').ok, true, 'max_results defaults to 5');
+  assert.equal(adapters.buildRequest('tavily', 'web_search', {}, 'k').reason, 'param_missing');
+  const [a] = adapters.listActions('tavily');
+  assert.equal(a.kind, 'read_only');
+  assert.equal(a.scope, 'search.read');
+});
+
+test('brave and tavily accept no user-controlled host (no SSRF path)', () => {
+  const nasty = 'x/../../evil?api_key=zz&next=https://attacker.example';
+  const b = adapters.buildRequest('brave-search', 'web_search', { query: nasty }, 'k');
+  assert.equal(b.ok, true);
+  assert.ok(b.request.url.indexOf('https://api.search.brave.com/res/v1/web/search?q=') === 0, 'brave stays on its pinned host');
+  const t = adapters.buildRequest('tavily', 'web_search', { query: nasty }, 'k');
+  assert.equal(t.ok, true);
+  assert.equal(t.request.url, 'https://api.tavily.com/search', 'tavily stays on its pinned host');
 });
