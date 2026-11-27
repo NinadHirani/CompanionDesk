@@ -412,6 +412,28 @@
     ],
   };
 
+  ADAPTERS['internet-archive'] = {
+    id: 'internet-archive', name: 'Internet Archive', authShape: 'public', setupRequired: false,
+    setupNote: 'no account or key needed: the Internet Archive advanced search and metadata APIs are public and keyless for reads; uploading items is an authenticated API this build never touches',
+    buildHeaders: function () { return { 'User-Agent': 'CompanionDesk', Accept: 'application/json' }; },
+    actions: [
+      { id: 'search_items', label: 'Search the Internet Archive for items', scope: 'metadata.read', kind: 'read_only',
+        params: [{ name: 'query', required: true, maxLength: 200 }, { name: 'limit', required: false, maxLength: 3 }],
+        build: function (p) {
+          if (!/^[ -~]+$/.test(p.query)) return { error: 'param_invalid' };
+          const limit = optionalInt(p, 'limit', 20);
+          if (limit === null || limit < 1 || limit > 50) return { error: 'param_invalid' };
+          return { method: 'GET', url: 'https://archive.org/advancedsearch.php?q=' + encodeURIComponent(p.query) + '&fl%5B%5D=identifier&fl%5B%5D=title&fl%5B%5D=mediatype&rows=' + limit + '&output=json&page=1', headers: this.buildHeaders(), body: null };
+        } },
+      { id: 'get_metadata', label: 'Read one Internet Archive item by identifier', scope: 'metadata.read', kind: 'read_only',
+        params: [{ name: 'identifier', required: true, maxLength: 100 }],
+        build: function (p) {
+          if (!/^[A-Za-z0-9._~-]+$/.test(p.identifier)) return { error: 'param_invalid' };
+          return { method: 'GET', url: 'https://archive.org/metadata/' + encodeURIComponent(p.identifier), headers: this.buildHeaders(), body: null };
+        } },
+    ],
+  };
+
   ADAPTERS.pypi = {
     id: 'pypi', name: 'PyPI', authShape: 'public', setupRequired: false,
     setupNote: 'no account or key needed: the PyPI JSON API is public and keyless for reads; uploading packages is a different, authenticated API this build never touches',

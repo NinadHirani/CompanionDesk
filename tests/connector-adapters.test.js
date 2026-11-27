@@ -12,7 +12,7 @@ const assert = require('node:assert');
 const adapters = require('../src/connector-adapters.js');
 const { createConnectorCatalog } = require('../src/connectors.js');
 
-const IMPLEMENTED = ['anthropic', 'brave-search', 'arxiv', 'crossref', 'discord', 'github', 'gitlab', 'gmail', 'google-calendar', 'google-docs', 'google-sheets', 'google-drive', 'google-gemini', 'huggingface', 'jira', 'microsoft-calendar', 'microsoft-onedrive', 'microsoft-excel', 'microsoft-outlook', 'microsoft-teams', 'microsoft-word', 'musicbrainz', 'notion', 'open-meteo', 'openai', 'openalex', 'openlibrary', 'openstreetmap', 'pypi', 'slack', 'tavily', 'telegram', 'wikimedia'];
+const IMPLEMENTED = ['anthropic', 'brave-search', 'arxiv', 'crossref', 'discord', 'github', 'gitlab', 'gmail', 'google-calendar', 'google-docs', 'google-sheets', 'google-drive', 'google-gemini', 'huggingface', 'internet-archive', 'jira', 'microsoft-calendar', 'microsoft-onedrive', 'microsoft-excel', 'microsoft-outlook', 'microsoft-teams', 'microsoft-word', 'musicbrainz', 'notion', 'open-meteo', 'openai', 'openalex', 'openlibrary', 'openstreetmap', 'pypi', 'slack', 'tavily', 'telegram', 'wikimedia'];
 const OAUTH = ['gmail', 'google-calendar', 'google-drive', 'microsoft-calendar', 'microsoft-onedrive', 'microsoft-outlook'];
 
 test('the adapter registry covers exactly the implemented catalog entries', () => {
@@ -845,5 +845,33 @@ test('pypi builds pinned-host keyless package reads and validates params', () =>
   for (const a of adapters.listActions('pypi')) {
     assert.equal(a.kind, 'read_only');
     assert.equal(a.scope, 'packages.read');
+  }
+});
+
+// ---- batch 18 (27 Nov 2026): Internet Archive keyless public read-only adapter ----
+
+test('internet-archive builds pinned-host keyless item reads and validates params', () => {
+  assert.equal(adapters.get('internet-archive').authShape, 'public');
+  assert.ok(adapters.get('internet-archive').setupNote.indexOf('keyless') !== -1, 'the setup note is honest about keyless reads');
+  const si = adapters.buildRequest('internet-archive', 'search_items', { query: 'collection:nasa' });
+  assert.equal(si.ok, true);
+  assert.equal(si.request.method, 'GET');
+  assert.equal(si.request.url, 'https://archive.org/advancedsearch.php?q=collection%3Anasa&fl%5B%5D=identifier&fl%5B%5D=title&fl%5B%5D=mediatype&rows=20&output=json&page=1');
+  assert.equal(si.request.headers['User-Agent'], 'CompanionDesk');
+  assert.equal(si.request.urlContainsSecret, false);
+  const capped = adapters.buildRequest('internet-archive', 'search_items', { query: 'x', limit: '50' });
+  assert.equal(capped.ok, true);
+  assert.equal(capped.request.url, 'https://archive.org/advancedsearch.php?q=x&fl%5B%5D=identifier&fl%5B%5D=title&fl%5B%5D=mediatype&rows=50&output=json&page=1');
+  assert.equal(adapters.buildRequest('internet-archive', 'search_items', { query: 'x', limit: '51' }).reason, 'param_invalid', 'limit above the cap');
+  assert.equal(adapters.buildRequest('internet-archive', 'search_items', { query: 'a\nb' }).reason, 'param_invalid', 'control char in query');
+  const gm = adapters.buildRequest('internet-archive', 'get_metadata', { identifier: 'nasa_apollo' });
+  assert.equal(gm.ok, true);
+  assert.equal(gm.request.url, 'https://archive.org/metadata/nasa_apollo');
+  assert.equal(adapters.buildRequest('internet-archive', 'get_metadata', { identifier: 'a/b' }).reason, 'param_invalid', 'path traversal in identifier');
+  assert.equal(adapters.buildRequest('internet-archive', 'get_metadata', {}).reason, 'param_missing');
+  assert.equal(adapters.validateOnly('internet-archive', 'search_items', { query: 'x' }), null, 'validateOnly needs no credential');
+  for (const a of adapters.listActions('internet-archive')) {
+    assert.equal(a.kind, 'read_only');
+    assert.equal(a.scope, 'metadata.read');
   }
 });

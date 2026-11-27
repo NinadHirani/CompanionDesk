@@ -610,3 +610,18 @@ test('pypi connects keyless and reads on the pinned host', async () => {
   assert.equal(seen.url, 'https://pypi.org/pypi/qiskit/json');
   assert.equal(r.data.info.name, 'qiskit');
 });
+
+// ---- batch 18 (27 Nov 2026): internet-archive public gates ----
+
+test('internet-archive connects keyless and reads on the pinned host', async () => {
+  let seen = null;
+  const transport = async (req) => { seen = req; return { status: 200, body: JSON.stringify({ metadata: { identifier: 'nasa_apollo', title: 'Apollo' } }) }; };
+  const { catalog, engine } = makeEngine(transport, () => null);
+  assert.equal((await engine.run('internet-archive', 'get_metadata', { identifier: 'nasa_apollo' })).reason, 'not_connected');
+  const c = catalog.connect('internet-archive', { userInitiated: true, scopes: ['metadata.read'] });
+  assert.equal(c.ok, true);
+  const r = await engine.run('internet-archive', 'get_metadata', { identifier: 'nasa_apollo' });
+  assert.equal(r.ok, true);
+  assert.equal(seen.url, 'https://archive.org/metadata/nasa_apollo');
+  assert.equal(r.data.metadata.identifier, 'nasa_apollo');
+});
