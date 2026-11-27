@@ -640,3 +640,18 @@ test('docker-hub connects keyless and reads on the pinned host', async () => {
   assert.equal(seen.url, 'https://hub.docker.com/v2/repositories/library/nginx/');
   assert.equal(r.data.name, 'nginx');
 });
+
+// ---- batch 20 (27 Nov 2026): npm public gates ----
+
+test('npm connects keyless and reads on the pinned host', async () => {
+  let seen = null;
+  const transport = async (req) => { seen = req; return { status: 200, body: JSON.stringify({ name: 'qiskit', 'dist-tags': { latest: '1.0.0' } }) }; };
+  const { catalog, engine } = makeEngine(transport, () => null);
+  assert.equal((await engine.run('npm', 'get_package', { package: 'qiskit' })).reason, 'not_connected');
+  const c = catalog.connect('npm', { userInitiated: true, scopes: ['packages.read'] });
+  assert.equal(c.ok, true);
+  const r = await engine.run('npm', 'get_package', { package: 'qiskit' });
+  assert.equal(r.ok, true);
+  assert.equal(seen.url, 'https://registry.npmjs.org/qiskit');
+  assert.equal(r.data['dist-tags'].latest, '1.0.0');
+});

@@ -464,6 +464,28 @@
     ],
   };
 
+  ADAPTERS.npm = {
+    id: 'npm', name: 'npm', authShape: 'public', setupRequired: false,
+    setupNote: 'no account or key needed: the npm registry API is public and keyless for public packages; publishing and private packages need authentication this build never requests',
+    buildHeaders: function () { return { 'User-Agent': 'CompanionDesk', Accept: 'application/json' }; },
+    actions: [
+      { id: 'get_package', label: 'Read an npm package: full registry metadata', scope: 'packages.read', kind: 'read_only',
+        params: [{ name: 'package', required: true, maxLength: 214 }],
+        build: function (p) {
+          if (!/^(@[a-z0-9-~][a-z0-9-._~]*\/)?[a-z0-9-~][a-z0-9-._~]*$/.test(p.package)) return { error: 'param_invalid' };
+          return { method: 'GET', url: 'https://registry.npmjs.org/' + encodeURIComponent(p.package).replace(/^%40/, '@'), headers: this.buildHeaders(), body: null };
+        } },
+      { id: 'search_packages', label: 'Search npm for public packages', scope: 'packages.read', kind: 'read_only',
+        params: [{ name: 'query', required: true, maxLength: 200 }, { name: 'limit', required: false, maxLength: 3 }],
+        build: function (p) {
+          if (!/^[ -~]+$/.test(p.query)) return { error: 'param_invalid' };
+          const limit = optionalInt(p, 'limit', 20);
+          if (limit === null || limit < 1 || limit > 25) return { error: 'param_invalid' };
+          return { method: 'GET', url: 'https://registry.npmjs.org/-/v1/search?text=' + encodeURIComponent(p.query) + '&size=' + limit, headers: this.buildHeaders(), body: null };
+        } },
+    ],
+  };
+
   ADAPTERS.pypi = {
     id: 'pypi', name: 'PyPI', authShape: 'public', setupRequired: false,
     setupNote: 'no account or key needed: the PyPI JSON API is public and keyless for reads; uploading packages is a different, authenticated API this build never touches',

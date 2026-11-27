@@ -14,7 +14,7 @@ const assert = require('node:assert');
 const { createConnectorCatalog } = require('../src/connectors.js');
 
 const EXPECTED_TOTAL = 187; // batch 10 brave+tavily, batch 12 excel+word
-const EXPECTED_DEFINITION_ONLY = 140; // batch 11 google reads, batch 13 microsoft-teams, batch 15 jira, batch 16 musicbrainz, batch 17 pypi, batch 19 docker-hub
+const EXPECTED_DEFINITION_ONLY = 139; // batch 11 google reads, batch 13 microsoft-teams, batch 15 jira, batch 16 musicbrainz, batch 17 pypi, batch 19 docker-hub, batch 20 npm
 
 test('the catalog is the expanded set with no duplicate ids or names', () => {
   const c = createConnectorCatalog({});
@@ -53,7 +53,7 @@ test('every entry carries complete metadata: provider, category, auth, cost, lim
 test('every new expanded entry is least-privilege with a read-only baseline scope', () => {
   const c = createConnectorCatalog({});
   const expanded = c.list().filter(e => e.integrationImplemented === false && e.id !== 'slack' && e.id !== 'discord' && e.id !== 'notion' && e.id !== 'dropbox' && e.id !== 'google-drive' && e.id !== 'gmail' && e.id !== 'google-calendar' && e.id !== 'microsoft-onedrive' && e.id !== 'microsoft-outlook' && e.id !== 'telegram' && e.id !== 'youtube' && e.id !== 'spotify' && e.id !== 'zoom');
-  assert.equal(expanded.length, 136, 'the 136 still-definition-only expanded entries carry the marker (batch 11 google reads, batch 12 excel/word, batch 13 microsoft-teams, batch 15 jira, batch 16 musicbrainz, batch 17 pypi, batch 19 docker-hub reads; Open-Meteo sits in the legacy tier)');
+  assert.equal(expanded.length, 135, 'the 135 still-definition-only expanded entries carry the marker (batch 11 google reads, batch 12 excel/word, batch 13 microsoft-teams, batch 15 jira, batch 16 musicbrainz, batch 17 pypi, batch 19 docker-hub, batch 20 npm reads; Open-Meteo sits in the legacy tier)');
   for (const e of expanded) {
     assert.ok(e.scopes.some(s => s.class === 'read_only'), e.id + ' has a read-only baseline scope');
   }

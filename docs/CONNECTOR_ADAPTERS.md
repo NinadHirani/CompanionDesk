@@ -486,3 +486,14 @@ REDACTED. Suite 1504/1504.
 - Honest auth correction: the row previously claimed `access_token`, but public repository reads on the Hub v2 API are keyless; the row is now `auth: none` with a note that private repositories need authentication this build never requests and that image pulls stay out of scope (the adapter reads metadata only). Requests carry only the pinned `CompanionDesk` User-Agent; no writes, no credentials.
 - Count pins: definition-only curated+expanded is now 140; the marker test counts 136 still-definition-only expanded entries. Catalog total unchanged at 187.
 - Tests (batch 19 sections): pinned-host URL construction for all three actions, result caps, control-character query refusal, namespace/repository shape validation including path-traversal refusals, validateOnly paths, read-only declarations; engine gates: `not_connected` before connect and keyless connect on the declared scope with the pinned host on the wire.
+## Batch 20 (27 Nov 2026): npm registry
+
+Upgraded `npm` from definition-only to a keyless public read-only adapter (`auth: none`, `authShape: public`).
+
+Actions (both read-only, scope `packages.read`, pinned to `registry.npmjs.org` with a `CompanionDesk` user agent):
+- `get_package`: full registry metadata for one package, scoped or unscoped; strict name regex (lowercase, `@scope/name` allowed, no slashes beyond the scope separator), name percent-encoded with the `%40` restored to `@` for the registry's path form.
+- `search_packages`: capped package search (`size` 1-25) via `/-/v1/search`.
+
+No credentials are collected; the row and this doc say the row is honestly keyless because public package reads are keyless (publishing and private packages need authentication this build never requests). No writes, no registry publish, no npm account access.
+
+Tests: adapter build/validation (13 assertions incl. uppercase-name and unscoped-slash rejection, limit cap), public-gate engine test (not_connected refusal before connect, keyless connect, live read on the pinned host). Catalog count pins updated: 135 still-definition-only expanded rows, 139 definition-only total.

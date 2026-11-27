@@ -12,7 +12,7 @@ const assert = require('node:assert');
 const adapters = require('../src/connector-adapters.js');
 const { createConnectorCatalog } = require('../src/connectors.js');
 
-const IMPLEMENTED = ['anthropic', 'brave-search', 'arxiv', 'crossref', 'discord', 'docker-hub', 'github', 'gitlab', 'gmail', 'google-calendar', 'google-docs', 'google-sheets', 'google-drive', 'google-gemini', 'huggingface', 'internet-archive', 'jira', 'microsoft-calendar', 'microsoft-onedrive', 'microsoft-excel', 'microsoft-outlook', 'microsoft-teams', 'microsoft-word', 'musicbrainz', 'notion', 'open-meteo', 'openai', 'openalex', 'openlibrary', 'openstreetmap', 'pypi', 'slack', 'tavily', 'telegram', 'wikimedia'];
+const IMPLEMENTED = ['anthropic', 'brave-search', 'arxiv', 'crossref', 'discord', 'docker-hub', 'github', 'gitlab', 'gmail', 'google-calendar', 'google-docs', 'google-sheets', 'google-drive', 'google-gemini', 'huggingface', 'internet-archive', 'jira', 'microsoft-calendar', 'microsoft-onedrive', 'microsoft-excel', 'microsoft-outlook', 'microsoft-teams', 'microsoft-word', 'musicbrainz', 'notion', 'npm', 'open-meteo', 'openai', 'openalex', 'openlibrary', 'openstreetmap', 'pypi', 'slack', 'tavily', 'telegram', 'wikimedia'];
 const OAUTH = ['gmail', 'google-calendar', 'google-drive', 'microsoft-calendar', 'microsoft-onedrive', 'microsoft-outlook'];
 
 test('the adapter registry covers exactly the implemented catalog entries', () => {
@@ -905,5 +905,34 @@ test('docker-hub builds pinned-host keyless repository reads and validates param
   for (const a of adapters.listActions('docker-hub')) {
     assert.equal(a.kind, 'read_only');
     assert.equal(a.scope, 'images.read');
+  }
+});
+
+// ---- batch 20 (27 Nov 2026): npm keyless public read-only adapter ----
+
+test('npm builds pinned-host keyless registry reads and validates params', () => {
+  assert.equal(adapters.get('npm').authShape, 'public');
+  assert.ok(adapters.get('npm').setupNote.indexOf('keyless') !== -1, 'the setup note is honest about keyless public reads');
+  const gp = adapters.buildRequest('npm', 'get_package', { package: 'qiskit' });
+  assert.equal(gp.ok, true);
+  assert.equal(gp.request.method, 'GET');
+  assert.equal(gp.request.url, 'https://registry.npmjs.org/qiskit');
+  assert.equal(gp.request.headers['User-Agent'], 'CompanionDesk');
+  assert.equal(gp.request.urlContainsSecret, false);
+  const scoped = adapters.buildRequest('npm', 'get_package', { package: '@angular/core' });
+  assert.equal(scoped.ok, true);
+  assert.equal(scoped.request.url, 'https://registry.npmjs.org/@angular%2Fcore');
+  const sp = adapters.buildRequest('npm', 'search_packages', { query: 'quantum', limit: '25' });
+  assert.equal(sp.ok, true);
+  assert.equal(sp.request.url, 'https://registry.npmjs.org/-/v1/search?text=quantum&size=25');
+  assert.equal(adapters.buildRequest('npm', 'search_packages', { query: 'x', limit: '26' }).reason, 'param_invalid', 'limit above the cap');
+  assert.equal(adapters.buildRequest('npm', 'search_packages', { query: 'a\nb' }).reason, 'param_invalid', 'control char in query');
+  assert.equal(adapters.buildRequest('npm', 'get_package', { package: 'a/b' }).reason, 'param_invalid', 'unscoped name with a slash is not valid');
+  assert.equal(adapters.buildRequest('npm', 'get_package', { package: 'A' }).reason, 'param_invalid', 'npm names are lowercase');
+  assert.equal(adapters.buildRequest('npm', 'get_package', {}).reason, 'param_missing');
+  assert.equal(adapters.validateOnly('npm', 'search_packages', { query: 'x' }), null, 'validateOnly needs no credential');
+  for (const a of adapters.listActions('npm')) {
+    assert.equal(a.kind, 'read_only');
+    assert.equal(a.scope, 'packages.read');
   }
 });
