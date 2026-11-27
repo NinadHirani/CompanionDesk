@@ -715,3 +715,22 @@ test('linear refuses before connect, reads with a credential, and gates its crea
   assert.equal(w.ok, true);
   assert.equal((await engine.run('linear', 'create_issue', { team_id: 't', title: 'y' }, { approvalId: a.approvalId })).reason, 'approval_required', 'the spent approval is dead');
 });
+
+// ---- batch 24 (27 Nov 2026): trello credential + approval gates ----
+
+test('trello refuses before connect, reads with the key+token credential, and gates its create behind one approval', async () => {
+  let seen = null;
+  const transport = async (req) => { seen = req; return { status: 200, body: JSON.stringify([]) }; };
+  const { catalog, engine } = makeEngine(transport, 'key=abcdef0123456789abcdef0123456789&token=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef');
+  assert.equal((await engine.run('trello', 'list_boards', {})).reason, 'not_connected');
+  const c = catalog.connect('trello', { userInitiated: true, scopes: ['boards.read', 'boards.write'], credentialRef: 'vault:trello-cred' });
+  assert.equal(c.ok, true);
+  const r = await engine.run('trello', 'list_boards', {});
+  assert.equal(r.ok, true);
+  assert.ok(seen.url.indexOf('&key=abcdef0123456789abcdef0123456789&token=0123456789') > 0, 'the stored key and token ride the url');
+  assert.equal((await engine.run('trello', 'create_card', { list_id: 'l', name: 'x' })).reason, 'approval_required', 'write without an approval refuses');
+  const a = catalog.approve('trello', 'boards.write', { userInitiated: true });
+  const w = await engine.run('trello', 'create_card', { list_id: 'l', name: 'x' }, { approvalId: a.approvalId });
+  assert.equal(w.ok, true);
+  assert.equal((await engine.run('trello', 'create_card', { list_id: 'l', name: 'y' }, { approvalId: a.approvalId })).reason, 'approval_required', 'the spent approval is dead');
+});

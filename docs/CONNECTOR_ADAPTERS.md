@@ -533,3 +533,16 @@ Actions (all GraphQL POSTs to the pinned `api.linear.app/graphql`; user input tr
 The key is the user's own Linear personal API key pasted into the app vault; requests carry only `Authorization: <key>` per Linear's documented header form, plus a CompanionDesk user agent. The write action is single-use approval gated by the policy engine (refused without an approval, dead after one use). No updates, no deletes, no status changes.
 
 Tests: adapter build/validation (12 assertions incl. variable-based bodies, charset rejects, limit cap), engine gates (not_connected refusal, credential rides the read, write refused without an approval, approved write runs once, spent approval is dead). Catalog count pins: 132 still-definition-only expanded rows, 136 definition-only total.
+## Batch 24 (27 Nov 2026): Trello
+
+Upgraded `trello` from definition-only to a key+token adapter (`auth: api_key` row, `authShape: url_token`).
+
+Actions (pinned to `api.trello.com/1`; the power-up key and token ride the query string under the url_token scheme, never a log-safe header):
+- `list_boards` (read_only, `boards.read`): your boards, fields name/url, limit 1-100.
+- `get_board_lists` (read_only, `boards.read`): one board's lists, board id charset-validated, limit 1-100.
+- `get_cards` (read_only, `boards.read`): one list's cards, fields name/url, limit 1-100.
+- `create_card` (write, `boards.write`): create a card in a list (list_id charset-validated, name required, optional desc, all percent-encoded into the query).
+
+The credential is one vault string the user pastes in the documented format `key=YOURKEY&token=YOURTOKEN` (their own Trello power-up key and token); a malformed string refuses with `credential_invalid` before any request is built, and both halves are charset- and length-validated. The write action is single-use approval gated by the policy engine (refused without an approval, dead after one use). No updates, no deletes, no moves.
+
+Tests: adapter build/validation (10 assertions incl. malformed-credential refusal, key/token in the query string, charset rejects, limit cap), engine gates (not_connected refusal, key/token ride the url on a read, write refused without an approval, approved write runs once, spent approval is dead). Catalog count pins: 131 still-definition-only expanded rows, 135 definition-only total.

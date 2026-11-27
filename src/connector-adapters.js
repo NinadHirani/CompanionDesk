@@ -157,6 +157,59 @@
     ],
   };
 
+  function parseTrelloCred(token) {
+    if (typeof token !== 'string') return null;
+    const m = /^key=([A-Za-z0-9]{16,64})&token=([A-Za-z0-9]{16,128})$/.exec(token);
+    return m ? { key: m[1], token: m[2] } : null;
+  }
+
+  ADAPTERS.trello = {
+    id: 'trello', name: 'Trello', authShape: 'url_token', setupRequired: false,
+    setupNote: 'create your own power-up key at trello.com/power-ups/admin, generate a token for it, and paste both as key=YOURKEY&token=YOURTOKEN; they are stored only in the app vault, never requested or shown in chat',
+    buildHeaders: function () { return { 'User-Agent': 'CompanionDesk' }; },
+    actions: [
+      { id: 'list_boards', label: 'List your Trello boards (capped)', scope: 'boards.read', kind: 'read_only',
+        params: [{ name: 'limit', required: false, maxLength: 3 }],
+        build: function (p, token) {
+          const cred = parseTrelloCred(token);
+          if (!cred) return { error: 'credential_invalid' };
+          const limit = optionalInt(p, 'limit', 50);
+          if (limit === null || limit < 1 || limit > 100) return { error: 'param_invalid' };
+          return { method: 'GET', url: 'https://api.trello.com/1/members/me/boards?fields=name,url&limit=' + limit + '&key=' + cred.key + '&token=' + cred.token, headers: this.buildHeaders(), body: null };
+        } },
+      { id: 'get_board_lists', label: "Read one board's lists", scope: 'boards.read', kind: 'read_only',
+        params: [{ name: 'board_id', required: true, maxLength: 80 }, { name: 'limit', required: false, maxLength: 3 }],
+        build: function (p, token) {
+          const cred = parseTrelloCred(token);
+          if (!cred) return { error: 'credential_invalid' };
+          if (!/^[A-Za-z0-9_-]+$/.test(p.board_id)) return { error: 'param_invalid' };
+          const limit = optionalInt(p, 'limit', 50);
+          if (limit === null || limit < 1 || limit > 100) return { error: 'param_invalid' };
+          return { method: 'GET', url: 'https://api.trello.com/1/boards/' + encodeURIComponent(p.board_id) + '/lists?limit=' + limit + '&key=' + cred.key + '&token=' + cred.token, headers: this.buildHeaders(), body: null };
+        } },
+      { id: 'get_cards', label: "Read one list's cards (capped)", scope: 'boards.read', kind: 'read_only',
+        params: [{ name: 'list_id', required: true, maxLength: 80 }, { name: 'limit', required: false, maxLength: 3 }],
+        build: function (p, token) {
+          const cred = parseTrelloCred(token);
+          if (!cred) return { error: 'credential_invalid' };
+          if (!/^[A-Za-z0-9_-]+$/.test(p.list_id)) return { error: 'param_invalid' };
+          const limit = optionalInt(p, 'limit', 50);
+          if (limit === null || limit < 1 || limit > 100) return { error: 'param_invalid' };
+          return { method: 'GET', url: 'https://api.trello.com/1/lists/' + encodeURIComponent(p.list_id) + '/cards?fields=name,url&limit=' + limit + '&key=' + cred.key + '&token=' + cred.token, headers: this.buildHeaders(), body: null };
+        } },
+      { id: 'create_card', label: 'Create a card in a Trello list', scope: 'boards.write', kind: 'write',
+        params: [{ name: 'list_id', required: true, maxLength: 80 }, { name: 'name', required: true, maxLength: 200 }, { name: 'desc', required: false, maxLength: 5000 }],
+        build: function (p, token) {
+          const cred = parseTrelloCred(token);
+          if (!cred) return { error: 'credential_invalid' };
+          if (!/^[A-Za-z0-9_-]+$/.test(p.list_id)) return { error: 'param_invalid' };
+          let url = 'https://api.trello.com/1/cards?idList=' + encodeURIComponent(p.list_id) + '&name=' + encodeURIComponent(p.name) + '&key=' + cred.key + '&token=' + cred.token;
+          if (p.desc) url += '&desc=' + encodeURIComponent(p.desc);
+          return { method: 'POST', url: url, headers: this.buildHeaders(), body: null };
+        } },
+    ],
+  };
+
   ADAPTERS.linear = {
     id: 'linear', name: 'Linear', authShape: 'token', setupRequired: false,
     setupNote: 'create a personal API key at linear.app/settings/account/security and paste it; your key is stored only in the app vault, never requested or shown in chat',

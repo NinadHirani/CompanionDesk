@@ -12,7 +12,7 @@ const assert = require('node:assert');
 const adapters = require('../src/connector-adapters.js');
 const { createConnectorCatalog } = require('../src/connectors.js');
 
-const IMPLEMENTED = ['anthropic', 'brave-search', 'arxiv', 'airtable', 'crossref', 'discord', 'docker-hub', 'github', 'gitlab', 'gmail', 'google-calendar', 'google-docs', 'google-sheets', 'google-drive', 'google-gemini', 'huggingface', 'internet-archive', 'jira', 'linear', 'microsoft-calendar', 'microsoft-onedrive', 'microsoft-excel', 'microsoft-outlook', 'microsoft-teams', 'microsoft-word', 'musicbrainz', 'notion', 'npm', 'open-meteo', 'openai', 'openalex', 'openlibrary', 'openstreetmap', 'pypi', 'slack', 'tavily', 'telegram', 'todoist', 'wikimedia'];
+const IMPLEMENTED = ['anthropic', 'brave-search', 'arxiv', 'airtable', 'crossref', 'discord', 'docker-hub', 'github', 'gitlab', 'gmail', 'google-calendar', 'google-docs', 'google-sheets', 'google-drive', 'google-gemini', 'huggingface', 'internet-archive', 'jira', 'linear', 'microsoft-calendar', 'microsoft-onedrive', 'microsoft-excel', 'microsoft-outlook', 'microsoft-teams', 'microsoft-word', 'musicbrainz', 'notion', 'npm', 'open-meteo', 'openai', 'openalex', 'openlibrary', 'openstreetmap', 'pypi', 'slack', 'tavily', 'telegram', 'trello', 'todoist', 'wikimedia'];
 const OAUTH = ['gmail', 'google-calendar', 'google-drive', 'microsoft-calendar', 'microsoft-onedrive', 'microsoft-outlook'];
 
 test('the adapter registry covers exactly the implemented catalog entries', () => {
@@ -1025,5 +1025,32 @@ test('linear builds variables-based GraphQL reads and one gated create with stri
     if (a.id === 'create_issue') { assert.equal(a.scope, 'issues.write'); continue; }
     assert.equal(a.kind, 'read_only');
     assert.equal(a.scope, 'issues.read');
+  }
+});
+
+// ---- batch 24 (27 Nov 2026): trello key+token read + create-only adapter ----
+
+test('trello parses the key+token vault string and builds url-token reads and one gated create', () => {
+  assert.equal(adapters.buildRequest('trello', 'list_boards', {}, 'bad-format').reason, 'credential_invalid', 'malformed vault string');
+  const lb = adapters.buildRequest('trello', 'list_boards', {}, 'key=abcdef0123456789abcdef0123456789&token=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef');
+  assert.equal(lb.ok, true);
+  assert.equal(lb.request.method, 'GET');
+  assert.ok(lb.request.url.indexOf('https://api.trello.com/1/members/me/boards?fields=name,url&limit=50&key=abcdef0123456789abcdef0123456789&token=') === 0, 'key and token ride the query string');
+  const gl = adapters.buildRequest('trello', 'get_board_lists', { board_id: 'abc12345' }, 'key=abcdef0123456789abcdef0123456789&token=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef');
+  assert.equal(gl.ok, true);
+  assert.ok(gl.request.url.indexOf('https://api.trello.com/1/boards/abc12345/lists?limit=50&key=') === 0);
+  const gc = adapters.buildRequest('trello', 'get_cards', { list_id: 'list1234', limit: '5' }, 'key=abcdef0123456789abcdef0123456789&token=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef');
+  assert.ok(gc.request.url.indexOf('limit=5&key=') > 0);
+  const cc = adapters.buildRequest('trello', 'create_card', { list_id: 'list1234', name: 'N', desc: 'D' }, 'key=abcdef0123456789abcdef0123456789&token=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef');
+  assert.equal(cc.ok, true);
+  assert.ok(cc.request.url.indexOf('/1/cards?idList=list1234&name=N&key=') > 0 && cc.request.url.indexOf('&desc=D') > 0, 'create fields are percent-encoded into the query');
+  assert.equal(adapters.buildRequest('trello', 'get_board_lists', { board_id: 'a b' }, 'key=abcdef0123456789abcdef0123456789&token=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef').reason, 'param_invalid', 'space in board id');
+  assert.equal(adapters.buildRequest('trello', 'create_card', { list_id: 'list1234' }, 'key=abcdef0123456789abcdef0123456789&token=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef').reason, 'param_missing', 'name required');
+  assert.equal(adapters.buildRequest('trello', 'list_boards', { limit: '101' }, 'key=abcdef0123456789abcdef0123456789&token=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef').reason, 'param_invalid', 'limit above the cap');
+  assert.equal(adapters.listActions('trello').find((a) => a.id === 'create_card').kind, 'write');
+  for (const a of adapters.listActions('trello')) {
+    if (a.id === 'create_card') { assert.equal(a.scope, 'boards.write'); continue; }
+    assert.equal(a.kind, 'read_only');
+    assert.equal(a.scope, 'boards.read');
   }
 });
