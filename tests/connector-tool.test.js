@@ -50,7 +50,7 @@ test('list returns the catalog with live states and the open requests', async ()
   s.requests.request('rss', { reason: 'needs feeds' });
   const out = await s.tool.execute({ action: 'list' });
   assert.equal(out.ok, true);
-  assert.equal(out.connectors.length, 185, 'the shipped catalog (22 legacy + 13 curated popular providers + 149 expanded breadth tier + microsoft-calendar)');
+  assert.equal(out.connectors.length, 187, 'the shipped catalog (22 legacy + 15 curated popular providers + 149 expanded breadth tier + microsoft-calendar)');
   assert.equal(out.connectors.find((c) => c.id === 'rss').state, 'discovered');
   assert.equal(out.requests.length, 1);
 });

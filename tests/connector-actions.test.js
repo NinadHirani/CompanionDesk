@@ -467,3 +467,45 @@ test('google-docs and google-sheets refuse unconnected runs and refresh expired 
   assert.equal(r2.ok, true);
   assert.equal(s2.recorded[1].url.indexOf('https://docs.googleapis.com/v1/documents/abc') === 0, true, 'pinned docs host');
 });
+
+// ---- batch 12 (27 Nov 2026): microsoft-excel and microsoft-word gates + refresh ----
+
+test('microsoft-excel refuses unconnected runs, connects on the minimal scope, and refreshes before a read', async () => {
+  const s = oauthStack(async function (req) {
+    if (req.url.indexOf('login.microsoftonline.com/common/oauth2/v2.0/token') !== -1) {
+      return { status: 200, body: JSON.stringify({ access_token: 'at-2', expires_in: 3600, refresh_token: 'rt-2' }) };
+    }
+    return { status: 200, body: JSON.stringify({ address: 'A1:C10', echo: 'access_token=at-2' }) };
+  }, expiredBlob());
+  assert.equal((await s.engine.run('microsoft-excel', 'get_workbook_range', { workbook_item_id: 'id1', worksheet: 'Sheet1', range: 'A1:C10' })).reason, 'not_connected');
+  assert.equal(s.catalog.connect('microsoft-excel', { userInitiated: true, scopes: ['workbook.read'] }).reason, 'credential_ref_required');
+  const c = s.catalog.connect('microsoft-excel', { userInitiated: true, scopes: ['workbook.read'], credentialRef: 'vault:msx' });
+  assert.equal(c.ok, true);
+  const r = await s.engine.run('microsoft-excel', 'get_workbook_range', { workbook_item_id: 'id1', worksheet: 'Sheet1', range: 'A1:C10' });
+  assert.equal(r.ok, true, JSON.stringify(r));
+  assert.equal(s.recorded.length, 2, 'one refresh, one action');
+  assert.equal(s.recorded[0].url.indexOf('login.microsoftonline.com/common/oauth2/v2.0/token') !== -1, true, 'refresh goes to the pinned Microsoft token endpoint');
+  assert.equal(s.recorded[1].url.indexOf('https://graph.microsoft.com/v1.0/me/drive/items/id1/workbook/worksheets/') === 0, true, 'pinned Graph host');
+  assert.equal(s.recorded[1].headers.Authorization, 'Bearer at-2', 'the action uses the fresh token');
+  assert.ok(s.recorded[1].url.indexOf('at-2') === -1, 'the access token never rides the URL');
+  assert.ok(r.data.echo.indexOf('at-2') === -1 && r.data.echo.indexOf('REDACTED') !== -1, 'secret-shaped response text is redacted');
+});
+
+test('microsoft-word refuses unconnected runs and reads metadata after a refresh', async () => {
+  const s = oauthStack(async function (req) {
+    if (req.url.indexOf('login.microsoftonline.com/common/oauth2/v2.0/token') !== -1) {
+      return { status: 200, body: JSON.stringify({ access_token: 'at-2', expires_in: 3600, refresh_token: 'rt-2' }) };
+    }
+    return { status: 200, body: JSON.stringify({ name: 'notes.docx', echo: 'refresh_token=rt-2' }) };
+  }, expiredBlob());
+  assert.equal((await s.engine.run('microsoft-word', 'get_document_properties', { item_id: 'doc1' })).reason, 'not_connected');
+  assert.equal(s.catalog.connect('microsoft-word', { userInitiated: true, scopes: ['documents.read'] }).reason, 'credential_ref_required');
+  const c = s.catalog.connect('microsoft-word', { userInitiated: true, scopes: ['documents.read'], credentialRef: 'vault:msw' });
+  assert.equal(c.ok, true);
+  const r = await s.engine.run('microsoft-word', 'get_document_properties', { item_id: 'doc1' });
+  assert.equal(r.ok, true, JSON.stringify(r));
+  assert.equal(s.recorded.length, 2, 'one refresh, one action');
+  assert.equal(s.recorded[1].url, 'https://graph.microsoft.com/v1.0/me/drive/items/doc1?select=id,name,size,lastModifiedDateTime,webUrl', 'pinned Graph metadata URL');
+  assert.equal(s.recorded[1].headers.Authorization, 'Bearer at-2');
+  assert.ok(r.data.echo.indexOf('rt-2') === -1 && r.data.echo.indexOf('REDACTED') !== -1, 'secret-shaped response text is redacted');
+});

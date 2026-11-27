@@ -12,7 +12,7 @@ const assert = require('node:assert');
 const adapters = require('../src/connector-adapters.js');
 const { createConnectorCatalog } = require('../src/connectors.js');
 
-const IMPLEMENTED = ['anthropic', 'brave-search', 'arxiv', 'crossref', 'discord', 'github', 'gmail', 'google-calendar', 'google-docs', 'google-sheets', 'google-drive', 'google-gemini', 'huggingface', 'microsoft-calendar', 'microsoft-onedrive', 'microsoft-outlook', 'notion', 'open-meteo', 'openai', 'openalex', 'openlibrary', 'openstreetmap', 'slack', 'tavily', 'telegram', 'wikimedia'];
+const IMPLEMENTED = ['anthropic', 'brave-search', 'arxiv', 'crossref', 'discord', 'github', 'gmail', 'google-calendar', 'google-docs', 'google-sheets', 'google-drive', 'google-gemini', 'huggingface', 'microsoft-calendar', 'microsoft-onedrive', 'microsoft-excel', 'microsoft-outlook', 'microsoft-word', 'notion', 'open-meteo', 'openai', 'openalex', 'openlibrary', 'openstreetmap', 'slack', 'tavily', 'telegram', 'wikimedia'];
 const OAUTH = ['gmail', 'google-calendar', 'google-drive', 'microsoft-calendar', 'microsoft-onedrive', 'microsoft-outlook'];
 
 test('the adapter registry covers exactly the implemented catalog entries', () => {
@@ -630,4 +630,58 @@ test('google sheets validates spreadsheet ids and ranges and stays on the pinned
   const [a] = adapters.listActions('google-sheets');
   assert.equal(a.kind, 'read_only');
   assert.equal(a.scope, 'spreadsheets.read');
+});
+
+// ---- batch 12 (27 Nov 2026): Microsoft Excel + Word readonly reads (Graph) ----
+
+test('microsoft-excel consents to exactly Files.Read and reads a validated workbook range', () => {
+  assert.equal(adapters.get('microsoft-excel').oauth.scope, 'Files.Read offline_access');
+  const au = adapters.authorizeUrl('microsoft-excel', { client_id: 'cid', redirect_uri: 'https://app.example/cb' }, 'st');
+  assert.equal(au.ok, true);
+  assert.ok(au.url.indexOf('scope=' + encodeURIComponent('Files.Read offline_access')) !== -1, 'the consent URL names only Files.Read');
+  assert.equal(au.url.indexOf('login.microsoftonline.com/common/oauth2/v2.0/authorize') !== -1, true, 'pinned authorize host');
+  const tk = adapters.tokenRequest('microsoft-excel', { client_id: 'cid', client_secret: 'cs', redirect_uri: 'https://app.example/cb' }, 'code1');
+  assert.equal(tk.request.url, 'https://login.microsoftonline.com/common/oauth2/v2.0/token');
+  const blob = { client_id: 'cid', access_token: 'at-1', refresh_token: 'rt-1', expires_at: 3600000 };
+  const s = adapters.buildRequest('microsoft-excel', 'get_workbook_range', { workbook_item_id: '01ABCD2F!123', worksheet: 'Sheet 1', range: 'A1:C10' }, JSON.stringify(blob));
+  assert.equal(s.ok, true);
+  assert.equal(s.request.method, 'GET');
+  assert.equal(s.request.url, 'https://graph.microsoft.com/v1.0/me/drive/items/01ABCD2F!123/workbook/worksheets/' + encodeURIComponent('Sheet 1') + "/range(address='" + encodeURIComponent('A1:C10') + "')");
+  assert.equal(s.request.headers.Authorization, 'Bearer at-1');
+  assert.equal(s.request.urlContainsSecret, false);
+  for (const bad of ['../etc/passwd', 'id/x', 'id?q=1', 'id q']) {
+    assert.equal(adapters.buildRequest('microsoft-excel', 'get_workbook_range', { workbook_item_id: bad, worksheet: 'Sheet1', range: 'A1' }, JSON.stringify(blob)).reason, 'param_invalid', bad);
+  }
+  for (const bad of ['Sheet;1', 'Sheet/1', 'Sheet?1', '../Sheet1']) {
+    assert.equal(adapters.buildRequest('microsoft-excel', 'get_workbook_range', { workbook_item_id: 'id1', worksheet: bad, range: 'A1' }, JSON.stringify(blob)).reason, 'param_invalid', bad);
+  }
+  for (const bad of ['A1;DROP', 'A1?x', '../A1', 'a\nb']) {
+    assert.equal(adapters.buildRequest('microsoft-excel', 'get_workbook_range', { workbook_item_id: 'id1', worksheet: 'Sheet1', range: bad }, JSON.stringify(blob)).reason, 'param_invalid', bad);
+  }
+  assert.equal(adapters.buildRequest('microsoft-excel', 'get_workbook_range', { workbook_item_id: 'id1' }, JSON.stringify(blob)).reason, 'param_missing');
+  assert.equal(adapters.validateOnly('microsoft-excel', 'get_workbook_range', { workbook_item_id: 'id1', worksheet: 'S', range: 'A1' }), null, 'validateOnly needs no credential');
+  const [a] = adapters.listActions('microsoft-excel');
+  assert.equal(a.kind, 'read_only');
+  assert.equal(a.scope, 'workbook.read');
+});
+
+test('microsoft-word consents to exactly Files.Read and reads document metadata', () => {
+  assert.equal(adapters.get('microsoft-word').oauth.scope, 'Files.Read offline_access');
+  const au = adapters.authorizeUrl('microsoft-word', { client_id: 'cid', redirect_uri: 'https://app.example/cb' }, 'st');
+  assert.ok(au.url.indexOf('scope=' + encodeURIComponent('Files.Read offline_access')) !== -1);
+  const blob = { client_id: 'cid', access_token: 'at-1', refresh_token: 'rt-1', expires_at: 3600000 };
+  const s = adapters.buildRequest('microsoft-word', 'get_document_properties', { item_id: '01WORD9Z!456' }, JSON.stringify(blob));
+  assert.equal(s.ok, true);
+  assert.equal(s.request.method, 'GET');
+  assert.equal(s.request.url, 'https://graph.microsoft.com/v1.0/me/drive/items/01WORD9Z!456?select=id,name,size,lastModifiedDateTime,webUrl');
+  assert.equal(s.request.headers.Authorization, 'Bearer at-1');
+  assert.equal(s.request.urlContainsSecret, false);
+  for (const bad of ['../x', 'id/y', 'id;q=1', 'id z']) {
+    assert.equal(adapters.buildRequest('microsoft-word', 'get_document_properties', { item_id: bad }, JSON.stringify(blob)).reason, 'param_invalid', bad);
+  }
+  assert.equal(adapters.buildRequest('microsoft-word', 'get_document_properties', {}, JSON.stringify(blob)).reason, 'param_missing');
+  assert.equal(adapters.validateOnly('microsoft-word', 'get_document_properties', { item_id: 'x' }), null, 'validateOnly needs no credential');
+  const [a] = adapters.listActions('microsoft-word');
+  assert.equal(a.kind, 'read_only');
+  assert.equal(a.scope, 'documents.read');
 });

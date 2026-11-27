@@ -742,6 +742,38 @@
     ]),
   };
 
+  ADAPTERS['microsoft-excel'] = {
+    id: 'microsoft-excel', name: 'Microsoft Excel', authShape: 'oauth_json', setupRequired: true,
+    setupNote: 'register your own app in the Azure portal (Microsoft Graph) and complete the in-app sign-in; no shared client exists; consent requests only the read-only Files.Read Microsoft scope',
+    oauth: microsoftOauth('Files.Read offline_access'),
+    buildHeaders: function (blob) { return bearerHeader(blob.access_token); },
+    actions: oauthActions([
+      { id: 'get_workbook_range', label: 'Read one Excel workbook range by worksheet and address', scope: 'workbook.read', kind: 'read_only',
+        params: [{ name: 'workbook_item_id', required: true, maxLength: 200 }, { name: 'worksheet', required: true, maxLength: 100 }, { name: 'range', required: true, maxLength: 200 }],
+        build: function (p, blob) {
+          if (!/^[A-Za-z0-9_.!-]+$/.test(p.workbook_item_id)) return { error: 'param_invalid' };
+          if (!/^[A-Za-z0-9_ .-]+$/.test(p.worksheet)) return { error: 'param_invalid' };
+          if (!/^[A-Za-z0-9_ '!:.$,-]+$/.test(p.range)) return { error: 'param_invalid' };
+          return { method: 'GET', url: 'https://graph.microsoft.com/v1.0/me/drive/items/' + encodeURIComponent(p.workbook_item_id) + '/workbook/worksheets/' + encodeURIComponent(p.worksheet) + "/range(address='" + encodeURIComponent(p.range) + "')", headers: this.buildHeaders(blob), body: null };
+        } },
+    ]),
+  };
+
+  ADAPTERS['microsoft-word'] = {
+    id: 'microsoft-word', name: 'Microsoft Word', authShape: 'oauth_json', setupRequired: true,
+    setupNote: 'register your own app in the Azure portal (Microsoft Graph) and complete the in-app sign-in; no shared client exists; consent requests only the read-only Files.Read Microsoft scope',
+    oauth: microsoftOauth('Files.Read offline_access'),
+    buildHeaders: function (blob) { return bearerHeader(blob.access_token); },
+    actions: oauthActions([
+      { id: 'get_document_properties', label: 'Read one Word document item by id (metadata)', scope: 'documents.read', kind: 'read_only',
+        params: [{ name: 'item_id', required: true, maxLength: 200 }],
+        build: function (p, blob) {
+          if (!/^[A-Za-z0-9_.!-]+$/.test(p.item_id)) return { error: 'param_invalid' };
+          return { method: 'GET', url: 'https://graph.microsoft.com/v1.0/me/drive/items/' + encodeURIComponent(p.item_id) + '?select=id,name,size,lastModifiedDateTime,webUrl', headers: this.buildHeaders(blob), body: null };
+        } },
+    ]),
+  };
+
   ADAPTERS['microsoft-onedrive'] = {
     id: 'microsoft-onedrive', name: 'Microsoft OneDrive', authShape: 'oauth_json', setupRequired: true,
     setupNote: 'register your own app in the Azure portal (Microsoft Graph, delegated Files.ReadWrite) and complete the in-app sign-in; no shared client exists',

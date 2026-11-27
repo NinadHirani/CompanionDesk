@@ -13,13 +13,13 @@ const { test } = require('node:test');
 const assert = require('node:assert');
 const { createConnectorCatalog } = require('../src/connectors.js');
 
-const EXPECTED_TOTAL = 185; // batch 10: brave-search and tavily join
+const EXPECTED_TOTAL = 187; // batch 10 brave+tavily, batch 12 excel+word
 const EXPECTED_DEFINITION_ONLY = 145; // google-docs + google-sheets read adapters landed in batch 11 // definition-only curated + expanded after the 27 Nov adapter batch
 
 test('the catalog is the expanded set with no duplicate ids or names', () => {
   const c = createConnectorCatalog({});
   const l = c.list();
-  assert.equal(l.length, EXPECTED_TOTAL, 'legacy 22 + curated 13 + expanded 149 + microsoft-calendar');
+  assert.equal(l.length, EXPECTED_TOTAL, 'legacy 22 + curated 15 + expanded 149 + microsoft-calendar');
   const ids = l.map(e => e.id);
   assert.equal(new Set(ids).size, ids.length, 'no duplicate ids');
   const names = l.map(e => e.name.toLowerCase());
