@@ -966,3 +966,19 @@ test('replicate and together-ai refuse before connect and ride their credentials
     assert.ok(seen.headers.Authorization.indexOf('rp-tok') > 0, id + ' credential rides the header');
   }
 });
+
+// ---- batch 39 (27 Nov 2026): stability-ai + elevenlabs credential gates ----
+
+test('stability-ai and elevenlabs refuse before connect and ride their credentials on reads', async () => {
+  let seen = null;
+  const transport = async (req) => { seen = req; return { status: 200, body: JSON.stringify([]) }; };
+  const { catalog, engine } = makeEngine(transport, 'acct-tok');
+  for (const [id, action, scope] of [['stability-ai', 'list_engines', 'account.read'], ['elevenlabs', 'list_voices', 'voices.read']]) {
+    assert.equal((await engine.run(id, action, {})).reason, 'not_connected', id + ' refuses before connect');
+    const c = catalog.connect(id, { userInitiated: true, scopes: [scope], credentialRef: 'vault:' + id + '-cred' });
+    assert.equal(c.ok, true, id + ' connects');
+    const r = await engine.run(id, action, {});
+    assert.equal(r.ok, true, id + ' reads with a credential');
+    assert.ok(Object.values(seen.headers).some(function (v) { return String(v).indexOf('acct-tok') >= 0; }), id + ' credential rides the headers');
+  }
+});

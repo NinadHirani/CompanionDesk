@@ -708,3 +708,14 @@ Actions:
 The credentials are the user's own keys pasted into the app vault.
 
 Tests: adapter build/validation (one-action pins, header shapes, read-only sweeps, sends never present), engine gates (each refuses before connect and rides its credential on a read). Catalog count pins: 105 still-definition-only expanded rows, 109 definition-only total.
+## Batch 39 (27 Nov 2026): Stability AI, ElevenLabs
+
+Upgraded two ai_cloud connectors to token-bound READ-ONLY adapters (each `auth: api_key`, `authShape: token`).
+
+Actions:
+- Stability AI (pinned `api.stability.ai/v1`, Bearer): `list_engines` (the engine list available to your key). The `images.generate` scope is never requested and nothing is generated.
+- ElevenLabs (pinned `api.elevenlabs.io/v1`, `xi-api-key` header): `list_voices` (the voices in your account). The `speech.send` scope is never requested and nothing is synthesized.
+
+The credentials are the user's own keys pasted into the app vault.
+
+Tests: adapter build/validation (one-action pins, header shapes, read-only sweeps, sends never present), engine gates (each refuses before connect and rides its credential on a read). Catalog count pins: 103 still-definition-only expanded rows, 107 definition-only total.

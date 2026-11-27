@@ -12,7 +12,7 @@ const assert = require('node:assert');
 const adapters = require('../src/connector-adapters.js');
 const { createConnectorCatalog } = require('../src/connectors.js');
 
-const IMPLEMENTED = ['anthropic', 'brave-search', 'arxiv', 'airtable', 'coda', 'circleci', 'cloudflare', 'crossref', 'digitalocean', 'discord', 'docker-hub', 'github', 'gitlab', 'gmail', 'heroku', 'google-calendar', 'google-docs', 'google-sheets', 'google-drive', 'google-gemini', 'huggingface', 'internet-archive', 'jira', 'mailgun', 'postmark', 'sendgrid', 'linear', 'microsoft-calendar', 'microsoft-onedrive', 'microsoft-excel', 'microsoft-outlook', 'microsoft-teams', 'microsoft-word', 'musicbrainz', 'notion', 'npm', 'open-meteo', 'openai', 'openalex', 'openlibrary', 'openstreetmap', 'pypi', 'render', 'slack', 'supabase', 'sentry', 'pagerduty', 'tmdb', 'unsplash', 'new-relic', 'pinecone', 'pexels', 'kaggle', 'stripe', 'groq', 'cohere', 'xai', 'mistral', 'openrouter', 'replicate', 'together-ai', 'tavily', 'telegram', 'trello', 'todoist', 'wikimedia'];
+const IMPLEMENTED = ['anthropic', 'brave-search', 'arxiv', 'airtable', 'coda', 'circleci', 'cloudflare', 'crossref', 'digitalocean', 'discord', 'docker-hub', 'github', 'gitlab', 'gmail', 'heroku', 'google-calendar', 'google-docs', 'google-sheets', 'google-drive', 'google-gemini', 'huggingface', 'internet-archive', 'jira', 'mailgun', 'postmark', 'sendgrid', 'linear', 'microsoft-calendar', 'microsoft-onedrive', 'microsoft-excel', 'microsoft-outlook', 'microsoft-teams', 'microsoft-word', 'musicbrainz', 'notion', 'npm', 'open-meteo', 'openai', 'openalex', 'openlibrary', 'openstreetmap', 'pypi', 'render', 'slack', 'supabase', 'sentry', 'pagerduty', 'tmdb', 'unsplash', 'new-relic', 'pinecone', 'pexels', 'kaggle', 'stripe', 'groq', 'cohere', 'xai', 'mistral', 'openrouter', 'replicate', 'together-ai', 'stability-ai', 'elevenlabs', 'tavily', 'telegram', 'trello', 'todoist', 'wikimedia'];
 const OAUTH = ['gmail', 'google-calendar', 'google-drive', 'microsoft-calendar', 'microsoft-onedrive', 'microsoft-outlook'];
 
 test('the adapter registry covers exactly the implemented catalog entries', () => {
@@ -1485,6 +1485,27 @@ test('replicate and together-ai build bearer model reads with no sends and no wr
       assert.equal(a.scope, 'models.read');
       assert.notEqual(a.scope, 'predictions.send', id + ' predictions never implemented');
       assert.notEqual(a.scope, 'completions.send', id + ' completions never implemented');
+    }
+  }
+});
+
+// ---- batch 39 (27 Nov 2026): stability-ai + elevenlabs read-only adapters ----
+
+test('stability-ai and elevenlabs build keyed account reads with no sends and no writes', () => {
+  const le = adapters.buildRequest('stability-ai', 'list_engines', {}, 'sa-tok');
+  assert.equal(le.ok, true);
+  assert.equal(le.request.url, 'https://api.stability.ai/v1/engines/list');
+  assert.equal(le.request.headers.Authorization, 'Bearer sa-tok');
+  const lv = adapters.buildRequest('elevenlabs', 'list_voices', {}, 'el-tok');
+  assert.equal(lv.ok, true);
+  assert.equal(lv.request.url, 'https://api.elevenlabs.io/v1/voices');
+  assert.equal(lv.request.headers['xi-api-key'], 'el-tok');
+  for (const id of ['stability-ai', 'elevenlabs']) {
+    assert.equal(adapters.listActions(id).length, 1, id + ' implements only the account read');
+    for (const a of adapters.listActions(id)) {
+      assert.equal(a.kind, 'read_only', id + ' is read-only');
+      assert.notEqual(a.scope, 'images.generate', id + ' image generation never implemented');
+      assert.notEqual(a.scope, 'speech.send', id + ' speech never implemented');
     }
   }
 });

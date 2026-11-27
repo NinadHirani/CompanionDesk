@@ -157,6 +157,32 @@
     ],
   };
 
+  ADAPTERS['stability-ai'] = {
+    id: 'stability-ai', name: 'Stability AI', authShape: 'token', setupRequired: false,
+    setupNote: 'paste a Stability AI API key from platform.stability.ai/account/keys; it is stored only in the app vault, never requested or shown in chat',
+    buildHeaders: function (token) { return { Authorization: 'Bearer ' + token, 'User-Agent': 'CompanionDesk' }; },
+    actions: [
+      { id: 'list_engines', label: 'List the Stability AI engines available to your key', scope: 'account.read', kind: 'read_only',
+        params: [],
+        build: function (p, token) {
+          return { method: 'GET', url: 'https://api.stability.ai/v1/engines/list', headers: this.buildHeaders(token), body: null };
+        } },
+    ],
+  };
+
+  ADAPTERS.elevenlabs = {
+    id: 'elevenlabs', name: 'ElevenLabs', authShape: 'token', setupRequired: false,
+    setupNote: 'paste an ElevenLabs API key from elevenlabs.io/app/settings/api-keys; it is stored only in the app vault, never requested or shown in chat',
+    buildHeaders: function (token) { return { 'xi-api-key': token, 'User-Agent': 'CompanionDesk' }; },
+    actions: [
+      { id: 'list_voices', label: 'List the voices in your ElevenLabs account', scope: 'voices.read', kind: 'read_only',
+        params: [],
+        build: function (p, token) {
+          return { method: 'GET', url: 'https://api.elevenlabs.io/v1/voices', headers: this.buildHeaders(token), body: null };
+        } },
+    ],
+  };
+
   ADAPTERS.replicate = {
     id: 'replicate', name: 'Replicate', authShape: 'token', setupRequired: false,
     setupNote: 'paste a Replicate API token from replicate.com/account/api-tokens; it is stored only in the app vault, never requested or shown in chat',
