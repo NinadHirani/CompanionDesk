@@ -318,3 +318,22 @@ test('a bad event parameter set refuses before any approval is consumed', async 
   const good = await engine.run('google-calendar', 'create_event', { summary: 'x', start: '2026-12-01T10:00:00Z', end: '2026-12-01T11:00:00Z' }, { approvalId: a.approvalId });
   assert.equal(good.ok, true, 'the SAME approval still works after the invalid run was refused');
 });
+
+// ---- batch 5 (27 Nov 2026): the new reads flow through the same gates ----
+
+test('new messaging reads run after connect with their scope and never need an approval', async () => {
+  const { catalog, engine } = makeEngine(async () => ({ status: 200, body: '{"ok":true}' }), 'bot-token');
+  catalog.connect('telegram', { userInitiated: true, scopes: ['chats.read'], credentialRef: 'vault:tg-cred' });
+  const r = await engine.run('telegram', 'get_updates', {});
+  assert.equal(r.ok, true, 'a granted read runs with no approval');
+  catalog.connect('discord', { userInitiated: true, scopes: ['guilds.read', 'channels.read'], credentialRef: 'vault:dc-cred' });
+  const r2 = await engine.run('discord', 'list_channel_messages', { channel_id: '123456789012345678' });
+  assert.equal(r2.ok, true, 'channel reads need no approval');
+});
+
+test('a read without its scope still refuses with scope_not_granted', async () => {
+  const { catalog, engine } = makeEngine(async () => { throw new Error('must not be called'); }, 'bot-token');
+  catalog.connect('discord', { userInitiated: true, scopes: ['guilds.read'], credentialRef: 'vault:dc-cred' });
+  const r = await engine.run('discord', 'list_channel_messages', { channel_id: '123456789012345678' });
+  assert.equal(r.reason, 'scope_not_granted', 'channels.read was not granted at connect');
+});

@@ -183,6 +183,13 @@
         build: function (p, token) {
           return { method: 'GET', url: 'https://slack.com/api/conversations.info?channel=' + encodeURIComponent(p.channel), headers: this.buildHeaders(token), body: null };
         } },
+      { id: 'list_users', label: 'List people in the workspace', scope: 'users.read', kind: 'read_only',
+        params: [{ name: 'limit', required: false, maxLength: 3 }],
+        build: function (p, token) {
+          const limit = optionalInt(p, 'limit', 50);
+          if (limit === null) return { error: 'param_invalid' };
+          return { method: 'GET', url: 'https://slack.com/api/users.list?limit=' + limit, headers: this.buildHeaders(token), body: null };
+        } },
       { id: 'post_message', label: 'Post a message to a channel', scope: 'message.send', kind: 'send',
         params: [{ name: 'channel', required: true, maxLength: 80 }, { name: 'text', required: true, maxLength: 4000 }],
         build: function (p, token) {
@@ -201,6 +208,26 @@
         build: function (p, token) {
           return { method: 'GET', url: 'https://discord.com/api/v10/users/@me/guilds', headers: this.buildHeaders(token), body: null };
         } },
+      { id: 'list_channels', label: 'List channels in a guild', scope: 'guilds.read', kind: 'read_only',
+        params: [{ name: 'guild_id', required: true, maxLength: 25 }],
+        build: function (p, token) {
+          if (!/^\d{5,25}$/.test(p.guild_id)) return { error: 'param_invalid' };
+          return { method: 'GET', url: 'https://discord.com/api/v10/guilds/' + p.guild_id + '/channels', headers: this.buildHeaders(token), body: null };
+        } },
+      { id: 'get_channel', label: 'Read one channel by id', scope: 'channels.read', kind: 'read_only',
+        params: [{ name: 'channel_id', required: true, maxLength: 25 }],
+        build: function (p, token) {
+          if (!/^\d{5,25}$/.test(p.channel_id)) return { error: 'param_invalid' };
+          return { method: 'GET', url: 'https://discord.com/api/v10/channels/' + p.channel_id, headers: this.buildHeaders(token), body: null };
+        } },
+      { id: 'list_channel_messages', label: 'Read recent messages in a channel', scope: 'channels.read', kind: 'read_only',
+        params: [{ name: 'channel_id', required: true, maxLength: 25 }, { name: 'limit', required: false, maxLength: 3 }],
+        build: function (p, token) {
+          if (!/^\d{5,25}$/.test(p.channel_id)) return { error: 'param_invalid' };
+          const limit = optionalInt(p, 'limit', 20);
+          if (limit === null) return { error: 'param_invalid' };
+          return { method: 'GET', url: 'https://discord.com/api/v10/channels/' + p.channel_id + '/messages?limit=' + limit, headers: this.buildHeaders(token), body: null };
+        } },
       { id: 'send_message', label: 'Send a message to a channel', scope: 'message.send', kind: 'send',
         params: [{ name: 'channel_id', required: true, maxLength: 40 }, { name: 'content', required: true, maxLength: 2000 }],
         build: function (p, token) {
@@ -217,6 +244,24 @@
         params: [],
         build: function (p, token) {
           return { method: 'GET', url: 'https://api.telegram.org/bot' + encodeURIComponent(token) + '/getMe', headers: {}, body: null };
+        } },
+      { id: 'get_updates', label: 'Read recent messages and updates sent to the bot', scope: 'chats.read', kind: 'read_only',
+        params: [{ name: 'limit', required: false, maxLength: 3 }, { name: 'offset', required: false, maxLength: 20 }],
+        build: function (p, token) {
+          const limit = optionalInt(p, 'limit', 20);
+          if (limit === null) return { error: 'param_invalid' };
+          let qs = '?limit=' + limit;
+          if (p.offset !== undefined && p.offset !== '') {
+            if (!/^\d{1,20}$/.test(p.offset)) return { error: 'param_invalid' };
+            qs += '&offset=' + p.offset;
+          }
+          return { method: 'GET', url: 'https://api.telegram.org/bot' + encodeURIComponent(token) + '/getUpdates' + qs, headers: {}, body: null };
+        } },
+      { id: 'get_chat', label: 'Read one chat by id', scope: 'chats.read', kind: 'read_only',
+        params: [{ name: 'chat_id', required: true, maxLength: 21 }],
+        build: function (p, token) {
+          if (!/^-?\d{1,20}$/.test(p.chat_id)) return { error: 'param_invalid' };
+          return { method: 'GET', url: 'https://api.telegram.org/bot' + encodeURIComponent(token) + '/getChat?chat_id=' + encodeURIComponent(p.chat_id), headers: {}, body: null };
         } },
       { id: 'send_message', label: 'Send a message to a chat', scope: 'message.send', kind: 'send',
         params: [{ name: 'chat_id', required: true, maxLength: 80 }, { name: 'text', required: true, maxLength: 4000 }],

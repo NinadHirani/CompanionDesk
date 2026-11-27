@@ -207,3 +207,38 @@ write approval lifecycle on a calendar event (refuse, run once, dead),
 scope/connected refusals for events.write, param refusal before
 approval burn, the AI tool never passing an approvalId for a calendar
 write, and the panel's calendar-write two-step confirm. Suite 1471/1471.
+
+## Batch 5 (27 Nov 2026): reads for the thin messaging adapters
+
+Discord and Telegram carried only two actions each, so the batch
+widens the useful read surface of the three messaging adapters while
+keeping every send exactly where it was:
+
+- **Slack `list_users`** (users.read): lists people in the workspace
+  with an optional limit capped at 100 (default 50). A new read-only
+  users.read scope joins Slack's catalog row.
+- **Discord `list_channels`** (guilds.read): lists channels in a guild;
+  snowflake ids validated. **`get_channel`** and
+  **`list_channel_messages`** (new read-only channels.read scope,
+  added to Discord's catalog row): read one channel and its recent
+  messages with the limit capped at 100 (default 20).
+- **Telegram `get_updates`** (chats.read): reads recent messages and
+  updates sent to the bot, optional numeric offset and limit capped at
+  100 (default 20); deliberately no long-poll timeout so a call can
+  never hold. **`get_chat`** (chats.read): reads one chat by numeric
+  id, negative group ids allowed.
+
+All new actions are read-only: they run after connect once their scope
+is granted, need no approval, and every existing send still needs the
+per-action approval and panel two-step confirm. The new Discord scope
+means a future reconnect grants channel reads; existing connections
+keep their old grant until the user reconnects.
+
+AI adapters (OpenAI, Anthropic, Gemini) stay at their two actions:
+list_models plus one send. A second generate variant would duplicate
+the same call shape, so nothing was added there.
+
+Tests: builds and validation for all five new reads (limits, snowflake
+and numeric-id rules, no long-poll), declarations, reads running with
+no approval, and scope_not_granted when the new scope was not granted.
+Suite 1478/1478.

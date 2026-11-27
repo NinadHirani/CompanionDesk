@@ -307,3 +307,58 @@ test('both calendar providers declare create_event identically as a gated write'
     assert.equal(adapters.validateOnly(id, 'create_event', {}), 'param_missing', 'validateOnly works with no credential at all');
   }
 });
+
+// ---- batch 5 (27 Nov 2026): read actions for the thin messaging adapters ----
+
+test('slack list_users builds a scoped directory read with a bounded limit', () => {
+  const ok = adapters.buildRequest('slack', 'list_users', {}, 'xoxb-tok');
+  assert.equal(ok.ok, true);
+  assert.equal(ok.request.method, 'GET');
+  assert.equal(ok.request.url, 'https://slack.com/api/users.list?limit=50');
+  const lim = adapters.buildRequest('slack', 'list_users', { limit: '5' }, 'xoxb-tok');
+  assert.equal(lim.request.url, 'https://slack.com/api/users.list?limit=5');
+  assert.equal(adapters.buildRequest('slack', 'list_users', { limit: '300' }, 'xoxb-tok').reason, 'param_invalid', 'limit is capped');
+  const a = adapters.listActions('slack').find((x) => x.id === 'list_users');
+  assert.equal(a.kind, 'read_only');
+  assert.equal(a.scope, 'users.read');
+});
+
+test('discord channel reads validate snowflake ids and cap the message limit', () => {
+  const cred = 'bot-token';
+  const lc = adapters.buildRequest('discord', 'list_channels', { guild_id: '123456789012345678' }, cred);
+  assert.equal(lc.ok, true);
+  assert.equal(lc.request.url, 'https://discord.com/api/v10/guilds/123456789012345678/channels');
+  assert.equal(adapters.buildRequest('discord', 'list_channels', { guild_id: 'not-a-snowflake' }, cred).reason, 'param_invalid');
+  const gc = adapters.buildRequest('discord', 'get_channel', { channel_id: '123456789012345678' }, cred);
+  assert.equal(gc.ok, true);
+  assert.equal(gc.request.url, 'https://discord.com/api/v10/channels/123456789012345678');
+  const lm = adapters.buildRequest('discord', 'list_channel_messages', { channel_id: '123456789012345678' }, cred);
+  assert.equal(lm.request.url, 'https://discord.com/api/v10/channels/123456789012345678/messages?limit=20');
+  const lm5 = adapters.buildRequest('discord', 'list_channel_messages', { channel_id: '123456789012345678', limit: '5' }, cred);
+  assert.equal(lm5.request.url, 'https://discord.com/api/v10/channels/123456789012345678/messages?limit=5');
+  assert.equal(adapters.buildRequest('discord', 'list_channel_messages', { channel_id: '123456789012345678', limit: '300' }, cred).reason, 'param_invalid');
+  assert.equal(adapters.buildRequest('discord', 'get_channel', { channel_id: 'drop table' }, cred).reason, 'param_invalid');
+  for (const id of ['list_channels', 'get_channel', 'list_channel_messages']) {
+    const a = adapters.listActions('discord').find((x) => x.id === id);
+    assert.equal(a.kind, 'read_only', id + ' is a read');
+  }
+  assert.equal(adapters.listActions('discord').find((x) => x.id === 'list_channels').scope, 'guilds.read');
+  assert.equal(adapters.listActions('discord').find((x) => x.id === 'list_channel_messages').scope, 'channels.read');
+});
+
+test('telegram reads validate ids and cap limits without long-polling', () => {
+  const cred = 'bot-token';
+  const gu = adapters.buildRequest('telegram', 'get_updates', {}, cred);
+  assert.equal(gu.ok, true);
+  assert.equal(gu.request.url, 'https://api.telegram.org/bot' + encodeURIComponent(cred) + '/getUpdates?limit=20');
+  const gu2 = adapters.buildRequest('telegram', 'get_updates', { limit: '3', offset: '987654321' }, cred);
+  assert.equal(gu2.request.url, 'https://api.telegram.org/bot' + encodeURIComponent(cred) + '/getUpdates?limit=3&offset=987654321');
+  assert.equal(adapters.buildRequest('telegram', 'get_updates', { offset: 'abc' }, cred).reason, 'param_invalid', 'offset must be numeric');
+  assert.equal(adapters.buildRequest('telegram', 'get_updates', { limit: '500' }, cred).reason, 'param_invalid');
+  const gc = adapters.buildRequest('telegram', 'get_chat', { chat_id: '-1001234567890' }, cred);
+  assert.equal(gc.ok, true, 'group chat ids may be negative');
+  assert.equal(gc.request.url, 'https://api.telegram.org/bot' + encodeURIComponent(cred) + '/getChat?chat_id=-1001234567890');
+  assert.equal(adapters.buildRequest('telegram', 'get_chat', { chat_id: '@channelname' }, cred).reason, 'param_invalid', 'only numeric chat ids allowed');
+  assert.equal(adapters.listActions('telegram').find((x) => x.id === 'get_updates').kind, 'read_only');
+  assert.equal(adapters.listActions('telegram').find((x) => x.id === 'get_chat').scope, 'chats.read');
+});
