@@ -359,3 +359,27 @@ test('the huggingface adapter runs its reads after connect and refuses without s
   const r2 = await engine.run('huggingface', 'list_models', { search: 'qiskit' });
   assert.equal(r2.ok, true);
 });
+
+// ---- batch 7 (27 Nov 2026): public connectors run keyless behind the connect gate ----
+
+test('public research connectors run with no credential once connected', async () => {
+  const { catalog, engine } = makeEngine(async () => ({ status: 200, body: '{}' }), null);
+  assert.equal((await engine.run('arxiv', 'search_papers', { query: 'qaoa' })).reason, 'not_connected');
+  const c = catalog.connect('arxiv', { userInitiated: true, scopes: ['papers.read'] });
+  assert.equal(c.ok, true, 'a public API connects with no credential ref');
+  const r = await engine.run('arxiv', 'search_papers', { query: 'qaoa' });
+  assert.equal(r.ok, true, 'the read runs with no credential at all');
+  catalog.connect('crossref', { userInitiated: true, scopes: ['works.read'] });
+  const r2 = await engine.run('crossref', 'get_work', { doi: '10.1234/abc' });
+  assert.equal(r2.ok, true);
+  catalog.connect('openalex', { userInitiated: true, scopes: ['works.read'] });
+  const r3 = await engine.run('openalex', 'search_works', { search: 'qubo' });
+  assert.equal(r3.ok, true);
+});
+
+test('the connect gate still holds for public connectors: no scopes, no run', async () => {
+  const { catalog, engine } = makeEngine(async () => ({ status: 200, body: '{}' }), null);
+  assert.equal(catalog.connect('arxiv', { userInitiated: true, scopes: [] }).reason, 'requires_explicit_scopes');
+  assert.equal(catalog.connect('arxiv', {}).reason, 'requires_user_action');
+  assert.equal((await engine.run('arxiv', 'get_paper', { id: '2310.1' })).reason, 'not_connected');
+});

@@ -12,7 +12,7 @@ const assert = require('node:assert');
 const adapters = require('../src/connector-adapters.js');
 const { createConnectorCatalog } = require('../src/connectors.js');
 
-const IMPLEMENTED = ['anthropic', 'discord', 'github', 'gmail', 'google-calendar', 'google-drive', 'google-gemini', 'microsoft-calendar', 'microsoft-onedrive', 'microsoft-outlook', 'notion', 'openai', 'slack', 'telegram', 'huggingface'];
+const IMPLEMENTED = ['anthropic', 'arxiv', 'crossref', 'discord', 'github', 'gmail', 'google-calendar', 'google-drive', 'google-gemini', 'huggingface', 'microsoft-calendar', 'microsoft-onedrive', 'microsoft-outlook', 'notion', 'openai', 'openalex', 'slack', 'telegram'];
 const OAUTH = ['gmail', 'google-calendar', 'google-drive', 'microsoft-calendar', 'microsoft-onedrive', 'microsoft-outlook'];
 
 test('the adapter registry covers exactly the implemented catalog entries', () => {
@@ -415,4 +415,50 @@ test('the new huggingface adapter reads the Hub with a plain token', () => {
     assert.equal(a.scope, 'models.read');
   }
   assert.deepEqual(adapters.validateOnly('huggingface', 'whoami', {}), null, 'validateOnly needs no credential');
+});
+
+// ---- batch 7 (27 Nov 2026): public research connectors, read-only ----
+
+test('arxiv search and lookup build safe public GETs with no credential', () => {
+  const s = adapters.buildRequest('arxiv', 'search_papers', { query: 'QAOA vehicle routing' });
+  assert.equal(s.ok, true);
+  assert.equal(s.request.method, 'GET');
+  assert.equal(s.request.url, 'https://export.arxiv.org/api/query?search_query=all:' + encodeURIComponent('QAOA vehicle routing') + '&start=0&max_results=20');
+  assert.equal(s.request.headers.Authorization, undefined, 'no credential rides a public call');
+  const g = adapters.buildRequest('arxiv', 'get_paper', { id: '2310.12345v2' });
+  assert.equal(g.ok, true);
+  assert.equal(g.request.url, 'https://export.arxiv.org/api/query?id_list=2310.12345v2&max_results=1');
+  assert.equal(adapters.buildRequest('arxiv', 'get_paper', { id: 'bad id!' }).reason, 'param_invalid');
+  assert.equal(adapters.buildRequest('arxiv', 'search_papers', { query: 'q', limit: '500' }).reason, 'param_invalid');
+  assert.equal(adapters.validateOnly('arxiv', 'get_paper', { id: 'ok.id' }), null, 'validateOnly needs no credential');
+});
+
+test('crossref work search and DOI lookup validate the DOI shape', () => {
+  const s = adapters.buildRequest('crossref', 'search_works', { query: 'quantum annealing', limit: '5' });
+  assert.equal(s.ok, true);
+  assert.equal(s.request.url, 'https://api.crossref.org/works?query=' + encodeURIComponent('quantum annealing') + '&rows=5');
+  const g = adapters.buildRequest('crossref', 'get_work', { doi: '10.1234/abc.def' });
+  assert.equal(g.request.url, 'https://api.crossref.org/works/10.1234%2Fabc.def');
+  assert.equal(adapters.buildRequest('crossref', 'get_work', { doi: 'not-a-doi' }).reason, 'param_invalid');
+  assert.equal(adapters.buildRequest('crossref', 'search_works', {}).reason, 'param_missing');
+});
+
+test('openalex search and work lookup accept OpenAlex ids and DOIs', () => {
+  const s = adapters.buildRequest('openalex', 'search_works', { search: 'quantum' });
+  assert.equal(s.request.url, 'https://api.openalex.org/works?search=quantum&per-page=20');
+  const w = adapters.buildRequest('openalex', 'get_work', { work_id: 'W2741809807' });
+  assert.equal(w.request.url, 'https://api.openalex.org/works/W2741809807');
+  const d = adapters.buildRequest('openalex', 'get_work', { work_id: 'doi:10.1234/x' });
+  assert.equal(d.request.url, 'https://api.openalex.org/works/doi%3A10.1234%2Fx');
+  assert.equal(adapters.buildRequest('openalex', 'get_work', { work_id: 'javascript:alert(1)' }).reason, 'param_invalid');
+  assert.equal(adapters.buildRequest('openalex', 'search_works', { search: 'q', limit: '500' }).reason, 'param_invalid');
+});
+
+test('the three research adapters are read-only under declared scopes', () => {
+  for (const pair of [['arxiv', 'papers.read'], ['crossref', 'works.read'], ['openalex', 'works.read']]) {
+    for (const a of adapters.listActions(pair[0])) {
+      assert.equal(a.kind, 'read_only', pair[0] + '.' + a.id + ' is a read');
+      assert.equal(a.scope, pair[1]);
+    }
+  }
 });

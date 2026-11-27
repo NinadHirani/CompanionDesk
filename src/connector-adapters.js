@@ -359,6 +359,70 @@
     ],
   };
 
+  ADAPTERS.arxiv = {
+    id: 'arxiv', name: 'arXiv', authShape: 'public', setupRequired: false,
+    setupNote: 'no account or key needed: the arXiv API is public and free; keep usage gentle (about one request every 3 seconds)',
+    buildHeaders: function () { return { 'User-Agent': 'CompanionDesk', Accept: 'application/atom+xml, application/json;q=0.8' }; },
+    actions: [
+      { id: 'search_papers', label: 'Search arXiv for papers', scope: 'papers.read', kind: 'read_only',
+        params: [{ name: 'query', required: true, maxLength: 200 }, { name: 'limit', required: false, maxLength: 3 }],
+        build: function (p) {
+          const limit = optionalInt(p, 'limit', 20);
+          if (limit === null) return { error: 'param_invalid' };
+          return { method: 'GET', url: 'https://export.arxiv.org/api/query?search_query=all:' + encodeURIComponent(p.query) + '&start=0&max_results=' + limit, headers: this.buildHeaders(), body: null };
+        } },
+      { id: 'get_paper', label: 'Read one paper by arXiv id', scope: 'papers.read', kind: 'read_only',
+        params: [{ name: 'id', required: true, maxLength: 60 }],
+        build: function (p) {
+          if (!/^[A-Za-z0-9][A-Za-z0-9.\-\/]*$/.test(p.id)) return { error: 'param_invalid' };
+          return { method: 'GET', url: 'https://export.arxiv.org/api/query?id_list=' + encodeURIComponent(p.id) + '&max_results=1', headers: this.buildHeaders(), body: null };
+        } },
+    ],
+  };
+
+  ADAPTERS.crossref = {
+    id: 'crossref', name: 'Crossref', authShape: 'public', setupRequired: false,
+    setupNote: 'no account or key needed: the Crossref REST API is public; the optional polite-pool mailto parameter is not sent by this build',
+    buildHeaders: function () { return { 'User-Agent': 'CompanionDesk', Accept: 'application/json' }; },
+    actions: [
+      { id: 'search_works', label: 'Search Crossref for scholarly works', scope: 'works.read', kind: 'read_only',
+        params: [{ name: 'query', required: true, maxLength: 200 }, { name: 'limit', required: false, maxLength: 3 }],
+        build: function (p) {
+          const limit = optionalInt(p, 'limit', 20);
+          if (limit === null) return { error: 'param_invalid' };
+          return { method: 'GET', url: 'https://api.crossref.org/works?query=' + encodeURIComponent(p.query) + '&rows=' + limit, headers: this.buildHeaders(), body: null };
+        } },
+      { id: 'get_work', label: 'Read one work by DOI', scope: 'works.read', kind: 'read_only',
+        params: [{ name: 'doi', required: true, maxLength: 200 }],
+        build: function (p) {
+          if (!/^10\.[0-9]{4,9}\//.test(p.doi)) return { error: 'param_invalid' };
+          return { method: 'GET', url: 'https://api.crossref.org/works/' + encodeURIComponent(p.doi), headers: this.buildHeaders(), body: null };
+        } },
+    ],
+  };
+
+  ADAPTERS.openalex = {
+    id: 'openalex', name: 'OpenAlex', authShape: 'public', setupRequired: false,
+    setupNote: 'no account or key needed: the OpenAlex API is public and free; the optional polite-pool mailto parameter is not sent by this build',
+    buildHeaders: function () { return { 'User-Agent': 'CompanionDesk', Accept: 'application/json' }; },
+    actions: [
+      { id: 'search_works', label: 'Search OpenAlex for scholarly works', scope: 'works.read', kind: 'read_only',
+        params: [{ name: 'search', required: true, maxLength: 200 }, { name: 'limit', required: false, maxLength: 3 }],
+        build: function (p) {
+          const limit = optionalInt(p, 'limit', 20);
+          if (limit === null) return { error: 'param_invalid' };
+          return { method: 'GET', url: 'https://api.openalex.org/works?search=' + encodeURIComponent(p.search) + '&per-page=' + limit, headers: this.buildHeaders(), body: null };
+        } },
+      { id: 'get_work', label: 'Read one work by OpenAlex id or DOI', scope: 'works.read', kind: 'read_only',
+        params: [{ name: 'work_id', required: true, maxLength: 200 }],
+        build: function (p) {
+          const okShape = /^W[0-9]{1,15}$/.test(p.work_id) || /^(doi:)?10\.[0-9]{4,9}\/[A-Za-z0-9._()\-\/]+$/.test(p.work_id);
+          if (!okShape) return { error: 'param_invalid' };
+          return { method: 'GET', url: 'https://api.openalex.org/works/' + encodeURIComponent(p.work_id), headers: this.buildHeaders(), body: null };
+        } },
+    ],
+  };
+
   ADAPTERS['google-gemini'] = {
     id: 'google-gemini', name: 'Google Gemini', authShape: 'url_token', setupRequired: false,
     setupNote: 'paste your own API key from aistudio.google.com; the free tier has request limits',
@@ -625,7 +689,9 @@
     const bad = validateParams(action, params);
     if (bad) return fail(bad);
     let cred;
-    if (a.authShape === 'oauth_json') {
+    if (a.authShape === 'public') {
+      cred = { ok: true };
+    } else if (a.authShape === 'oauth_json') {
       cred = parseOauthCredential(credential);
       if (!cred.ok) return cred;
     } else {
@@ -634,6 +700,7 @@
     }
     let req;
     if (a.authShape === 'oauth_json') req = action.build.call(a, params || {}, cred.blob);
+    else if (a.authShape === 'public') req = action.build.call(a, params || {});
     else req = action.build.call(a, params || {}, cred.token);
     if (!req || req.error) return fail((req && req.error) || 'request_build_failed');
     if (!/^https:\/\//.test(req.url)) return fail('url_invalid');

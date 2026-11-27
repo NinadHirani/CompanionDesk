@@ -14,7 +14,7 @@ const assert = require('node:assert');
 const { createConnectorCatalog } = require('../src/connectors.js');
 
 const EXPECTED_TOTAL = 183;
-const EXPECTED_DEFINITION_ONLY = 151; // definition-only curated + expanded after the 27 Nov adapter batch
+const EXPECTED_DEFINITION_ONLY = 148; // definition-only curated + expanded after the 27 Nov adapter batch
 
 test('the catalog is the expanded set with no duplicate ids or names', () => {
   const c = createConnectorCatalog({});
@@ -53,7 +53,7 @@ test('every entry carries complete metadata: provider, category, auth, cost, lim
 test('every new expanded entry is least-privilege with a read-only baseline scope', () => {
   const c = createConnectorCatalog({});
   const expanded = c.list().filter(e => e.integrationImplemented === false && e.id !== 'slack' && e.id !== 'discord' && e.id !== 'notion' && e.id !== 'dropbox' && e.id !== 'google-drive' && e.id !== 'gmail' && e.id !== 'google-calendar' && e.id !== 'microsoft-onedrive' && e.id !== 'microsoft-outlook' && e.id !== 'telegram' && e.id !== 'youtube' && e.id !== 'spotify' && e.id !== 'zoom');
-  assert.equal(expanded.length, 147, 'the 147 still-definition-only expanded entries carry the marker (google-gemini and anthropic now have adapters)');
+  assert.equal(expanded.length, 144, 'the 144 still-definition-only expanded entries carry the marker (arXiv, Crossref and OpenAlex now have adapters too)');
   for (const e of expanded) {
     assert.ok(e.scopes.some(s => s.class === 'read_only'), e.id + ' has a read-only baseline scope');
   }

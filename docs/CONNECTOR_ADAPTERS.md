@@ -268,3 +268,41 @@ No duplicate or no-op actions were added for count.
 Tests: builds and validation for all six additions, declarations, the
 registry-parity set updated for Hugging Face, reads running with no
 approval, and the new adapter refusing without its scope. Suite 1484/1484.
+
+## Batch 7 (27 Nov 2026): public research connectors (arXiv, Crossref, OpenAlex)
+
+Three read-only adapters for public scholarly APIs, all keyless. Their catalog entries already existed as definition-only rows in the expanded tier; batch 7 implements them in place and marks the rows implemented:
+
+- **arXiv** (`papers.read`): `search_papers` (query + optional limit,
+  max_results capped at 100, default 20) and `get_paper` (one arXiv id,
+  charset-validated). The API returns Atom XML, which the executor keeps
+  as raw text when it is not JSON.
+- **Crossref** (`works.read`): `search_works` (query, rows capped at
+  100, default 20) and `get_work` (DOI validated against the
+  `10.registrar/suffix` shape before it is URL-encoded).
+- **OpenAlex** (`works.read`): `search_works` (search, per-page capped
+  at 100, default 20) and `get_work` (accepts an OpenAlex id `W...` or a
+  DOI, optionally `doi:`-prefixed, charset-validated).
+
+Architecture change, kept explicit and small: a new `public` authShape.
+These APIs need no account, no key and no vault entry, so
+
+- `connect` accepts a missing `credentialRef` only for catalog entries
+  with `auth: 'none'` (a passed ref is still validated);
+- the action engine skips credential resolution for `public` adapters;
+  the connect + scope gate stays the whole consent story;
+- no Authorization header is ever built for these calls, and no secret
+  is requested in chat or stored.
+
+Politeness is documented, not encoded as a shared secret: arXiv asks
+for about one request every 3 seconds; Crossref and OpenAlex offer an
+optional polite-pool `mailto` parameter which this build does not send.
+Rate limits live on each catalog row. No write actions exist for any
+of the three; sends and writes elsewhere keep their per-action approval
+and panel confirm. No duplicate or no-op actions were added for count.
+
+Tests: builds and validation for all six actions, DOI and id shape
+checks, declarations, the registry-parity set extended, keyless connect
+(no ref, invalid ref refused, valid ref accepted), the engine running
+public actions with no credential reader, and the connect gate still
+refusing an unscoped or non-user-initiated connect. Suite 1491/1491.

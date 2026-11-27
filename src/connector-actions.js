@@ -204,12 +204,19 @@
       if (!authz.allowed) return { ok: false, reason: authz.reason };
 
       const credential = credentialReader ? credentialReader(id) : null;
-      if (typeof credential !== 'string' || credential.length === 0) return { ok: false, reason: 'credential_missing' };
+      // Batch 7 (27 Nov 2026): authShape 'public' adapters call keyless
+      // public APIs; no credential exists to resolve and the connect +
+      // scope gate above is the whole consent story.
+      let credentialForBuild = credential;
+      if (adapter.authShape === 'public') {
+        credentialForBuild = null;
+      } else if (typeof credential !== 'string' || credential.length === 0) {
+        return { ok: false, reason: 'credential_missing' };
+      }
 
       // OAuth lifecycle: an expired (or near-expiry) access token is
       // refreshed BEFORE the action, using the adapter's own refresh
       // request, and the rotated blob is written back to the vault.
-      let credentialForBuild = credential;
       if (adapter.authShape === 'oauth_json' && connectorTokens) {
         const parsed = connectorTokens.parseBlob(credential);
         if (!parsed.ok) return { ok: false, reason: parsed.reason };

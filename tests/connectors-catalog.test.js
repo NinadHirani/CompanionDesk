@@ -142,3 +142,15 @@ test('audit carries accepted state changes only, with ids, actions and scopes; r
   assert.deepEqual(log[log.length - 1].scopes, ['repos.read']);
   assert.equal(JSON.stringify(log).includes('keychain:gh-1'), false, 'audit entries carry no credential references');
 });
+
+// ---- batch 7 (27 Nov 2026): keyless public connectors ----
+
+test('keyless public connectors connect without a credential reference', () => {
+  const c = cc.createConnectorCatalog({});
+  const r = c.connect('arxiv', { scopes: ['papers.read'], userInitiated: true });
+  assert.equal(r.ok, true, 'a public API needs no vault ref');
+  const bad = c.connect('crossref', { scopes: ['works.read'], userInitiated: true, credentialRef: 'not a ref!' });
+  assert.equal(bad.reason, 'credential_ref_invalid', 'a given ref is still validated');
+  const secreted = c.connect('openalex', { scopes: ['works.read'], userInitiated: true, credentialRef: 'vault:oa-cred' });
+  assert.equal(secreted.ok, true, 'a ref stays accepted when one is given');
+});
