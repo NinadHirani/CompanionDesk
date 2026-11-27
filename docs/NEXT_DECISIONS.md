@@ -81,6 +81,50 @@ the new entries up automatically. Catalog is 33 entries; connector-tool
 count test and the doc-sync test updated (docs/CONNECTOR_CATALOG.md table
 regenerated from the live catalog). Suite 1398 tests, selftest PASS.
 
+Follow-on (27 Nov 2026 ~17:40 IST, catalog breadth expansion, Ninad's explicit
+request "expand the connector catalog to as huge a variety as practical" on
+main): the catalog grew 33 -> 182 entries across 26 categories. Added 149
+curated expanded-tier entries (every one integrationImplemented: false with an
+honest readinessNote, refused at authorizeCall even when connected) spanning
+productivity (Google Docs/Sheets, Airtable, Confluence, Trello, Asana,
+ClickUp, monday.com, Linear, Evernote, Todoist, TickTick), automation (Zapier,
+Make, IFTTT), calendar/meetings (Cal.com, Calendly, MS Teams, Google Meet),
+messaging (WhatsApp, Signal, Google Chat, Rocket.Chat, LINE), email
+(SendGrid, Mailgun, Postmark, Proton Mail, Fastmail, Zoho Mail), developer
+(Bitbucket, Jira, Azure DevOps, CircleCI, Jenkins, Vercel, Netlify, Railway,
+Render, Fly.io, Supabase, Docker Hub, npm, PyPI, Heroku, Kaggle), monitoring
+(Sentry, PagerDuty, Datadog, New Relic, Uptime Kuma, Better Stack), cloud
+(AWS S3, GCS, Azure Blob, Backblaze B2, Wasabi, Cloudflare, DigitalOcean,
+Hetzner, iCloud), AI (Anthropic, Gemini, Mistral, Cohere, xAI, Groq, Together,
+OpenRouter, Perplexity, Replicate, ElevenLabs, Stability, Deepgram,
+AssemblyAI, Pinecone, Qdrant, Weaviate, LM Studio), business (HubSpot,
+Salesforce, Pipedrive, Zoho CRM, Intercom, Freshdesk, Zendesk, Mailchimp,
+Shopify, Square, WooCommerce, Gumroad), finance (Stripe, Razorpay, Xero,
+QuickBooks, Plaid, Zerodha Kite, Upstox, Coinbase, Splitwise), analytics
+(GA4, PostHog, Amplitude, Mixpanel, Plausible, Matomo, Metabase), media
+(Google Photos, Vimeo, Twitch, SoundCloud, Deezer, TMDB, Trakt, AniList,
+Goodreads, Unsplash, Pexels, MusicBrainz), social (Instagram, X, Reddit,
+Bluesky, LinkedIn, Pinterest, TikTok, Threads, Flickr), education (Canvas,
+Moodle, Google Classroom, Udemy), research (OpenAlex, arXiv, Crossref),
+travel (Amadeus, Booking.com, Tripadvisor, Uber), maps (Google Maps Platform,
+OpenStreetMap, Mapbox), smart home (Philips Hue, Tuya, SmartThings, Nest,
+Ring, ESPHome). A provider field was added to EVERY entry (list() and
+describe() now pass it through). Every expanded entry also gained a
+read-only baseline scope (15 send-only entries got models/stats/domains/etc.
+read scopes) so least-privilege holds catalog-wide. No security, persistence
+or consent gate changed: AUTO_CONNECT stays false, the explicit
+user-selected-scope connect gate, HTTPS custom-URL validation,
+no-embedded-secrets rule, disconnect/revoke/readmit semantics and the
+approval classes are untouched. New tests/connector-catalog-expanded.test.js
+(6 tests) pins the count, metadata completeness, least-privilege baseline,
+honest labelling + authorizeCall refusal for all 162 definition-only entries,
+26-category coverage and dedupe; connector-tool count test updated 33 -> 182;
+doc table regenerated with a provider column. Suite 1404 tests, selftest PASS.
+Next decision is WHICH services get real adapters first (each adapter must
+honor the same explicit-connect + scope-approval + credential-vault flow);
+still nothing connects by itself and no credential is requested anywhere.
+
+
 Follow-on (27 Nov 2026 evening, marketplace slice, same authorization):
 Ninad asked for a real Connector Catalog/Marketplace UI on main. Landed:
 the Connectors section gained a client-side search box and category filter,
