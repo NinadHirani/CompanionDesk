@@ -12,7 +12,7 @@ const assert = require('node:assert');
 const adapters = require('../src/connector-adapters.js');
 const { createConnectorCatalog } = require('../src/connectors.js');
 
-const IMPLEMENTED = ['anthropic', 'discord', 'github', 'gmail', 'google-calendar', 'google-drive', 'google-gemini', 'microsoft-calendar', 'microsoft-onedrive', 'microsoft-outlook', 'notion', 'openai', 'slack', 'telegram'];
+const IMPLEMENTED = ['anthropic', 'discord', 'github', 'gmail', 'google-calendar', 'google-drive', 'google-gemini', 'microsoft-calendar', 'microsoft-onedrive', 'microsoft-outlook', 'notion', 'openai', 'slack', 'telegram', 'huggingface'];
 const OAUTH = ['gmail', 'google-calendar', 'google-drive', 'microsoft-calendar', 'microsoft-onedrive', 'microsoft-outlook'];
 
 test('the adapter registry covers exactly the implemented catalog entries', () => {
@@ -361,4 +361,58 @@ test('telegram reads validate ids and cap limits without long-polling', () => {
   assert.equal(adapters.buildRequest('telegram', 'get_chat', { chat_id: '@channelname' }, cred).reason, 'param_invalid', 'only numeric chat ids allowed');
   assert.equal(adapters.listActions('telegram').find((x) => x.id === 'get_updates').kind, 'read_only');
   assert.equal(adapters.listActions('telegram').find((x) => x.id === 'get_chat').scope, 'chats.read');
+});
+
+// ---- batch 6 (27 Nov 2026): practical reads + one new API-key provider ----
+
+test('github pull-request and commit reads build safe GETs', () => {
+  const cred = 'ghp-tok';
+  const pr = adapters.buildRequest('github', 'list_pull_requests', { owner: 'NinadHirani', repo: 'CompanionDesk' }, cred);
+  assert.equal(pr.ok, true);
+  assert.equal(pr.request.method, 'GET');
+  assert.equal(pr.request.url, 'https://api.github.com/repos/NinadHirani/CompanionDesk/pulls?state=open&per_page=20');
+  const co = adapters.buildRequest('github', 'list_commits', { owner: 'NinadHirani', repo: 'CompanionDesk' }, cred);
+  assert.equal(co.ok, true);
+  assert.equal(co.request.url, 'https://api.github.com/repos/NinadHirani/CompanionDesk/commits?per_page=20');
+  assert.equal(adapters.listActions('github').find((x) => x.id === 'list_pull_requests').scope, 'repos.read');
+  assert.equal(adapters.listActions('github').find((x) => x.id === 'list_commits').kind, 'read_only');
+});
+
+test('notion page blocks read builds a bounded GET', () => {
+  const r = adapters.buildRequest('notion', 'get_page_blocks', { page_id: 'abc-123' }, 'secret');
+  assert.equal(r.ok, true);
+  assert.equal(r.request.method, 'GET');
+  assert.equal(r.request.url, 'https://api.notion.com/v1/blocks/abc-123/children?page_size=100');
+  assert.equal(adapters.listActions('notion').find((x) => x.id === 'get_page_blocks').scope, 'pages.read');
+});
+
+test('slack channel history read validates the limit and channel param', () => {
+  const cred = 'xoxb-tok';
+  const r = adapters.buildRequest('slack', 'get_channel_history', { channel: 'C123' }, cred);
+  assert.equal(r.ok, true);
+  assert.equal(r.request.url, 'https://slack.com/api/conversations.history?channel=C123&limit=20');
+  const r5 = adapters.buildRequest('slack', 'get_channel_history', { channel: 'C123', limit: '5' }, cred);
+  assert.equal(r5.request.url, 'https://slack.com/api/conversations.history?channel=C123&limit=5');
+  assert.equal(adapters.buildRequest('slack', 'get_channel_history', { channel: 'C123', limit: '500' }, cred).reason, 'param_invalid');
+  assert.equal(adapters.listActions('slack').find((x) => x.id === 'get_channel_history').scope, 'channels.read');
+});
+
+test('the new huggingface adapter reads the Hub with a plain token', () => {
+  const cred = 'hf-tok';
+  const w = adapters.buildRequest('huggingface', 'whoami', {}, cred);
+  assert.equal(w.ok, true);
+  assert.equal(w.request.method, 'GET');
+  assert.equal(w.request.url, 'https://huggingface.co/api/whoami-v2');
+  assert.equal(w.request.headers.Authorization, 'Bearer ' + cred);
+  const lm = adapters.buildRequest('huggingface', 'list_models', { search: 'quantum', limit: '5' }, cred);
+  assert.equal(lm.request.url, 'https://huggingface.co/api/models?limit=5&search=quantum');
+  const lmDefault = adapters.buildRequest('huggingface', 'list_models', {}, cred);
+  assert.equal(lmDefault.request.url, 'https://huggingface.co/api/models?limit=20');
+  assert.equal(adapters.buildRequest('huggingface', 'list_models', { limit: '500' }, cred).reason, 'param_invalid');
+  for (const id of ['whoami', 'list_models']) {
+    const a = adapters.listActions('huggingface').find((x) => x.id === id);
+    assert.equal(a.kind, 'read_only', id + ' is a read');
+    assert.equal(a.scope, 'models.read');
+  }
+  assert.deepEqual(adapters.validateOnly('huggingface', 'whoami', {}), null, 'validateOnly needs no credential');
 });

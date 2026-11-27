@@ -126,6 +126,16 @@
           if (!isFinite(n) || n < 1) return { error: 'param_invalid' };
           return { method: 'GET', url: 'https://api.github.com/repos/' + encodeURIComponent(p.owner) + '/' + encodeURIComponent(p.repo) + '/issues/' + n, headers: this.buildHeaders(token), body: null };
         } },
+      { id: 'list_pull_requests', label: 'List open pull requests on a repository', scope: 'repos.read', kind: 'read_only',
+        params: [{ name: 'owner', required: true, maxLength: 100 }, { name: 'repo', required: true, maxLength: 100 }],
+        build: function (p, token) {
+          return { method: 'GET', url: 'https://api.github.com/repos/' + encodeURIComponent(p.owner) + '/' + encodeURIComponent(p.repo) + '/pulls?state=open&per_page=20', headers: this.buildHeaders(token), body: null };
+        } },
+      { id: 'list_commits', label: 'List recent commits on a repository', scope: 'repos.read', kind: 'read_only',
+        params: [{ name: 'owner', required: true, maxLength: 100 }, { name: 'repo', required: true, maxLength: 100 }],
+        build: function (p, token) {
+          return { method: 'GET', url: 'https://api.github.com/repos/' + encodeURIComponent(p.owner) + '/' + encodeURIComponent(p.repo) + '/commits?per_page=20', headers: this.buildHeaders(token), body: null };
+        } },
       { id: 'create_issue', label: 'Open a new issue on a repository', scope: 'issues.write', kind: 'write',
         params: [{ name: 'owner', required: true, maxLength: 100 }, { name: 'repo', required: true, maxLength: 100 }, { name: 'title', required: true, maxLength: 200 }, { name: 'body', required: false, maxLength: 4000 }],
         build: function (p, token) {
@@ -152,6 +162,11 @@
         params: [{ name: 'page_id', required: true, maxLength: 80 }],
         build: function (p, token) {
           return { method: 'GET', url: 'https://api.notion.com/v1/pages/' + encodeURIComponent(p.page_id), headers: this.buildHeaders(token), body: null };
+        } },
+      { id: 'get_page_blocks', label: "Read a page's content blocks", scope: 'pages.read', kind: 'read_only',
+        params: [{ name: 'page_id', required: true, maxLength: 80 }],
+        build: function (p, token) {
+          return { method: 'GET', url: 'https://api.notion.com/v1/blocks/' + encodeURIComponent(p.page_id) + '/children?page_size=100', headers: this.buildHeaders(token), body: null };
         } },
       { id: 'create_page', label: 'Create a page under a parent page', scope: 'pages.write', kind: 'write',
         params: [{ name: 'parent_id', required: true, maxLength: 80 }, { name: 'title', required: true, maxLength: 200 }, { name: 'content', required: false, maxLength: 20000 }],
@@ -189,6 +204,13 @@
           const limit = optionalInt(p, 'limit', 50);
           if (limit === null) return { error: 'param_invalid' };
           return { method: 'GET', url: 'https://slack.com/api/users.list?limit=' + limit, headers: this.buildHeaders(token), body: null };
+        } },
+      { id: 'get_channel_history', label: 'Read recent messages in a channel', scope: 'channels.read', kind: 'read_only',
+        params: [{ name: 'channel', required: true, maxLength: 80 }, { name: 'limit', required: false, maxLength: 3 }],
+        build: function (p, token) {
+          const limit = optionalInt(p, 'limit', 20);
+          if (limit === null) return { error: 'param_invalid' };
+          return { method: 'GET', url: 'https://slack.com/api/conversations.history?channel=' + encodeURIComponent(p.channel) + '&limit=' + limit, headers: this.buildHeaders(token), body: null };
         } },
       { id: 'post_message', label: 'Post a message to a channel', scope: 'message.send', kind: 'send',
         params: [{ name: 'channel', required: true, maxLength: 80 }, { name: 'text', required: true, maxLength: 4000 }],
@@ -311,6 +333,28 @@
           const maxTokens = optionalInt(p, 'max_tokens', 1024);
           if (maxTokens === null) return { error: 'param_invalid' };
           return { method: 'POST', url: 'https://api.anthropic.com/v1/messages', headers: this.buildHeaders(token), body: JSON.stringify({ model: p.model, messages: messages, max_tokens: maxTokens }) };
+        } },
+    ],
+  };
+
+  ADAPTERS.huggingface = {
+    id: 'huggingface', name: 'Hugging Face', authShape: 'token', setupRequired: false,
+    setupNote: 'create a read access token at huggingface.co/settings/tokens and paste it (the account token is free; inference itself may cost on paid models)',
+    buildHeaders: function (token) { return { Authorization: 'Bearer ' + token, 'User-Agent': 'CompanionDesk', Accept: 'application/json' }; },
+    actions: [
+      { id: 'whoami', label: 'Check the token works and who it belongs to', scope: 'models.read', kind: 'read_only',
+        params: [],
+        build: function (p, token) {
+          return { method: 'GET', url: 'https://huggingface.co/api/whoami-v2', headers: this.buildHeaders(token), body: null };
+        } },
+      { id: 'list_models', label: 'List or search models on the Hub', scope: 'models.read', kind: 'read_only',
+        params: [{ name: 'search', required: false, maxLength: 200 }, { name: 'limit', required: false, maxLength: 3 }],
+        build: function (p, token) {
+          const limit = optionalInt(p, 'limit', 20);
+          if (limit === null) return { error: 'param_invalid' };
+          let url = 'https://huggingface.co/api/models?limit=' + limit;
+          if (p.search) url += '&search=' + encodeURIComponent(p.search);
+          return { method: 'GET', url: url, headers: this.buildHeaders(token), body: null };
         } },
     ],
   };

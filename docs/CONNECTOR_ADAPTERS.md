@@ -242,3 +242,29 @@ Tests: builds and validation for all five new reads (limits, snowflake
 and numeric-id rules, no long-poll), declarations, reads running with
 no approval, and scope_not_granted when the new scope was not granted.
 Suite 1478/1478.
+
+## Batch 6 (27 Nov 2026): practical reads + one new API-key provider
+
+- **GitHub `list_pull_requests` and `list_commits`** (repos.read):
+  open pull requests and recent commits for a repository, plain GETs
+  with a 20-per-page cap.
+- **Notion `get_page_blocks`** (pages.read): reads a page's content
+  blocks, page_size capped at 100.
+- **Slack `get_channel_history`** (channels.read): recent messages in a
+  channel, limit capped at 100 (default 20). The bot needs the matching
+  upstream scope (channels:history) as the setup note already says.
+- **New adapter: Hugging Face** (token auth): `whoami` checks the token
+  and `list_models` searches the Hub, both read-only under models.read.
+  Setup is honestly documented: create a read access token at
+  huggingface.co/settings/tokens and paste it. The catalog row is now
+  marked implemented and states no write actions exist yet; the
+  datasets.upload scope stays listed but unused until a real write
+  action ships.
+
+All new actions are read-only behind the same connect/scope gates;
+sends and writes keep their per-action approval and panel confirm.
+No duplicate or no-op actions were added for count.
+
+Tests: builds and validation for all six additions, declarations, the
+registry-parity set updated for Hugging Face, reads running with no
+approval, and the new adapter refusing without its scope. Suite 1484/1484.

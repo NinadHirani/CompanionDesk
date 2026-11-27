@@ -337,3 +337,25 @@ test('a read without its scope still refuses with scope_not_granted', async () =
   const r = await engine.run('discord', 'list_channel_messages', { channel_id: '123456789012345678' });
   assert.equal(r.reason, 'scope_not_granted', 'channels.read was not granted at connect');
 });
+
+// ---- batch 6 (27 Nov 2026): the new reads and the new adapter through the gates ----
+
+test('github and notion reads run with no approval once connected', async () => {
+  const { catalog, engine } = makeEngine(async () => ({ status: 200, body: '{}' }), 'ghp-tok');
+  catalog.connect('github', { userInitiated: true, scopes: ['repos.read'], credentialRef: 'vault:gh-cred' });
+  const r = await engine.run('github', 'list_pull_requests', { owner: 'NinadHirani', repo: 'CompanionDesk' });
+  assert.equal(r.ok, true, 'a granted read runs with no approval');
+  catalog.connect('notion', { userInitiated: true, scopes: ['pages.read'], credentialRef: 'vault:nt-cred' });
+  const r2 = await engine.run('notion', 'get_page_blocks', { page_id: 'abc' });
+  assert.equal(r2.ok, true);
+});
+
+test('the huggingface adapter runs its reads after connect and refuses without scope', async () => {
+  const { catalog, engine } = makeEngine(async () => ({ status: 200, body: '{"ok":1}' }), 'hf-tok');
+  assert.equal((await engine.run('huggingface', 'whoami', {})).reason, 'not_connected');
+  catalog.connect('huggingface', { userInitiated: true, scopes: ['models.read'], credentialRef: 'vault:hf-cred' });
+  const r = await engine.run('huggingface', 'whoami', {});
+  assert.equal(r.ok, true, 'a granted read runs with no approval');
+  const r2 = await engine.run('huggingface', 'list_models', { search: 'qiskit' });
+  assert.equal(r2.ok, true);
+});
