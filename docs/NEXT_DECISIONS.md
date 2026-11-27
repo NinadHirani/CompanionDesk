@@ -62,6 +62,23 @@ strict snapshot/restore pair on the catalog. No service is connected and
 no credential exists yet, so nothing is granted today.
 
 
+Follow-on (27 Nov 2026 evening, marketplace slice, same authorization):
+Ninad asked for a real Connector Catalog/Marketplace UI on main. Landed:
+the Connectors section gained a client-side search box and category filter,
+and CUSTOM CONNECTORS - the user may add a connector for an app/website
+outside the built-in catalog via an explicit form (safe auth-type allowlist
+api_key/access_token/oauth2/webhook/website, https-only URLs with loopback
+http only, no userinfo/query strings so secrets never ride in a URL, exact
+name:class scopes, 50-entry bound). Every custom row carries an honest
+readiness label and authorizeCall refuses custom entries with
+integration_not_implemented, so no custom connector can fake a working
+integration; connect still runs the unchanged explicit gate and removal
+drops the credential. New channels workspace:connectorCustomAdd /
+connectorCustomRemove (renderer gestures, main builds userInitiated), 14
+core tests + 5 panel tests, suite 1391/1391 and selftest PASS. Nothing is
+activated automatically; naming a real service and approving its scopes
+remain the owner's calls. (docs/CONNECTOR_CATALOG.md has the full rules.)
+
 Follow-on (27 Nov 2026, credential-store slice, landed under Ninad's
 continuous implementation authorization): the service-agnostic credential
 store exists (src/connector-credential-store.js, OS credential vault,

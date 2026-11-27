@@ -60,6 +60,34 @@
   const MAX_CONNECTIONS = 200;
   const MAX_AUDIT = 1000;
   const MAX_EXTRA = 400;
+  const MAX_CUSTOM = 50;
+  const CATEGORY_RE = /^[A-Za-z0-9 _-]{1,40}$/;
+  // Custom connectors (27 Nov 2026, Ninad's marketplace instruction): the
+  // safe auth-type allowlist for user-added connectors, each with its honest
+  // readiness note. Nothing here fakes a working integration: every custom
+  // connector is definition + (optional) OS-vault credential, and every
+  // authorizeCall on one is refused until a real adapter exists.
+  const CUSTOM_AUTH = Object.freeze({
+    oauth2: { urlRequired: true, readiness: 'oauth flow not implemented: this build has no provider-backed OAuth flow, so the definition and credential reference are stored but no OAuth handshake runs' },
+    api_key: { urlRequired: false, readiness: 'credential stored, integration not implemented: the API key lives in the OS credential vault, but no integration actions are implemented for custom connectors in this build' },
+    access_token: { urlRequired: false, readiness: 'credential stored, integration not implemented: the token lives in the OS credential vault, but no integration actions are implemented for custom connectors in this build' },
+    webhook: { urlRequired: true, readiness: 'URL stored, integration not implemented: the webhook URL is part of the definition, but this build never sends outbound webhook calls' },
+    website: { urlRequired: true, readiness: 'URL stored, integration not implemented: the site URL is part of the definition, but this build performs no site requests' },
+  });
+  function validCustomUrl(u) {
+    if (typeof u !== 'string' || u.length === 0 || u.length > 2048) return false;
+    // Refuse userinfo and query strings: a secret must never ride inside a
+    // stored URL.
+    if (u.indexOf('@') !== -1 || u.indexOf('?') !== -1) return false;
+    let parsed = null;
+    try { parsed = new URL(u); } catch (e) { return false; }
+    if (parsed.protocol === 'https:') return true;
+    if (parsed.protocol === 'http:') {
+      const h = parsed.hostname;
+      return h === 'localhost' || h === '127.0.0.1' || h === '[::1]';
+    }
+    return false;
+  }
 
   // The shipped catalog. Discovery data only: every entry names what it
   // would cost and how it is limited BEFORE anyone can activate it, and the
@@ -97,12 +125,15 @@
     const grants = new Map(); // id -> array of granted scope names
     const approvals = new Map(); // approvalId -> { id, scope, ts }
     const additions = [];
+    const customs = []; // user-added connector definitions, never auto-connected
     const auditLog = [];
     let approvalSeq = 0;
 
     function entry(id) {
       if (CATALOG.some(function (e) { return e.id === id; })) return CATALOG.find(function (e) { return e.id === id; });
-      return additions.find(function (e) { return e.id === id; }) || null;
+      const a = additions.find(function (e) { return e.id === id; });
+      if (a) return a;
+      return customs.find(function (e) { return e.id === id; }) || null;
     }
     function declaredScope(e, name) {
       return (e.scopes || []).find(function (s) { return s.name === name; }) || null;
@@ -112,6 +143,23 @@
       if (scopes) e.scopes = scopes.slice();
       auditLog.push(e);
       if (auditLog.length > MAX_AUDIT) auditLog.splice(0, auditLog.length - MAX_AUDIT);
+    }
+    function validateCustomDef(m) {
+      if (typeof m.id !== 'string' || !ID_RE.test(m.id)) return 'id_invalid';
+      if (typeof m.name !== 'string' || m.name.length === 0 || m.name.length > NAME_MAX) return 'name_invalid';
+      if (!CUSTOM_AUTH[m.authType]) return 'auth_type_invalid';
+      const spec = CUSTOM_AUTH[m.authType];
+      const hasUrl = m.url !== undefined && m.url !== null && m.url !== '';
+      if (spec.urlRequired && !hasUrl) return 'url_required';
+      if (hasUrl && !validCustomUrl(m.url)) return 'url_invalid';
+      if (m.costModel !== undefined && m.costModel !== null && !COST_RANK[m.costModel]) return 'cost_model_invalid';
+      if (m.category !== undefined && m.category !== null && (typeof m.category !== 'string' || !CATEGORY_RE.test(m.category))) return 'category_invalid';
+      if (m.description !== undefined && m.description !== null && (typeof m.description !== 'string' || m.description.length > 200)) return 'description_invalid';
+      if (!Array.isArray(m.scopes) || m.scopes.length === 0) return 'requires_explicit_scopes';
+      for (const s of m.scopes) {
+        if (!s || typeof s.name !== 'string' || !SCOPE_RE.test(s.name) || !SCOPE_CLASSES[s.class]) return 'scope_invalid';
+      }
+      return null;
     }
     function validateConnectArgs(e, args) {
       if (!args || args.userInitiated !== true) return 'requires_user_action';
@@ -211,6 +259,7 @@
       authorizeCall: function (id, scopeName, args) {
         const e = entry(id);
         if (!e) return { allowed: false, reason: 'unknown_connector' };
+        if (e.custom) return { allowed: false, reason: 'integration_not_implemented' };
         if ((states.get(id) || 'discovered') !== 'connected') return { allowed: false, reason: 'not_connected' };
         const s = declaredScope(e, scopeName);
         if (!s || !grants.get(id) || grants.get(id).indexOf(scopeName) === -1) return { allowed: false, reason: 'scope_not_granted' };
@@ -238,10 +287,49 @@
         pushAudit('register', m.id, null);
         return { ok: true, state: 'discovered' };
       },
+      addCustomConnector: function (m) {
+        if (!m || m.userInitiated !== true) return fail('requires_user_action');
+        const bad = validateCustomDef(m);
+        if (bad) return fail(bad);
+        if (entry(m.id)) return fail('id_taken');
+        if (customs.length >= MAX_CUSTOM) return fail('limit_reached');
+        const spec = CUSTOM_AUTH[m.authType];
+        const clean = Object.freeze({
+          id: m.id, name: m.name,
+          category: m.category || 'custom',
+          hosting: m.hosting || 'cloud',
+          costModel: m.costModel || 'free_tier',
+          auth: m.authType,
+          url: (spec.urlRequired || (m.url !== undefined && m.url !== null && m.url !== '')) ? m.url : undefined,
+          description: m.description || undefined,
+          costNote: m.costNote || undefined,
+          limits: m.limits || undefined,
+          custom: true,
+          scopes: Object.freeze(m.scopes.map(function (s) { return Object.freeze({ name: s.name, class: s.class }); })),
+        });
+        customs.push(clean);
+        states.set(m.id, 'discovered');
+        pushAudit('custom_add', m.id, null);
+        return { ok: true, state: 'discovered' };
+      },
+      removeCustomConnector: function (id, args) {
+        if (!args || args.userInitiated !== true) return fail('requires_user_action');
+        const e = entry(id);
+        if (!e) return fail('unknown_connector');
+        if (e.custom !== true) return fail('not_custom');
+        if ((states.get(id) || 'discovered') === 'connected') return fail('disconnect_first');
+        grants.delete(id);
+        for (const [aid, a] of Array.from(approvals)) if (a.id === id) approvals.delete(aid);
+        states.delete(id);
+        const idx = customs.findIndex(function (x) { return x.id === id; });
+        if (idx !== -1) customs.splice(idx, 1);
+        pushAudit('custom_remove', id, null);
+        return { ok: true, state: 'removed' };
+      },
       list: function (filter) {
         const f = filter || {};
-        let all = CATALOG.concat(additions).map(function (e) {
-          return { id: e.id, name: e.name, category: e.category, hosting: e.hosting, selfHostable: e.hosting === 'self_hostable' || e.selfHostable === true, localFirst: e.hosting === 'local' || e.localFirst === true, costModel: e.costModel, auth: e.auth, costNote: e.costNote, limits: e.limits, scopes: e.scopes.map(function (s) { return { name: s.name, class: s.class }; }) };
+        let all = CATALOG.concat(additions).concat(customs).map(function (e) {
+          return { id: e.id, name: e.name, category: e.category, hosting: e.hosting, selfHostable: e.hosting === 'self_hostable' || e.selfHostable === true, localFirst: e.hosting === 'local' || e.localFirst === true, costModel: e.costModel, auth: e.auth, costNote: e.costNote, limits: e.limits, scopes: e.scopes.map(function (s) { return { name: s.name, class: s.class }; }), custom: e.custom === true, integrationImplemented: e.custom === true ? false : undefined, url: e.url || null, description: e.description || null, readinessNote: e.custom === true ? CUSTOM_AUTH[e.auth].readiness : null };
         });
         if (f.hosting) all = all.filter(function (e) { return e.hosting === f.hosting; });
         if (f.selfHostable) all = all.filter(function (e) { return e.selfHostable; });
@@ -259,7 +347,7 @@
       describe: function (id) {
         const e = entry(id);
         if (!e) return null;
-        return { id: e.id, name: e.name, category: e.category, hosting: e.hosting, selfHostable: e.hosting === 'self_hostable' || e.selfHostable === true, localFirst: e.hosting === 'local' || e.localFirst === true, costModel: e.costModel, auth: e.auth, costNote: e.costNote, limits: e.limits, classes: e.scopes.map(function (s) { return s.class; }), scopes: e.scopes.map(function (s) { return { name: s.name, class: s.class }; }) };
+        return { id: e.id, name: e.name, category: e.category, hosting: e.hosting, selfHostable: e.hosting === 'self_hostable' || e.selfHostable === true, localFirst: e.hosting === 'local' || e.localFirst === true, costModel: e.costModel, auth: e.auth, costNote: e.costNote, limits: e.limits, classes: e.scopes.map(function (s) { return s.class; }), scopes: e.scopes.map(function (s) { return { name: s.name, class: s.class }; }), custom: e.custom === true, integrationImplemented: e.custom === true ? false : undefined, url: e.url || null, description: e.description || null, readinessNote: e.custom === true ? CUSTOM_AUTH[e.auth].readiness : null };
       },
       state: function (id) { return entry(id) ? (states.get(id) || 'discovered') : null; },
       // Persistence (27 Nov 2026 AI-access decision: a connection is
@@ -269,7 +357,14 @@
       // ids, undeclared or duplicate scopes, grants without a connected
       // state and connected states without grants are refused, not repaired.
       snapshot: function () {
-        const out = { states: [], grants: [] };
+        const out = { states: [], grants: [], customs: customs.map(function (e) {
+          const c = { id: e.id, name: e.name, category: e.category, hosting: e.hosting, costModel: e.costModel, auth: e.auth, scopes: e.scopes.map(function (s) { return { name: s.name, class: s.class }; }), custom: true };
+          if (e.url) c.url = e.url;
+          if (e.description) c.description = e.description;
+          if (e.costNote) c.costNote = e.costNote;
+          if (e.limits) c.limits = e.limits;
+          return c;
+        }) };
         for (const [id, st] of states) if (st !== 'discovered') out.states.push({ id: id, state: st });
         for (const [id, sc] of grants) out.grants.push({ id: id, scopes: sc.slice() });
         return out;
@@ -278,6 +373,16 @@
         const problems = [];
         if (!snap || !Array.isArray(snap.states) || !Array.isArray(snap.grants)) return { ok: false, problems: ['bad_snapshot'] };
         if (snap.states.length > MAX_CONNECTIONS || snap.grants.length > MAX_CONNECTIONS) return { ok: false, problems: ['limit_reached'] };
+        if (Array.isArray(snap.customs)) {
+          if (snap.customs.length > MAX_CUSTOM) return { ok: false, problems: ['limit_reached'] };
+          for (const cd of snap.customs) {
+            if (!cd || typeof cd !== 'object') { problems.push('bad_custom'); continue; }
+            const cand = { id: cd.id, name: cd.name, authType: cd.auth, url: cd.url, category: cd.category, costModel: cd.costModel, description: cd.description, costNote: cd.costNote, limits: cd.limits, scopes: cd.scopes };
+            if (validateCustomDef(cand)) { problems.push('bad_custom'); continue; }
+            if (entry(cd.id)) { problems.push('bad_custom'); continue; }
+            customs.push(Object.freeze({ id: cand.id, name: cand.name, category: cand.category || 'custom', hosting: cand.hosting || 'cloud', costModel: cand.costModel || 'free_tier', auth: cand.authType, url: cand.url || undefined, description: cand.description || undefined, costNote: cand.costNote || undefined, limits: cand.limits || undefined, custom: true, scopes: Object.freeze(cand.scopes.map(function (s) { return Object.freeze({ name: s.name, class: s.class }); })) }));
+          }
+        }
         for (const s of snap.states) {
           if (!s || typeof s.id !== 'string' || !entry(s.id)) { problems.push('unknown_connector'); continue; }
           if (['connected', 'disconnected', 'revoked'].indexOf(s.state) === -1) { problems.push('bad_state'); continue; }

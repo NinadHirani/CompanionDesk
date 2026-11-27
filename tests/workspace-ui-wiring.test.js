@@ -20,6 +20,8 @@ const CHANNELS = [
   'workspace:connectorRequests',
   'workspace:connectorCredentialSet',
   'workspace:connectorCredentialRemove',
+  'workspace:connectorCustomAdd',
+  'workspace:connectorCustomRemove',
 ];
 
 test('the allowlist, preload mirror and main handlers carry exactly the ten workspace channels', () => {

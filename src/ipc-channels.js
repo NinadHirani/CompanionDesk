@@ -137,6 +137,15 @@ const IPC_CHANNELS = Object.freeze([
   // connect gate as the user's own pick.
   'workspace:connectorRequests',
   'workspace:connectorRequestResolve',
+  // Custom connectors (27 Nov 2026, Ninad's marketplace instruction): the
+  // user may add a connector for an app/website that is not in the built-in
+  // catalog. add is an explicit renderer gesture (main builds
+  // userInitiated) and the policy core validates the auth-type allowlist,
+  // the https-only URL rules and the exact scopes; remove is refused while
+  // connected. Nothing here activates a real integration: custom entries
+  // carry an honest not-implemented label and authorizeCall refuses them.
+  'workspace:connectorCustomAdd',
+  'workspace:connectorCustomRemove',
 ]);
 
 // Messages main may PUSH to a window (streaming tokens and the like). The

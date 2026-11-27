@@ -1205,6 +1205,47 @@ app.whenReady().then(async () => {
     if (r && r.ok) CONNECTOR_CREDENTIAL_REFS.delete(id);
     return r && r.ok ? { ok: true, hasCredential: false } : r;
   });
+  // Custom connectors (27 Nov 2026, Ninad's marketplace instruction): the
+  // user adds a connector for an app/website outside the built-in catalog.
+  // The renderer click is the gesture and main builds userInitiated here;
+  // the policy core still validates the auth-type allowlist, the
+  // https-only URL rules and the exact name:class scopes. Scopes arrive as
+  // "name:class" strings so the class is always explicit and never
+  // guessed: a refused format surfaces verbatim. Removing a custom
+  // connector also drops its stored credential so nothing stale survives.
+  ipcMain.handle('workspace:connectorCustomAdd', async (_e, def) => {
+    if (!def || typeof def !== 'object') return { ok: false, reason: 'bad_request' };
+    const scopes = [];
+    if (Array.isArray(def.scopes)) {
+      for (const raw of def.scopes) {
+        if (typeof raw !== 'string') continue;
+        const cut = raw.lastIndexOf(':');
+        if (cut === -1) continue;
+        const name = raw.slice(0, cut).trim();
+        const cls = raw.slice(cut + 1).trim();
+        if (name && cls) scopes.push({ name: name, class: cls });
+      }
+    }
+    const r = workspaceConnectorCatalog.addCustomConnector({
+      userInitiated: true,
+      id: typeof def.id === 'string' ? def.id : '',
+      name: typeof def.name === 'string' ? def.name : '',
+      authType: typeof def.authType === 'string' ? def.authType : '',
+      url: typeof def.url === 'string' ? def.url : undefined,
+      category: typeof def.category === 'string' ? def.category : undefined,
+      description: typeof def.description === 'string' ? def.description : undefined,
+      costNote: typeof def.costNote === 'string' ? def.costNote : undefined,
+      scopes: scopes,
+    });
+    if (r && r.ok) saveConnectorState();
+    return r;
+  });
+  ipcMain.handle('workspace:connectorCustomRemove', async (_e, id) => {
+    if (typeof id !== 'string' || id.length === 0) return { ok: false, reason: 'bad_request' };
+    const r = workspaceConnectorCatalog.removeCustomConnector(id, { userInitiated: true });
+    if (r && r.ok) { saveConnectorState(); r.credentialRemoved = dropConnectorCredential(id); }
+    return r;
+  });
   // M5 slice 1: start the proactive delivery loop only after the surfaces
   // are registered. With no schedules and delivery off by default it is
   // inert: the first fire happens only for a schedule the user created.

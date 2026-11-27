@@ -200,7 +200,7 @@ test('connectors render with cost and limits visible and nothing connects on loa
     P.mount({ api: bridge, initialView: 'conversations' });
     const box = global.document.getElementById('ws-connectors');
     assert.ok(await until(() => box.children.length >= 2));
-    const text = box.children.map((c) => c.textContent).join(' ');
+    const text = deepText(box);
     assert.ok(text.includes('Free; RSS feeds are open by design'), 'cost visible before activation');
     assert.ok(text.includes('5,000 REST requests per hour'), 'limits visible');
     assert.strictEqual(bridge.__calls.connect.length, 0, 'no auto-connect on load');
@@ -220,7 +220,7 @@ test('the connector wait state states the activation rule up front: explicit pic
     const P = await loadPanel();
     P.mount({ api: bridge, initialView: 'conversations' });
     const box = global.document.getElementById('ws-connectors');
-    assert.ok(await until(() => box.children[0] && /connector catalog: 2 shipped, 1 connected/.test(box.children[0].textContent)));
+    assert.ok(await until(() => box.children[0] && /connector catalog: 2 listed, 1 connected/.test(box.children[0].textContent)));
     assert.ok(/explicit pick per connector/.test(box.children[0].textContent));
   } finally { uninstallDom(); }
 });
@@ -233,8 +233,8 @@ test('connecting is an explicit click that passes the entry scopes and surfaces 
     const P = await loadPanel();
     P.mount({ api: bridge, initialView: 'conversations' });
     const box = global.document.getElementById('ws-connectors');
-    assert.ok(await until(() => box.children.some((c) => c.tagName === 'button' && /Connect RSS feeds/.test(c.textContent))));
-    const connectBtn = box.children.find((c) => c.tagName === 'button' && /Connect RSS feeds/.test(c.textContent));
+    assert.ok(await until(() => !!findBtn(box, /Connect RSS feeds/)));
+    const connectBtn = findBtn(box, /Connect RSS feeds/);
     connectBtn.handlers.click[0]();
     await until(() => bridge.__calls.connect.length === 1);
     assert.deepStrictEqual(bridge.__calls.connect[0], ['rss', ['feed.read']]);
@@ -250,13 +250,13 @@ test('a connected connector offers disconnect and revoke, each on its own explic
     const P = await loadPanel();
     P.mount({ api: bridge, initialView: 'conversations' });
     const box = global.document.getElementById('ws-connectors');
-    assert.ok(await until(() => box.children.some((c) => c.tagName === 'button' && /Disconnect GitHub/.test(c.textContent))));
-    const d = box.children.find((c) => c.tagName === 'button' && /Disconnect GitHub/.test(c.textContent));
+    assert.ok(await until(() => !!findBtn(box, /Disconnect GitHub/)));
+    const d = findBtn(box, /Disconnect GitHub/);
     d.handlers.click[0]();
     await until(() => bridge.__calls.disconnect.length === 1);
     assert.strictEqual(bridge.__calls.disconnect[0], 'github');
     assert.ok(await until(() => /workspace: connector disconnected/.test(statusText())));
-    const r = box.children.find((c) => c.tagName === 'button' && /Revoke GitHub/.test(c.textContent));
+    const r = findBtn(box, /Revoke GitHub/);
     r.handlers.click[0]();
     await until(() => bridge.__calls.revoke.length === 1);
     assert.strictEqual(bridge.__calls.revoke[0], 'github');
@@ -297,6 +297,21 @@ const CATALOG_TWO = [
 ];
 
 function connectorText() { return (global.document.getElementById('ws-connectors') || {}).children || []; }
+
+// The connector rows are wrapped in per-row containers (the marketplace
+// slice added row filtering), so lookups walk the subtree instead of
+// scanning only direct children.
+function allNodes(root) {
+  const out = [];
+  const walk = (n) => { if (!n) return; out.push(n); for (const c of n.children || []) walk(c); };
+  walk(root);
+  return out.slice(1);
+}
+function deepText(root) { return allNodes(root).map((n) => n.textContent || '').join(' '); }
+function findBtn(root, re) { return allNodes(root).find((n) => n.tagName === 'button' && re.test(n.textContent || '')) || null; }
+function findInput(root, labelRe) {
+  return allNodes(root).find((n) => n.tagName === 'input' && (labelRe.test((n.attrs && n.attrs.placeholder) || '') || labelRe.test((n.attrs && n.attrs['aria-label']) || ''))) || null;
+}
 
 test('a pending AI request renders with its reason and approve/dismiss buttons', async () => {
   installDom();
@@ -351,7 +366,7 @@ test('a bridge without the optional request methods still renders the catalog', 
     const bridge = bridgeStub({ connectors: CATALOG_TWO });
     const P = await loadPanel();
     P.mount({ api: bridge, initialView: 'tasks' });
-    assert.ok(await until(() => connectorText().some((n) => /connector catalog: 2 shipped, 0 connected/.test(n.textContent))));
+    assert.ok(await until(() => connectorText().some((n) => /connector catalog: 2 listed, 0 connected/.test(n.textContent))));
     assert.equal(connectorText().some((n) => /AI request/.test(n.textContent)), false, 'no request rows invented');
   } finally { uninstallDom(); }
 });
@@ -381,8 +396,8 @@ test('a row without a stored credential shows a password field and an empty clic
     const P = await loadPanel();
     P.mount({ api: bridge, initialView: 'conversations' });
     const box = global.document.getElementById('ws-connectors');
-    assert.ok(await until(() => box.children.some((c) => c.tagName === 'input')), 'password field rendered');
-    const connectBtn = box.children.find((c) => c.tagName === 'button' && /Connect RSS feeds/.test(c.textContent));
+    assert.ok(await until(() => !!findInput(box, /credential for/)), 'password field rendered');
+    const connectBtn = findBtn(box, /Connect RSS feeds/);
     connectBtn.handlers.click[0]();
     assert.ok(await until(() => /workspace: enter a credential for RSS feeds to connect/.test(statusText())));
     assert.strictEqual(bridge.__calls.connect.length, 0, 'no connect without a credential');
@@ -398,10 +413,10 @@ test('a typed credential is saved through the bridge, the connect runs, and the 
     const P = await loadPanel();
     P.mount({ api: bridge, initialView: 'conversations' });
     const box = global.document.getElementById('ws-connectors');
-    assert.ok(await until(() => box.children.some((c) => c.tagName === 'input')));
-    const input = box.children.find((c) => c.tagName === 'input');
+    assert.ok(await until(() => !!findInput(box, /credential for/)));
+    const input = findInput(box, /credential for/);
     input.value = 'sk-secret-token';
-    const connectBtn = box.children.find((c) => c.tagName === 'button' && /Connect RSS feeds/.test(c.textContent));
+    const connectBtn = findBtn(box, /Connect RSS feeds/);
     connectBtn.handlers.click[0]();
     assert.ok(await until(() => bridge.__calls.connect.length === 1));
     assert.deepStrictEqual(bridge.__calls.credSet[0], ['rss', 'sk-secret-token'], 'the secret went to main only');
@@ -419,10 +434,10 @@ test('a failed credential save surfaces the reason verbatim and never connects',
     const P = await loadPanel();
     P.mount({ api: bridge, initialView: 'conversations' });
     const box = global.document.getElementById('ws-connectors');
-    assert.ok(await until(() => box.children.some((c) => c.tagName === 'input')));
-    const input = box.children.find((c) => c.tagName === 'input');
+    assert.ok(await until(() => !!findInput(box, /credential for/)));
+    const input = findInput(box, /credential for/);
     input.value = 'sk-secret-token';
-    const connectBtn = box.children.find((c) => c.tagName === 'button' && /Connect RSS feeds/.test(c.textContent));
+    const connectBtn = findBtn(box, /Connect RSS feeds/);
     connectBtn.handlers.click[0]();
     assert.ok(await until(() => /workspace: credential not saved: encryption_unavailable/.test(statusText())));
     assert.strictEqual(bridge.__calls.connect.length, 0, 'no connect when the credential did not save');
@@ -438,10 +453,138 @@ test('a row with a stored credential renders no credential field and connects on
     const P = await loadPanel();
     P.mount({ api: bridge, initialView: 'conversations' });
     const box = global.document.getElementById('ws-connectors');
-    assert.ok(await until(() => box.children.some((c) => c.tagName === 'button' && /Connect RSS feeds/.test(c.textContent))));
-    assert.strictEqual(box.children.some((c) => c.tagName === 'input'), false, 'no credential field when one is already stored');
-    const connectBtn = box.children.find((c) => c.tagName === 'button' && /Connect RSS feeds/.test(c.textContent));
+    assert.ok(await until(() => !!findBtn(box, /Connect RSS feeds/)));
+    assert.strictEqual(!!findInput(box, /credential for/), false, 'no credential field when one is already stored');
+    const connectBtn = findBtn(box, /Connect RSS feeds/);
     connectBtn.handlers.click[0]();
     assert.ok(await until(() => bridge.__calls.connect.length === 1));
+  } finally { uninstallDom(); }
+});
+
+// ---------------------------------------------------------------------------
+// Connector marketplace slice (27 Nov 2026, Ninad's instruction): search and
+// category filters, custom connectors with honest readiness labels, and the
+// add/remove custom flows. Nothing auto-connects; every custom entry is
+// definition-only and labelled, never a fake working integration.
+
+function marketplaceBridge(overrides) {
+  const calls = { customAdd: [], customRemove: [] };
+  const base = bridgeStub(overrides || {});
+  base.workspace_connectorCustomAdd = (def) => { calls.customAdd.push(def); return Promise.resolve((overrides && overrides.customAddResult) || { ok: true, state: 'discovered' }); };
+  base.workspace_connectorCustomRemove = (id) => { calls.customRemove.push(id); return Promise.resolve((overrides && overrides.customRemoveResult) || { ok: true, state: 'removed' }); };
+  base.__custom = calls;
+  return base;
+}
+
+test('the search filter and category select hide rows client-side', async () => {
+  installDom();
+  try {
+    const connectors = [
+      { id: 'rss', name: 'RSS feeds', category: 'feeds', state: 'discovered', costNote: 'Free', limits: 'Feed limits', scopes: [{ name: 'feed.read', class: 'read_only' }] },
+      { id: 'github', name: 'GitHub', category: 'code', state: 'discovered', costNote: 'Free for public repos', limits: 'Rate limits', scopes: [{ name: 'repos.read', class: 'read_only' }] },
+    ];
+    const bridge = marketplaceBridge({ connectors });
+    const P = await loadPanel();
+    P.mount({ api: bridge, initialView: 'tasks' });
+    const box = global.document.getElementById('ws-connectors');
+    assert.ok(await until(() => !!findInput(box, /search connectors/)));
+    const search = findInput(box, /search connectors/);
+    search.value = 'rss';
+    search.handlers.input[0]();
+    const rowDivs = box.children.filter((c) => c.tagName === 'div' && c.children.length);
+    const rssRow = rowDivs.find((r) => allNodes(r).some((n) => /RSS feeds - discovered/.test(n.textContent || '')));
+    const ghRow = rowDivs.find((r) => allNodes(r).some((n) => /GitHub - discovered/.test(n.textContent || '')));
+    assert.ok(rssRow && ghRow, 'both rows rendered as wrapped rows');
+    assert.strictEqual(rssRow.hidden, false);
+    assert.strictEqual(ghRow.hidden, true, 'the non-matching row is hidden client-side');
+    search.value = '';
+    search.handlers.input[0]();
+    assert.strictEqual(ghRow.hidden, false, 'clearing the search unhides every row');
+    const catSel = box.children.find((c) => c.tagName === 'select' && c.attrs['aria-label'] === 'filter connectors by category');
+    assert.ok(catSel, 'the category filter renders');
+    const values = catSel.children.map((o) => o.value);
+    assert.strictEqual(values[0], 'all');
+    assert.ok(values.indexOf('feeds') !== -1 && values.indexOf('code') !== -1, 'the categories come from the entries');
+    assert.strictEqual(bridge.__calls.connect.length, 0, 'filtering never connects anything');
+  } finally { uninstallDom(); }
+});
+
+test('a custom connector row carries the honest readiness label and a remove button', async () => {
+  installDom();
+  try {
+    const connectors = [
+      { id: 'my-service', name: 'My Service', state: 'discovered', custom: true, readinessNote: 'URL stored, integration not implemented: this build never sends outbound webhook calls', scopes: [{ name: 'events.read', class: 'read_only' }] },
+      { id: 'live-one', name: 'Live One', state: 'connected', custom: true, readinessNote: 'x', scopes: [] },
+    ];
+    const bridge = marketplaceBridge({ connectors });
+    const P = await loadPanel();
+    P.mount({ api: bridge, initialView: 'tasks' });
+    const box = global.document.getElementById('ws-connectors');
+    assert.ok(await until(() => deepText(box).includes('custom connector: URL stored, integration not implemented')));
+    const removeBtn = findBtn(box, /Remove My Service/);
+    assert.ok(removeBtn, 'remove button renders for a custom row');
+    removeBtn.handlers.click[0]();
+    assert.ok(await until(() => bridge.__custom.customRemove.length === 1));
+    assert.strictEqual(bridge.__custom.customRemove[0], 'my-service');
+    assert.ok(await until(() => /workspace: custom connector removed/.test(statusText())));
+    assert.strictEqual(findBtn(box, /Remove Live One/), null, 'no remove button while a custom connector is connected');
+  } finally { uninstallDom(); }
+});
+
+test('the custom form adds through the channel with an explicit slug and scopes', async () => {
+  installDom();
+  try {
+    const bridge = marketplaceBridge({ connectors: CATALOG_TWO });
+    const P = await loadPanel();
+    P.mount({ api: bridge, initialView: 'tasks' });
+    const box = global.document.getElementById('ws-connectors');
+    assert.ok(await until(() => !!findBtn(box, /Add custom connector/)));
+    findInput(box, /custom connector name/).value = '3Box Notes';
+    const auth = box.children.find((c) => c.tagName === 'select' && c.attrs['aria-label'] === 'custom connector auth type');
+    auth.value = 'webhook';
+    findInput(box, /custom connector URL/).value = 'https://example.com/hook';
+    findInput(box, /custom connector scopes/).value = 'events.read:read_only, events.write:write';
+    findBtn(box, /Add custom connector/).handlers.click[0]();
+    assert.ok(await until(() => bridge.__custom.customAdd.length === 1));
+    const def = bridge.__custom.customAdd[0];
+    assert.strictEqual(def.id, 'c-3box-notes', 'the slug is generated and digit-leading ids are prefixed');
+    assert.strictEqual(def.name, '3Box Notes');
+    assert.strictEqual(def.authType, 'webhook');
+    assert.strictEqual(def.url, 'https://example.com/hook');
+    assert.deepStrictEqual(def.scopes, ['events.read:read_only', 'events.write:write']);
+    assert.ok(await until(() => /custom connector added \(definition only/.test(statusText())));
+    assert.strictEqual(findInput(box, /custom connector name/).value, '', 'the form is cleared after a successful add');
+  } finally { uninstallDom(); }
+});
+
+test('a custom add refusal surfaces verbatim and the empty-name path never calls the channel', async () => {
+  installDom();
+  try {
+    const bridge = marketplaceBridge({ connectors: CATALOG_TWO, customAddResult: { ok: false, reason: 'url_invalid' } });
+    const P = await loadPanel();
+    P.mount({ api: bridge, initialView: 'tasks' });
+    const box = global.document.getElementById('ws-connectors');
+    assert.ok(await until(() => !!findBtn(box, /Add custom connector/)));
+    findBtn(box, /Add custom connector/).handlers.click[0]();
+    assert.ok(await until(() => statusText() === 'workspace: name your custom connector first'));
+    assert.strictEqual(bridge.__custom.customAdd.length, 0, 'no channel call without a name');
+    findInput(box, /custom connector name/).value = 'My Service';
+    findBtn(box, /Add custom connector/).handlers.click[0]();
+    assert.ok(await until(() => bridge.__custom.customAdd.length === 1));
+    assert.ok(await until(() => statusText() === 'workspace: custom connector refused: url_invalid'), 'the refusal, verbatim');
+  } finally { uninstallDom(); }
+});
+
+test('a bridge without the custom-connector methods degrades honestly', async () => {
+  installDom();
+  try {
+    const bridge = bridgeStub({ connectors: CATALOG_TWO });
+    const P = await loadPanel();
+    P.mount({ api: bridge, initialView: 'tasks' });
+    const box = global.document.getElementById('ws-connectors');
+    assert.ok(await until(() => !!findBtn(box, /Add custom connector/)));
+    findInput(box, /custom connector name/).value = 'My Service';
+    findBtn(box, /Add custom connector/).handlers.click[0]();
+    assert.ok(await until(() => statusText() === 'workspace: custom connectors unavailable in this build'));
   } finally { uninstallDom(); }
 });

@@ -69,3 +69,43 @@ connected by this step. Naming a real service, providing its credential and
 approving each activation remain the owner's calls.
 
 The AI can also ASK for a connection (27 Nov 2026 decision): its connector_status tool lists the catalog's live states and may raise a user-facing connect request naming one catalog connector and a short reason. The request appears in the Workspace panel's Connectors section; approving it is an explicit click that runs the SAME connect gate as the user's own pick, dismissing it just resolves the request. A request is never a grant and nothing auto-connects.
+
+## Custom connectors (marketplace slice, 27 Nov 2026)
+
+The Connectors section is no longer read-only: the user can add a connector
+for an app/website that is not in the built-in catalog, and the panel gained
+a client-side search box and a category filter over the full list.
+
+What a custom connector is, honestly:
+
+- A DEFINITION plus, for key/token types, one credential in the OS vault.
+  The panel labels every custom row with its readiness note, and
+  `authorizeCall` refuses custom entries with `integration_not_implemented`,
+  so a custom connector can never claim a working integration. The connect
+  gate itself is unchanged (explicit user action, exact declared scopes, an
+  opaque credential reference) and the connection persists until the user
+  disconnects, exactly like a built-in one.
+- Safe auth-type allowlist: `api_key`, `access_token`, `oauth2`, `webhook`,
+  `website`. OAuth is labelled as not implemented (no provider-backed flow
+  in this build); webhook/website URLs are stored as definitions only.
+- URL rules: https only (http accepted for loopback hosts only), no
+  userinfo and no query strings, so a secret can never ride inside a stored
+  URL. Bounded at 2048 characters.
+- Scopes are exact and never guessed: the form takes `name:class` pairs
+  (e.g. `events.read:read_only, events.write:write`) and the core validates
+  both halves against the same scope rules as the built-in catalog.
+- Bounded at 50 custom entries; ids are unique across built-ins, reviewed
+  registrations and customs; removing is user-initiated, refused while
+  connected, and also drops the stored credential.
+- Persistence: custom definitions ride the catalog snapshot (states, exact
+  grants, definitions only, never credential material) and restore fails
+  closed on an invalid definition. The audit log carries ids, actions and
+  scopes only; it never carries an URL or a credential.
+
+New channels: `workspace:connectorCustomAdd` and
+`workspace:connectorCustomRemove` (renderer gestures; main builds
+`userInitiated`). The AI sees custom entries through the ordinary catalog
+surface (`list`/`describe`/`connector_status`) and can request a connection
+through the existing request center; approval still runs the same explicit
+connect gate. No real service is activated by any of this until the user
+chooses one, enters its credential and approves its scopes.

@@ -121,7 +121,7 @@
         return;
       }
       const connectedCount = list.filter((e) => e && e.state === 'connected').length;
-      connEl.appendChild(line('connector catalog: ' + list.length + ' shipped, ' + connectedCount + ' connected; connecting is always your explicit pick per connector'));
+      connEl.appendChild(line('connector catalog: ' + list.length + ' listed, ' + connectedCount + ' connected; connecting is always your explicit pick per connector'));
       // Gate 2 AI-access connector flow (27 Nov 2026): the AI's connect
       // requests render here. Approving is an explicit user click and it
       // runs the SAME connect gate as the user's own pick; dismissing just
@@ -163,11 +163,53 @@
           }
         }
       }
+      // Catalog search + category filter (27 Nov 2026 marketplace slice):
+      // purely client-side. Filters hide rows; they never change a
+      // connector's state and they never activate anything.
+      const connFilter = { q: '', cat: 'all' };
+      const searchInput = el('input');
+      searchInput.type = 'search';
+      searchInput.setAttribute('placeholder', 'search connectors');
+      searchInput.setAttribute('aria-label', 'search connectors');
+      connEl.appendChild(searchInput);
+      const catSel = el('select');
+      catSel.setAttribute('aria-label', 'filter connectors by category');
+      const allOpt = el('option');
+      allOpt.value = 'all';
+      allOpt.textContent = 'all categories';
+      catSel.appendChild(allOpt);
+      for (const c of Array.from(new Set(list.map((x) => x && x.category).filter(Boolean))).sort()) {
+        const o = el('option');
+        o.value = c;
+        o.textContent = c;
+        catSel.appendChild(o);
+      }
+      connEl.appendChild(catSel);
+      const rowWrappers = [];
+      function applyConnFilter() {
+        const q = connFilter.q.trim().toLowerCase();
+        for (const w of rowWrappers) {
+          const e = w.e || {};
+          const hay = ((e.name || '') + ' ' + (e.id || '') + ' ' + (e.category || '')).toLowerCase();
+          w.rowEl.hidden = (q && hay.indexOf(q) === -1) || (connFilter.cat !== 'all' && e.category !== connFilter.cat);
+        }
+      }
+      searchInput.addEventListener('input', () => { connFilter.q = searchInput.value; applyConnFilter(); });
+      catSel.addEventListener('change', () => { connFilter.cat = catSel.value; applyConnFilter(); });
       for (const e of list) {
         if (!e || typeof e !== 'object') continue;
-        connEl.appendChild(line((e.name || e.id) + ' - ' + (e.state || 'discovered') + ' - ' + (e.costNote || '') + ' - ' + (e.limits || '')));
+        const rowEl = el('div');
+        connEl.appendChild(rowEl);
+        rowWrappers.push({ rowEl: rowEl, e: e });
+        rowEl.appendChild(line((e.name || e.id) + ' - ' + (e.state || 'discovered') + ' - ' + (e.costNote || '') + ' - ' + (e.limits || '')));
         if (Array.isArray(e.scopes) && e.scopes.length) {
-          connEl.appendChild(line('scopes: ' + e.scopes.map((s) => s.name + ' (' + s.class + ')').join(', ')));
+          rowEl.appendChild(line('scopes: ' + e.scopes.map((s) => s.name + ' (' + s.class + ')').join(', ')));
+        }
+        // Custom connectors (27 Nov 2026 marketplace slice): the honest
+        // readiness label travels with every custom row. No custom
+        // connector ever claims a working integration.
+        if (e.custom) {
+          rowEl.appendChild(line('custom connector: ' + (e.readinessNote || 'integration not implemented in this build')));
         }
         const state = e.state || 'discovered';
         const scopeNames = (Array.isArray(e.scopes) ? e.scopes : []).map((s) => s.name);
@@ -179,8 +221,8 @@
           // connects with the plain button, no repeated prompt.
           if (e.hasCredential !== true) {
             const credInput = passwordField('credential for ' + (e.name || e.id));
-            connEl.appendChild(credInput);
-            connEl.appendChild(button('Connect ' + e.name, 'Connect ' + e.name, async () => {
+            rowEl.appendChild(credInput);
+            rowEl.appendChild(button('Connect ' + e.name, 'Connect ' + e.name, async () => {
               const secret = credInput.value;
               credInput.value = '';
               if (!secret) {
@@ -199,31 +241,91 @@
               await renderConnectors(a);
             }));
           } else {
-            connEl.appendChild(button('Connect ' + e.name, 'Connect ' + e.name, async () => {
+            rowEl.appendChild(button('Connect ' + e.name, 'Connect ' + e.name, async () => {
               const r = await a.workspace_connector_connect(e.id, scopeNames);
               say(r && r.ok ? 'workspace: connect requested for ' + e.name : 'workspace: connect refused: ' + ((r && r.reason) || 'unknown'));
               await renderConnectors(a);
             }));
           }
         } else if (state === 'connected') {
-          connEl.appendChild(button('Disconnect ' + e.name, 'Disconnect ' + e.name, async () => {
+          rowEl.appendChild(button('Disconnect ' + e.name, 'Disconnect ' + e.name, async () => {
             const r = await a.workspace_connector_disconnect(e.id);
             say(r && r.ok ? 'workspace: connector disconnected' : 'workspace: disconnect refused: ' + ((r && r.reason) || 'unknown'));
             await renderConnectors(a);
           }));
-          connEl.appendChild(button('Revoke ' + e.name, 'Revoke ' + e.name, async () => {
+          rowEl.appendChild(button('Revoke ' + e.name, 'Revoke ' + e.name, async () => {
             const r = await a.workspace_connector_revoke(e.id);
             say(r && r.ok ? 'workspace: connector revoked' : 'workspace: revoke refused: ' + ((r && r.reason) || 'unknown'));
             await renderConnectors(a);
           }));
         } else {
-          connEl.appendChild(button('Readmit ' + e.name, 'Readmit ' + e.name, async () => {
+          rowEl.appendChild(button('Readmit ' + e.name, 'Readmit ' + e.name, async () => {
             const r = await a.workspace_connector_readmit(e.id);
             say(r && r.ok ? 'workspace: connector readmitted' : 'workspace: readmit refused: ' + ((r && r.reason) || 'unknown'));
             await renderConnectors(a);
           }));
         }
+        if (e.custom && state !== 'connected') {
+          rowEl.appendChild(button('Remove ' + (e.name || e.id), 'Remove custom connector ' + (e.name || e.id), async () => {
+            if (typeof a.workspace_connectorCustomRemove !== 'function') { say('workspace: custom connectors unavailable in this build'); return; }
+            const r = await a.workspace_connectorCustomRemove(e.id);
+            say(r && r.ok ? 'workspace: custom connector removed' : 'workspace: remove refused: ' + ((r && r.reason) || 'unknown'));
+            await renderConnectors(a);
+          }));
+        }
       }
+      applyConnFilter();
+      // Custom connector form (27 Nov 2026 marketplace slice): add a
+      // connector for an app/website that is not in the built-in catalog.
+      // Every field is explicit, the policy core validates and refuses
+      // anything unsafe, and every refusal surfaces verbatim. Scopes use
+      // the exact "name:class" form so a permission class is never guessed.
+      connEl.appendChild(line('add a custom connector: the definition (and, for key/token types, the credential) is stored, but no integration actions are implemented for custom connectors in this build'));
+      const fName = el('input');
+      fName.setAttribute('placeholder', 'name, e.g. My Service');
+      fName.setAttribute('aria-label', 'custom connector name');
+      connEl.appendChild(fName);
+      const fCat = el('input');
+      fCat.setAttribute('placeholder', 'category (optional)');
+      fCat.setAttribute('aria-label', 'custom connector category');
+      connEl.appendChild(fCat);
+      const fAuth = el('select');
+      fAuth.setAttribute('aria-label', 'custom connector auth type');
+      for (const t of ['api_key', 'access_token', 'oauth2', 'webhook', 'website']) {
+        const o = el('option');
+        o.value = t;
+        o.textContent = t;
+        fAuth.appendChild(o);
+      }
+      connEl.appendChild(fAuth);
+      const fUrl = el('input');
+      fUrl.setAttribute('placeholder', 'https:// URL (required for oauth2/webhook/website; http only for localhost)');
+      fUrl.setAttribute('aria-label', 'custom connector URL');
+      connEl.appendChild(fUrl);
+      const fScopes = el('input');
+      fScopes.setAttribute('placeholder', 'scopes as name:class, e.g. events.read:read_only, events.write:write');
+      fScopes.setAttribute('aria-label', 'custom connector scopes');
+      connEl.appendChild(fScopes);
+      connEl.appendChild(button('Add custom connector', 'Add custom connector', async () => {
+        if (typeof a.workspace_connectorCustomAdd !== 'function') { say('workspace: custom connectors unavailable in this build'); return; }
+        const name = fName.value.trim();
+        if (!name) { say('workspace: name your custom connector first'); return; }
+        const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+        if (!slug) { say('workspace: name your custom connector first'); return; }
+        const id = /^[a-z]/.test(slug) ? slug : 'c-' + slug;
+        const scopeList = fScopes.value.split(',').map((s) => s.trim()).filter(Boolean);
+        const r = await a.workspace_connectorCustomAdd({ id: id, name: name, category: fCat.value.trim() || undefined, authType: fAuth.value, url: fUrl.value.trim() || undefined, scopes: scopeList });
+        if (r && r.ok) {
+          say('workspace: custom connector added (definition only; no integration actions are implemented in this build)');
+          fName.value = '';
+          fCat.value = '';
+          fUrl.value = '';
+          fScopes.value = '';
+        } else {
+          say('workspace: custom connector refused: ' + ((r && r.reason) || 'unknown'));
+        }
+        await renderConnectors(a);
+      }));
     }
 
     async function refresh() {

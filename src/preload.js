@@ -119,6 +119,8 @@ const IPC_CHANNELS = [
   'workspace:connectorCredentialRemove',
   'workspace:connectorRequests',
   'workspace:connectorRequestResolve',
+  'workspace:connectorCustomAdd',
+  'workspace:connectorCustomRemove',
 ];
 
 // Messages main may push to this window. Mirrors IPC_EVENTS in ipc-channels.js.
