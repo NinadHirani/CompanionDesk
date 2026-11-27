@@ -12,7 +12,7 @@ const assert = require('node:assert');
 const adapters = require('../src/connector-adapters.js');
 const { createConnectorCatalog } = require('../src/connectors.js');
 
-const IMPLEMENTED = ['anthropic', 'brave-search', 'arxiv', 'crossref', 'discord', 'docker-hub', 'github', 'gitlab', 'gmail', 'google-calendar', 'google-docs', 'google-sheets', 'google-drive', 'google-gemini', 'huggingface', 'internet-archive', 'jira', 'microsoft-calendar', 'microsoft-onedrive', 'microsoft-excel', 'microsoft-outlook', 'microsoft-teams', 'microsoft-word', 'musicbrainz', 'notion', 'npm', 'open-meteo', 'openai', 'openalex', 'openlibrary', 'openstreetmap', 'pypi', 'slack', 'tavily', 'telegram', 'wikimedia'];
+const IMPLEMENTED = ['anthropic', 'brave-search', 'arxiv', 'crossref', 'discord', 'docker-hub', 'github', 'gitlab', 'gmail', 'google-calendar', 'google-docs', 'google-sheets', 'google-drive', 'google-gemini', 'huggingface', 'internet-archive', 'jira', 'microsoft-calendar', 'microsoft-onedrive', 'microsoft-excel', 'microsoft-outlook', 'microsoft-teams', 'microsoft-word', 'musicbrainz', 'notion', 'npm', 'open-meteo', 'openai', 'openalex', 'openlibrary', 'openstreetmap', 'pypi', 'slack', 'tavily', 'telegram', 'todoist', 'wikimedia'];
 const OAUTH = ['gmail', 'google-calendar', 'google-drive', 'microsoft-calendar', 'microsoft-onedrive', 'microsoft-outlook'];
 
 test('the adapter registry covers exactly the implemented catalog entries', () => {
@@ -934,5 +934,36 @@ test('npm builds pinned-host keyless registry reads and validates params', () =>
   for (const a of adapters.listActions('npm')) {
     assert.equal(a.kind, 'read_only');
     assert.equal(a.scope, 'packages.read');
+  }
+});
+
+// ---- batch 21 (27 Nov 2026): todoist key-bound read + create-only adapter ----
+
+test('todoist builds bearer reads and one gated create with strict validation', () => {
+  const gp = adapters.buildRequest('todoist', 'get_projects', {}, 'secret');
+  assert.equal(gp.ok, true);
+  assert.equal(gp.request.method, 'GET');
+  assert.equal(gp.request.url, 'https://api.todoist.com/rest/v2/projects');
+  assert.equal(gp.request.headers.Authorization, 'Bearer secret');
+  assert.equal(gp.request.headers['User-Agent'], 'CompanionDesk');
+  const gt = adapters.buildRequest('todoist', 'get_tasks', { project_id: '6Xf9', filter: 'today', limit: '100' }, 'secret');
+  assert.equal(gt.ok, true);
+  assert.equal(gt.request.url, 'https://api.todoist.com/rest/v2/tasks?project_id=6Xf9&filter=today&limit=100');
+  const ct = adapters.buildRequest('todoist', 'create_task', { content: 'Submit form', project_id: '6Xf9', due_string: 'tomorrow 9am', priority: '4' }, 'secret');
+  assert.equal(ct.ok, true);
+  assert.equal(ct.request.method, 'POST');
+  assert.equal(ct.request.url, 'https://api.todoist.com/rest/v2/tasks');
+  const body = JSON.parse(ct.request.body);
+  assert.deepEqual(body, { content: 'Submit form', project_id: '6Xf9', due_string: 'tomorrow 9am', priority: 4 });
+  assert.equal(adapters.buildRequest('todoist', 'create_task', {}).reason, 'param_missing', 'content is required');
+  assert.equal(adapters.buildRequest('todoist', 'create_task', { content: 'x', priority: '5' }, 'secret').reason, 'param_invalid', 'priority above 4');
+  assert.equal(adapters.buildRequest('todoist', 'create_task', { content: 'x', priority: '0' }, 'secret').reason, 'param_invalid', 'priority below 1');
+  assert.equal(adapters.buildRequest('todoist', 'get_tasks', { project_id: 'bad/name' }, 'secret').reason, 'param_invalid', 'project ids are alnum only');
+  assert.equal(adapters.buildRequest('todoist', 'get_tasks', { limit: '101' }, 'secret').reason, 'param_invalid', 'limit above the cap');
+  assert.equal(adapters.listActions('todoist').find((a) => a.id === 'create_task').kind, 'write');
+  for (const a of adapters.listActions('todoist')) {
+    if (a.id === 'create_task') { assert.equal(a.scope, 'tasks.write'); continue; }
+    assert.equal(a.kind, 'read_only');
+    assert.equal(a.scope, 'tasks.read');
   }
 });

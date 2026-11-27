@@ -157,6 +157,49 @@
     ],
   };
 
+  ADAPTERS.todoist = {
+    id: 'todoist', name: 'Todoist', authShape: 'token', setupRequired: false,
+    setupNote: 'paste your own Todoist API token from app.todoist.com/app/settings/integrations/developer; your token is stored only in the app vault, never requested or shown in chat',
+    buildHeaders: function (token) { return { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json', 'User-Agent': 'CompanionDesk' }; },
+    actions: [
+      { id: 'get_projects', label: 'List your Todoist projects', scope: 'tasks.read', kind: 'read_only',
+        params: [],
+        build: function (p, token) {
+          return { method: 'GET', url: 'https://api.todoist.com/rest/v2/projects', headers: this.buildHeaders(token), body: null };
+        } },
+      { id: 'get_tasks', label: 'List active tasks, optionally filtered', scope: 'tasks.read', kind: 'read_only',
+        params: [{ name: 'project_id', required: false, maxLength: 80 }, { name: 'filter', required: false, maxLength: 200 }, { name: 'limit', required: false, maxLength: 3 }],
+        build: function (p, token) {
+          const qs = [];
+          if (p.project_id) {
+            if (!/^[A-Za-z0-9]+$/.test(p.project_id)) return { error: 'param_invalid' };
+            qs.push('project_id=' + encodeURIComponent(p.project_id));
+          }
+          if (p.filter) qs.push('filter=' + encodeURIComponent(p.filter));
+          const limit = optionalInt(p, 'limit', 50);
+          if (limit === null || limit < 1 || limit > 100) return { error: 'param_invalid' };
+          qs.push('limit=' + limit);
+          return { method: 'GET', url: 'https://api.todoist.com/rest/v2/tasks' + (qs.length ? '?' + qs.join('&') : ''), headers: this.buildHeaders(token), body: null };
+        } },
+      { id: 'create_task', label: 'Create a task in Todoist', scope: 'tasks.write', kind: 'write',
+        params: [{ name: 'content', required: true, maxLength: 500 }, { name: 'project_id', required: false, maxLength: 80 }, { name: 'due_string', required: false, maxLength: 100 }, { name: 'priority', required: false, maxLength: 1 }],
+        build: function (p, token) {
+          const body = { content: p.content };
+          if (p.project_id) {
+            if (!/^[A-Za-z0-9]+$/.test(p.project_id)) return { error: 'param_invalid' };
+            body.project_id = p.project_id;
+          }
+          if (p.due_string) body.due_string = p.due_string;
+          if (p.priority) {
+            const pr = optionalInt(p, 'priority', 0);
+            if (pr === null || pr < 1 || pr > 4) return { error: 'param_invalid' };
+            body.priority = pr;
+          }
+          return { method: 'POST', url: 'https://api.todoist.com/rest/v2/tasks', headers: this.buildHeaders(token), body: JSON.stringify(body) };
+        } },
+    ],
+  };
+
   ADAPTERS.notion = {
     id: 'notion', name: 'Notion', authShape: 'token', setupRequired: false,
     setupNote: 'create an internal integration at notion.so/my-integrations and paste its secret token',

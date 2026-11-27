@@ -497,3 +497,15 @@ Actions (both read-only, scope `packages.read`, pinned to `registry.npmjs.org` w
 No credentials are collected; the row and this doc say the row is honestly keyless because public package reads are keyless (publishing and private packages need authentication this build never requests). No writes, no registry publish, no npm account access.
 
 Tests: adapter build/validation (13 assertions incl. uppercase-name and unscoped-slash rejection, limit cap), public-gate engine test (not_connected refusal before connect, keyless connect, live read on the pinned host). Catalog count pins updated: 135 still-definition-only expanded rows, 139 definition-only total.
+## Batch 21 (27 Nov 2026): Todoist
+
+Upgraded `todoist` from definition-only to a key-bound adapter (`auth: api_key`, `authShape: token`).
+
+Actions:
+- `get_projects` (read_only, `tasks.read`): list the user's projects.
+- `get_tasks` (read_only, `tasks.read`): list active tasks with optional project_id (alnum-validated), free-text filter, and a 1-100 limit cap.
+- `create_task` (write, `tasks.write`): create one task with content (required), optional project_id, due_string and priority 1-4.
+
+The token is the user's own Todoist API token pasted into the app vault; requests carry only `Authorization: Bearer`, pinned to `api.todoist.com` with a CompanionDesk user agent. The write action is single-use approval gated by the policy engine (refused without an approval, dead after one use). No updates, no deletes, no completion writes: the write surface here is create-only by design.
+
+Tests: adapter build/validation (15 assertions incl. priority bounds, project-id charset, limit cap), engine gates (not_connected refusal, credential rides the read, write refused without an approval, approved write runs once, spent approval is dead). Catalog count pins: 134 still-definition-only expanded rows, 138 definition-only total.

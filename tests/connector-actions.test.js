@@ -655,3 +655,24 @@ test('npm connects keyless and reads on the pinned host', async () => {
   assert.equal(seen.url, 'https://registry.npmjs.org/qiskit');
   assert.equal(r.data['dist-tags'].latest, '1.0.0');
 });
+
+// ---- batch 21 (27 Nov 2026): todoist credential + approval gates ----
+
+test('todoist refuses before connect, reads with a credential, and gates its create behind one approval', async () => {
+  let seen = null;
+  const transport = async (req) => { seen = req; return { status: 200, body: JSON.stringify([{ id: '6Xf9', name: 'Inbox' }]) }; };
+  const { catalog, engine } = makeEngine(transport, 'test-token');
+  assert.equal((await engine.run('todoist', 'get_tasks', {})).reason, 'not_connected');
+  const c = catalog.connect('todoist', { userInitiated: true, scopes: ['tasks.read', 'tasks.write'], credentialRef: 'vault:td-cred' });
+  assert.equal(c.ok, true);
+  const r = await engine.run('todoist', 'get_tasks', { limit: '50' });
+  assert.equal(r.ok, true);
+  assert.equal(seen.url, 'https://api.todoist.com/rest/v2/tasks?limit=50');
+  assert.equal(seen.headers.Authorization, 'Bearer test-token', 'the stored credential rides the request');
+  assert.equal((await engine.run('todoist', 'create_task', { content: 'x' })).reason, 'approval_required', 'write without an approval refuses');
+  const a = catalog.approve('todoist', 'tasks.write', { userInitiated: true });
+  const w = await engine.run('todoist', 'create_task', { content: 'x' }, { approvalId: a.approvalId });
+  assert.equal(w.ok, true);
+  const w2 = await engine.run('todoist', 'create_task', { content: 'y' }, { approvalId: a.approvalId });
+  assert.equal(w2.reason, 'approval_required', 'the spent approval is dead');
+});
