@@ -675,3 +675,14 @@ Actions:
 The credentials are the user's own keys pasted into the app vault.
 
 Tests: adapter build/validation per connector (caps, id reject, required param, header shapes, read-only sweeps, the one-action Groq pin), engine gates (each refuses before connect and rides its credential on a read). Catalog count pins: 111 still-definition-only expanded rows, 115 definition-only total.
+## Batch 36 (27 Nov 2026): Cohere, xAI
+
+Upgraded two ai_cloud connectors to token-bound READ-ONLY adapters (each `auth: api_key`, `authShape: token`).
+
+Actions:
+- Cohere (pinned `api.cohere.com/v1`, Bearer): `list_models` only. The `completions.send` scope is never requested and nothing is sent to a model.
+- xAI (pinned `api.x.ai/v1`, Bearer): `list_models` only. Same completions rule.
+
+The credentials are the user's own keys pasted into the app vault.
+
+Tests: adapter build/validation (one-action pins, header shapes, read-only sweeps, completions never present), engine gates (each refuses before connect and rides its credential on a read). Catalog count pins: 109 still-definition-only expanded rows, 113 definition-only total.

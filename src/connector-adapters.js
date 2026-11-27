@@ -157,6 +157,32 @@
     ],
   };
 
+  ADAPTERS.cohere = {
+    id: 'cohere', name: 'Cohere', authShape: 'token', setupRequired: false,
+    setupNote: 'paste a Cohere API key from dashboard.cohere.com/api-keys; it is stored only in the app vault, never requested or shown in chat',
+    buildHeaders: function (token) { return { Authorization: 'Bearer ' + token, 'User-Agent': 'CompanionDesk' }; },
+    actions: [
+      { id: 'list_models', label: 'List the Cohere models your key can use', scope: 'models.read', kind: 'read_only',
+        params: [],
+        build: function (p, token) {
+          return { method: 'GET', url: 'https://api.cohere.com/v1/models', headers: this.buildHeaders(token), body: null };
+        } },
+    ],
+  };
+
+  ADAPTERS.xai = {
+    id: 'xai', name: 'xAI', authShape: 'token', setupRequired: false,
+    setupNote: 'paste an xAI API key from console.x.ai; it is stored only in the app vault, never requested or shown in chat',
+    buildHeaders: function (token) { return { Authorization: 'Bearer ' + token, 'User-Agent': 'CompanionDesk' }; },
+    actions: [
+      { id: 'list_models', label: 'List the xAI models your key can use', scope: 'models.read', kind: 'read_only',
+        params: [],
+        build: function (p, token) {
+          return { method: 'GET', url: 'https://api.x.ai/v1/models', headers: this.buildHeaders(token), body: null };
+        } },
+    ],
+  };
+
   ADAPTERS.stripe = {
     id: 'stripe', name: 'Stripe', authShape: 'token', setupRequired: false,
     setupNote: 'paste a Stripe RESTRICTED API key with charges read access from dashboard.stripe.com/apikeys; it is stored only in the app vault, never requested or shown in chat',

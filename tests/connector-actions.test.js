@@ -918,3 +918,19 @@ test('stripe and groq refuse before connect and ride their credentials on reads'
     assert.ok(seen.headers.Authorization.indexOf('fin-tok') > 0, id + ' credential rides the header');
   }
 });
+
+// ---- batch 36 (27 Nov 2026): cohere + xai credential gates ----
+
+test('cohere and xai refuse before connect and ride their credentials on reads', async () => {
+  let seen = null;
+  const transport = async (req) => { seen = req; return { status: 200, body: JSON.stringify([]) }; };
+  const { catalog, engine } = makeEngine(transport, 'ai-tok');
+  for (const [id, action, scope] of [['cohere', 'list_models', 'models.read'], ['xai', 'list_models', 'models.read']]) {
+    assert.equal((await engine.run(id, action, {})).reason, 'not_connected', id + ' refuses before connect');
+    const c = catalog.connect(id, { userInitiated: true, scopes: [scope], credentialRef: 'vault:' + id + '-cred' });
+    assert.equal(c.ok, true, id + ' connects');
+    const r = await engine.run(id, action, {});
+    assert.equal(r.ok, true, id + ' reads with a credential');
+    assert.ok(seen.headers.Authorization.indexOf('ai-tok') > 0, id + ' credential rides the header');
+  }
+});
