@@ -216,3 +216,20 @@ closure; reopening it is always the owner's call and no question about it is
 asked here.
 
 Follow-on to the Gate 8 row-store decision (26 Nov 2026 night, c923013): Ninad confirmed Gate 8 A covered local databases and structured app data, so the two remaining categories landed as bounded row stores (databases prefix db, appdata prefix ad) with view adapters in workspace-views.js, same EMPTY/no-auto-exposure contract. Update 27 Nov 2026 00:00 IST: Ninad confirmed in chat that Gate 3 full Workspace UI + Gate 8 A cover renderer wiring (the later-lane note was outdated), and the five row-store views went wired true the same hour (c94dbb4): the panel fetches through the existing pure rows provider, shapes fail-closed, and shows an explicit empty state; settings stays the only unwired view. Still owner-gated: any persistence design for the stores (not clearly covered by Gate 8 A; M2/M4 sensitive persistence and the canonical markdown format stay untouched).
+
+Follow-on to the connector marketplace slice (27 Nov 2026, ~18:20 IST,
+Ninad's explicit go-ahead in chat): batch 1 of real connector adapters
+landed. Fourteen providers have pure request builders (src/
+connector-adapters.js) behind an action engine (src/connector-actions.js)
+that re-runs the full consent chain per call: connected, scope granted,
+single-use approval for write/send, credential resolved only in main from
+the OS vault. New IPC: workspace:connectorAction,
+workspace:connectorOAuthAuthorizeUrl, workspace:connectorOAuthExchange
+(user-created OAuth clients only; the app never creates or shares one).
+A real defect in the credential path shipped in this batch's fix: the
+vault keys files companiondesk-<id> but the panel handlers passed the
+plain id, so no credential could ever be saved; all vault call sites now
+normalize. Still open (not implemented, honestly refused): panel
+action-invocation UI, AI action-calling surface (same gates), OAuth
+refresh loop, Zapier/Make (need their own OAuth apps), custom webhook
+sends (consent surface needs its own design).

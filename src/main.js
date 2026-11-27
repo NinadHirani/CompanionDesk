@@ -90,6 +90,65 @@ const { createWorkspaceStore } = require('./workspace-stores');
 const { createConnectorCatalog } = require('./connectors');
 const { createConnectorCredentialStore, refFor } = require('./connector-credential-store');
 const { createConnectorRequestCenter } = require('./connector-requests');
+// Real connector adapters + action engine (27 Nov 2026, Ninad's
+// integration go-ahead): request builders live in pure modules; this file
+// performs the HTTPS calls, resolves credentials from the OS vault and
+// enforces the same user-initiated gate as every other connector handler.
+const https = require('https');
+const connectorAdapters = require('./connector-adapters');
+const connectorActions = require('./connector-actions');
+
+// The credential vault keys its files by the 'companiondesk-<id>' shape
+// (see src/connector-credential-store.js). Catalog ids are plain
+// ('slack'), so every vault call here normalizes first. Without this the
+// panel's credential entry was silently refused (bad_request) and no
+// real credential could ever be saved; fixed 27 Nov 2026 when the action
+// engine needed the same resolution path.
+function connectorStoreId(id) {
+  const s = String(id || '');
+  return s.indexOf('companiondesk-') === 0 ? s : 'companiondesk-' + s;
+}
+
+// HTTPS executor for adapter requests. Bounded (256 KiB response cap,
+// 15 s timeout), https-only, and it never logs or rejects with request
+// material: some providers (Telegram, Gemini) carry the secret in the
+// URL, so failures reject with a bare transport_error and nothing else.
+function connectorHttpsTransport(req) {
+  return new Promise((resolve, reject) => {
+    let u = null;
+    try { u = new URL(req.url); } catch (e) { return reject(new Error('transport_error')); }
+    if (u.protocol !== 'https:') return reject(new Error('transport_error'));
+    const headers = Object.assign({ Host: u.hostname }, req.headers || {});
+    if (req.body) headers['Content-Length'] = Buffer.byteLength(req.body);
+    const options = { method: req.method, hostname: u.hostname, port: u.port || 443, path: u.pathname + u.search, headers, timeout: 15000 };
+    let settled = false;
+    const r = https.request(options, (res) => {
+      const chunks = [];
+      let size = 0;
+      res.on('data', (c) => { size += c.length; if (size <= 262144) chunks.push(c); });
+      res.on('end', () => {
+        if (settled) return; settled = true;
+        resolve({ status: res.statusCode || 0, body: Buffer.concat(chunks).toString('utf8') });
+      });
+    });
+    r.on('timeout', () => { r.destroy(new Error('transport_error')); });
+    r.on('error', () => { if (!settled) { settled = true; reject(new Error('transport_error')); } });
+    if (req.body) r.write(req.body);
+    r.end();
+  });
+}
+
+let connectorActionEngine = null;
+function getConnectorActionEngine() {
+  if (connectorActionEngine) return connectorActionEngine;
+  connectorActionEngine = connectorActions.createActionEngine({
+    catalog: workspaceConnectorCatalog,
+    adapters: connectorAdapters,
+    transport: connectorHttpsTransport,
+    credentialReader: (id) => (connectorCredentialStore ? connectorCredentialStore.readCredential(connectorStoreId(id)) : null),
+  });
+  return connectorActionEngine;
+}
 const { createIntegrationRegistry } = require('./integrations');
 const { createDeviceAccessCentre } = require('./device-access');
 const { createSchedulerSurface } = require('./scheduler-surface');
@@ -1133,7 +1192,7 @@ app.whenReady().then(async () => {
   // reconnect that would need the credential again.
   try {
     for (const e of workspaceConnectorCatalog.list()) {
-      if (workspaceConnectorCatalog.state(e.id) === 'connected' && connectorCredentialStore && connectorCredentialStore.hasCredential(e.id)) {
+      if (workspaceConnectorCatalog.state(e.id) === 'connected' && connectorCredentialStore && connectorCredentialStore.hasCredential(connectorStoreId(e.id))) {
         CONNECTOR_CREDENTIAL_REFS.set(e.id, refFor(e.id));
       }
     }
@@ -1156,7 +1215,7 @@ app.whenReady().then(async () => {
   function dropConnectorCredential(id) {
     try {
       if (connectorCredentialStore) {
-        const cr = connectorCredentialStore.removeCredential(id);
+        const cr = connectorCredentialStore.removeCredential(connectorStoreId(id));
         if (cr && cr.ok === false) return false;
       }
     } catch { return false; }
@@ -1165,7 +1224,7 @@ app.whenReady().then(async () => {
   }
   ipcMain.handle('workspace:connectors', async () => workspaceConnectorCatalog.list().map((e) => Object.assign({}, e, {
     state: workspaceConnectorCatalog.state(e.id) || 'discovered',
-    hasCredential: connectorCredentialStore ? connectorCredentialStore.hasCredential(e.id) : false,
+    hasCredential: connectorCredentialStore ? connectorCredentialStore.hasCredential(connectorStoreId(e.id)) : false,
   })));
   ipcMain.handle('workspace:connectorConnect', async (_e, id, scopes) => {
     if (typeof id !== 'string' || id.length === 0) return { ok: false, reason: 'bad_request' };
@@ -1193,7 +1252,7 @@ app.whenReady().then(async () => {
   ipcMain.handle('workspace:connectorCredentialSet', async (_e, id, secret) => {
     if (typeof id !== 'string' || !workspaceConnectorCatalog.describe(id)) return { ok: false, reason: 'unknown_connector' };
     if (!connectorCredentialStore) return { ok: false, reason: 'unavailable' };
-    const r = connectorCredentialStore.setCredential(id, secret);
+    const r = connectorCredentialStore.setCredential(connectorStoreId(id), secret);
     if (r && r.ok) CONNECTOR_CREDENTIAL_REFS.set(id, refFor(id));
     return r && r.ok ? { ok: true, hasCredential: true } : r;
   });
@@ -1201,9 +1260,50 @@ app.whenReady().then(async () => {
     if (typeof id !== 'string' || !workspaceConnectorCatalog.describe(id)) return { ok: false, reason: 'unknown_connector' };
     if (workspaceConnectorCatalog.state(id) === 'connected') return { ok: false, reason: 'disconnect_first' };
     if (!connectorCredentialStore) return { ok: false, reason: 'unavailable' };
-    const r = connectorCredentialStore.removeCredential(id);
+    const r = connectorCredentialStore.removeCredential(connectorStoreId(id));
     if (r && r.ok) CONNECTOR_CREDENTIAL_REFS.delete(id);
     return r && r.ok ? { ok: true, hasCredential: false } : r;
+  });
+  // Real connector actions (27 Nov 2026, Ninad's integration go-ahead).
+  // The engine re-runs the full consent chain (connected, scope granted,
+  // single-use approval for writes and sends) before any request is
+  // built, resolves the credential only inside this process, and never
+  // returns or logs credential material: results carry provider JSON
+  // with credential-shaped URL parameters scrubbed.
+  ipcMain.handle('workspace:connectorAction', async (_e, id, actionId, params, runOpts) => {
+    if (typeof id !== 'string' || id.length === 0 || typeof actionId !== 'string' || actionId.length === 0) return { ok: false, reason: 'bad_request' };
+    if (!runOpts || runOpts.userInitiated !== true) return { ok: false, reason: 'requires_user_action' };
+    try {
+      const r = await getConnectorActionEngine().run(id, actionId, (params && typeof params === 'object' && !Array.isArray(params)) ? params : {}, { approvalId: runOpts.approvalId });
+      console.log('[connectors] action', id, actionId, 'ok=' + r.ok + (r.status != null ? ' status=' + r.status : ' reason=' + r.reason));
+      return r;
+    } catch (e) { return { ok: false, reason: 'engine_error' }; }
+  });
+  // OAuth setup for the adapters that need the user's OWN client. Main
+  // never holds a shared client and never creates one: the authorize URL
+  // is built from the user's own client id, and the exchange stores the
+  // token blob straight into the OS vault. Only ok/hasCredential leaves
+  // this process. The explicit panel Connect with exact scopes stays the
+  // only thing that creates a connection.
+  ipcMain.handle('workspace:connectorOAuthAuthorizeUrl', (_e, id, clientId, redirectUri) => {
+    if (typeof id !== 'string' || !workspaceConnectorCatalog.describe(id)) return { ok: false, reason: 'unknown_connector' };
+    return connectorAdapters.authorizeUrl(id, { client_id: clientId, redirect_uri: redirectUri }, '');
+  });
+  ipcMain.handle('workspace:connectorOAuthExchange', async (_e, id, clientId, clientSecret, redirectUri, code) => {
+    if (typeof id !== 'string' || !workspaceConnectorCatalog.describe(id)) return { ok: false, reason: 'unknown_connector' };
+    if (!connectorCredentialStore) return { ok: false, reason: 'unavailable' };
+    const t = connectorAdapters.tokenRequest(id, { client_id: clientId, client_secret: clientSecret, redirect_uri: redirectUri }, code);
+    if (!t.ok) return { ok: false, reason: t.reason };
+    let res;
+    try { res = await connectorHttpsTransport(t.request); } catch (e) { return { ok: false, reason: 'transport_error' }; }
+    if (!res || res.status < 200 || res.status >= 300) return { ok: false, reason: 'oauth_exchange_refused', status: res ? res.status : null };
+    let tok = null;
+    try { tok = JSON.parse(res.body); } catch (e) { return { ok: false, reason: 'oauth_exchange_refused' }; }
+    if (!tok || typeof tok.access_token !== 'string' || !tok.access_token) return { ok: false, reason: 'oauth_exchange_refused' };
+    const blob = JSON.stringify({ client_id: String(clientId), client_secret: String(clientSecret), access_token: tok.access_token, refresh_token: typeof tok.refresh_token === 'string' ? tok.refresh_token : null, expires_at: typeof tok.expires_in === 'number' ? Date.now() + tok.expires_in * 1000 : null });
+    const sr = connectorCredentialStore.setCredential(connectorStoreId(id), blob);
+    if (sr && sr.ok) CONNECTOR_CREDENTIAL_REFS.set(id, refFor(id));
+    return sr && sr.ok ? { ok: true, hasCredential: true } : { ok: false, reason: sr && sr.reason ? sr.reason : 'unavailable' };
   });
   // Custom connectors (27 Nov 2026, Ninad's marketplace instruction): the
   // user adds a connector for an app/website outside the built-in catalog.

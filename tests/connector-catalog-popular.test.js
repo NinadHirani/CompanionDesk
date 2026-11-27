@@ -16,12 +16,22 @@ const POPULAR = ['slack', 'discord', 'notion', 'dropbox', 'google-drive', 'gmail
 test('the curated popular providers are all listed with honest metadata', () => {
   const c = createConnectorCatalog({});
   const all = c.list();
+  // 27 Nov 2026 adapter batch: nine of the thirteen now have real request
+  // builders (integrationImplemented true + an honest setup note); the
+  // other four stay definition-only and refused until an adapter exists.
+  const IMPLEMENTED = ['slack', 'discord', 'notion', 'google-drive', 'gmail', 'google-calendar', 'microsoft-onedrive', 'microsoft-outlook', 'telegram'];
   for (const id of POPULAR) {
     const e = all.find((x) => x.id === id);
     assert.ok(e, id + ' is listed');
     assert.equal(e.custom, false, id + ' is built-in, not custom');
-    assert.equal(e.integrationImplemented, false, id + ' is honestly marked not implemented');
-    assert.ok(/no integration actions are implemented/.test(e.readinessNote || ''), id + ' carries an honest readiness note');
+    const isImpl = IMPLEMENTED.indexOf(id) !== -1;
+    assert.equal(e.integrationImplemented, isImpl, id + ' carries the honest marker');
+    if (isImpl) {
+      assert.ok(e.readinessNote.indexOf('adapter implemented:') === 0, id + ' carries the adapter note');
+      assert.ok(e.readinessNote.includes('setup'), id + " says what setup is still the user's");
+    } else {
+      assert.ok(/no integration actions are implemented/.test(e.readinessNote || ''), id + ' carries an honest readiness note');
+    }
     assert.ok(e.costNote && e.limits, id + ' shows cost and limits before activation');
     assert.ok(Array.isArray(e.scopes) && e.scopes.length >= 1, id + ' declares exact scopes');
     assert.ok(e.category, id + ' has a category for the panel filter');
@@ -29,12 +39,26 @@ test('the curated popular providers are all listed with honest metadata', () => 
   }
 });
 
-test('a popular provider connects through the explicit gate but authorizeCall refuses it', () => {
+test('a definition-only popular provider connects through the explicit gate but authorizeCall refuses it', () => {
   const c = createConnectorCatalog({});
-  const r = c.connect('slack', { userInitiated: true, scopes: ['channels.read'], credentialRef: 'vault:slack-cred' });
+  const scope = c.describe('spotify').scopes[0].name;
+  const r = c.connect('spotify', { userInitiated: true, scopes: [scope], credentialRef: 'vault:spotify-cred' });
   assert.equal(r.ok, true, 'the unchanged explicit connect gate still runs');
+  assert.equal(c.state('spotify'), 'connected');
+  assert.deepEqual(c.authorizeCall('spotify', scope, {}), { allowed: false, reason: 'integration_not_implemented' }, 'no fake working integration');
+});
+
+test('an implemented popular provider is allowed at authorizeCall once connected, and sends still need a per-action approval', () => {
+  const c = createConnectorCatalog({});
+  const r = c.connect('slack', { userInitiated: true, scopes: ['channels.read', 'message.send'], credentialRef: 'vault:slack-cred' });
+  assert.equal(r.ok, true);
   assert.equal(c.state('slack'), 'connected');
-  assert.deepEqual(c.authorizeCall('slack', 'channels.read', {}), { allowed: false, reason: 'integration_not_implemented' }, 'no fake working integration');
+  assert.equal(c.authorizeCall('slack', 'channels.read', {}).allowed, true, 'read-only actions run after connect');
+  assert.deepEqual(c.authorizeCall('slack', 'message.send', {}), { allowed: false, reason: 'approval_required' }, 'sends need a single-use approval');
+  const a = c.approve('slack', 'message.send', { userInitiated: true });
+  assert.equal(a.ok, true);
+  assert.equal(c.authorizeCall('slack', 'message.send', { approvalId: a.approvalId }).allowed, true, 'the approval opens exactly one call');
+  assert.deepEqual(c.authorizeCall('slack', 'message.send', { approvalId: a.approvalId }), { allowed: false, reason: 'approval_required' }, 'and is single-use');
 });
 
 test('existing built-in connectors keep their authorizeCall behavior', () => {
@@ -43,12 +67,20 @@ test('existing built-in connectors keep their authorizeCall behavior', () => {
   assert.equal(c.authorizeCall('rss', 'feed.read', {}).allowed, true, 'the legacy tier is untouched');
 });
 
-test('the new entries are AI-discoverable through describe with the honest marker', () => {
+test('the still-definition-only entries are AI-discoverable through describe with the honest marker', () => {
+  const c = createConnectorCatalog({});
+  const d = c.describe('spotify');
+  assert.equal(d.id, 'spotify');
+  assert.equal(d.integrationImplemented, false);
+  assert.ok(/no integration actions are implemented/.test(d.readinessNote));
+});
+
+test('the implemented entries are AI-discoverable through describe with the adapter marker', () => {
   const c = createConnectorCatalog({});
   const d = c.describe('notion');
   assert.equal(d.id, 'notion');
-  assert.equal(d.integrationImplemented, false);
-  assert.ok(/no integration actions are implemented/.test(d.readinessNote));
+  assert.equal(d.integrationImplemented, true);
+  assert.ok(d.readinessNote.indexOf('adapter implemented:') === 0);
 });
 
 test('snapshot/restore is unaffected by the curated tier', () => {

@@ -211,10 +211,16 @@
         if (e.custom) {
           rowEl.appendChild(line('custom connector: ' + (e.readinessNote || 'integration not implemented in this build')));
         } else if (e.readinessNote) {
-          // Curated popular-provider tier (27 Nov 2026): mainstream services
-          // are LISTED for discovery, never claimed to work; the honest
-          // label travels with the row the same way it does for customs.
-          rowEl.appendChild(line('integration not implemented: ' + e.readinessNote));
+          // Honest labels travel with every row the same way they do for
+          // customs. Implemented-adapter entries (27 Nov 2026 batch) carry
+          // their own 'adapter implemented: ...' note and say what setup
+          // is still the user's; definition-only entries keep the
+          // not-implemented label until a real adapter exists.
+          if (e.readinessNote.indexOf('adapter implemented:') === 0) {
+            rowEl.appendChild(line(e.readinessNote));
+          } else {
+            rowEl.appendChild(line('integration not implemented: ' + e.readinessNote));
+          }
         }
         const state = e.state || 'discovered';
         const scopeNames = (Array.isArray(e.scopes) ? e.scopes : []).map((s) => s.name);

@@ -144,6 +144,12 @@ const IPC_CHANNELS = Object.freeze([
   // the https-only URL rules and the exact scopes; remove is refused while
   // connected. Nothing here activates a real integration: custom entries
   // carry an honest not-implemented label and authorizeCall refuses them.
+  // Real connector actions (27 Nov 2026 adapter batch): the action engine
+  // and the OAuth setup helpers for adapters that run on a client the user
+  // creates themselves.
+  'workspace:connectorAction',
+  'workspace:connectorOAuthAuthorizeUrl',
+  'workspace:connectorOAuthExchange',
   'workspace:connectorCustomAdd',
   'workspace:connectorCustomRemove',
 ]);
