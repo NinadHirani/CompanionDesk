@@ -535,3 +535,22 @@ test('microsoft-teams refuses unconnected runs, connects on the minimal scope, a
   assert.equal(r2.ok, true, JSON.stringify(r2));
   assert.ok(s.recorded[s.recorded.length - 1].url.indexOf(encodeURIComponent('19:abcXYZ@thread.v2')) !== -1, 'the chat id is URL-encoded');
 });
+
+// ---- batch 14 (27 Nov 2026): gitlab gates + token handling ----
+
+test('gitlab refuses unconnected runs, connects on the vault token, and never leaks it', async () => {
+  let seen = null;
+  const transport = async (req) => { seen = req; return { status: 200, body: JSON.stringify([{ id: 1, name: 'demo' }]), }; };
+  const { catalog, engine } = makeEngine(transport, () => 'glpat-secret-7');
+  assert.equal((await engine.run('gitlab', 'search_projects', { query: 'demo' })).reason, 'not_connected');
+  assert.equal(catalog.connect('gitlab', { userInitiated: true, scopes: ['read_api'] }).reason, 'credential_ref_required');
+  const c = catalog.connect('gitlab', { userInitiated: true, scopes: ['read_api'], credentialRef: 'vault:gitlab-pat' });
+  assert.equal(c.ok, true);
+  const r = await engine.run('gitlab', 'search_projects', { query: 'demo' });
+  assert.equal(r.ok, true);
+  assert.equal(seen.headers.Authorization, 'Bearer glpat-secret-7', 'the action uses the vault token');
+  assert.ok(seen.url.indexOf('glpat-secret') === -1, 'the vault token never appears in the request URL');
+  const second = makeEngine(async () => ({ status: 200, body: '{}' }), () => null);
+  assert.equal(second.catalog.connect('gitlab', { userInitiated: true, scopes: ['read_api'], credentialRef: 'vault:k' }).ok, true);
+  assert.equal((await second.engine.run('gitlab', 'search_projects', { query: 'q' })).reason, 'credential_missing');
+});

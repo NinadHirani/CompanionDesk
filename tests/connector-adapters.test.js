@@ -12,7 +12,7 @@ const assert = require('node:assert');
 const adapters = require('../src/connector-adapters.js');
 const { createConnectorCatalog } = require('../src/connectors.js');
 
-const IMPLEMENTED = ['anthropic', 'brave-search', 'arxiv', 'crossref', 'discord', 'github', 'gmail', 'google-calendar', 'google-docs', 'google-sheets', 'google-drive', 'google-gemini', 'huggingface', 'microsoft-calendar', 'microsoft-onedrive', 'microsoft-excel', 'microsoft-outlook', 'microsoft-teams', 'microsoft-word', 'notion', 'open-meteo', 'openai', 'openalex', 'openlibrary', 'openstreetmap', 'slack', 'tavily', 'telegram', 'wikimedia'];
+const IMPLEMENTED = ['anthropic', 'brave-search', 'arxiv', 'crossref', 'discord', 'github', 'gitlab', 'gmail', 'google-calendar', 'google-docs', 'google-sheets', 'google-drive', 'google-gemini', 'huggingface', 'microsoft-calendar', 'microsoft-onedrive', 'microsoft-excel', 'microsoft-outlook', 'microsoft-teams', 'microsoft-word', 'notion', 'open-meteo', 'openai', 'openalex', 'openlibrary', 'openstreetmap', 'slack', 'tavily', 'telegram', 'wikimedia'];
 const OAUTH = ['gmail', 'google-calendar', 'google-drive', 'microsoft-calendar', 'microsoft-onedrive', 'microsoft-outlook'];
 
 test('the adapter registry covers exactly the implemented catalog entries', () => {
@@ -716,5 +716,39 @@ test('microsoft-teams consents to exactly Chat.Read and builds validated chat re
   for (const a of adapters.listActions('microsoft-teams')) {
     assert.equal(a.kind, 'read_only');
     assert.equal(a.scope, 'chat.read');
+  }
+});
+
+// ---- batch 14 (27 Nov 2026): GitLab readonly adapter on gitlab.com (vault token) ----
+
+test('gitlab adapter pins the host, validates identifiers, and builds three readonly reads', () => {
+  assert.equal(adapters.get('gitlab').authShape, 'token');
+  assert.ok(adapters.get('gitlab').setupNote.indexOf('app vault') !== -1, 'the setup note says the token lives only in the app vault');
+  const s = adapters.buildRequest('gitlab', 'search_projects', { query: 'qiskit optimisation' }, 'gl-tok');
+  assert.equal(s.ok, true);
+  assert.equal(s.request.method, 'GET');
+  assert.equal(s.request.url, 'https://gitlab.com/api/v4/projects?search=' + encodeURIComponent('qiskit optimisation') + '&per_page=20');
+  assert.equal(s.request.headers.Authorization, 'Bearer gl-tok');
+  assert.equal(s.request.urlContainsSecret, false);
+  for (const bad of ['a;b', 'a/b', 'q?', 'a\nb', 'q=x']) {
+    assert.equal(adapters.buildRequest('gitlab', 'search_projects', { query: bad }, 'gl-tok').reason, 'param_invalid', bad);
+  }
+  assert.equal(adapters.buildRequest('gitlab', 'search_projects', {}, 'gl-tok').reason, 'param_missing');
+  const g = adapters.buildRequest('gitlab', 'get_project', { project: 'group/project' }, 'gl-tok');
+  assert.equal(g.ok, true);
+  assert.equal(g.request.url, 'https://gitlab.com/api/v4/projects/' + encodeURIComponent('group/project'));
+  const c = adapters.buildRequest('gitlab', 'list_recent_commits', { project: '123' }, 'gl-tok');
+  assert.equal(c.ok, true);
+  assert.equal(c.request.url, 'https://gitlab.com/api/v4/projects/123/repository/commits?per_page=20');
+  for (const bad of ['../x', 'a..b', 'a b', 'id?q=1']) {
+    assert.equal(adapters.buildRequest('gitlab', 'get_project', { project: bad }, 'gl-tok').reason, 'param_invalid', bad);
+    assert.equal(adapters.buildRequest('gitlab', 'list_recent_commits', { project: bad }, 'gl-tok').reason, 'param_invalid', bad);
+  }
+  assert.equal(adapters.buildRequest('gitlab', 'get_project', {}, 'gl-tok').reason, 'param_missing');
+  assert.equal(adapters.validateOnly('gitlab', 'search_projects', { query: 'q' }), null, 'validateOnly needs no credential');
+  assert.equal(adapters.validateOnly('gitlab', 'get_project', { project: 'x' }), null, 'validateOnly needs no credential');
+  for (const a of adapters.listActions('gitlab')) {
+    assert.equal(a.kind, 'read_only');
+    assert.equal(a.scope, 'read_api');
   }
 });

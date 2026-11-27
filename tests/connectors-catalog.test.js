@@ -62,9 +62,9 @@ test('credential references are opaque: raw secrets are refused and never stored
   assert.equal(r.ok, true, 'a keychain-style opaque ref is accepted');
   assert.equal(c.connect('github', { scopes: ['repos.read'], userInitiated: true, credentialRef: 'raw-token-pasted-inline' }).reason, 'already_connected');
   assert.equal(c.state('github'), 'connected');
-  const bad = c.connect('gitlab', { scopes: ['projects.read'], userInitiated: true, credentialRef: 'raw secret with spaces' });
+  const bad = c.connect('gitlab', { scopes: ['read_api'], userInitiated: true, credentialRef: 'raw secret with spaces' });
   assert.equal(bad.reason, 'credential_ref_invalid');
-  const tooLong = c.connect('gitlab', { scopes: ['projects.read'], userInitiated: true, credentialRef: 'x'.repeat(200) });
+  const tooLong = c.connect('gitlab', { scopes: ['read_api'], userInitiated: true, credentialRef: 'x'.repeat(200) });
   assert.equal(tooLong.reason, 'credential_ref_invalid');
   assert.equal(c.state('gitlab'), 'discovered', 'gitlab stays unconnected after refusals');
   assert.equal(c.audit().some(e => JSON.stringify(e).includes('raw secret')), false, 'the audit never carries a secret-looking value');

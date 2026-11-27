@@ -530,6 +530,32 @@
     ],
   };
 
+  ADAPTERS.gitlab = {
+    id: 'gitlab', name: 'GitLab', authShape: 'token', setupRequired: false,
+    setupNote: 'paste your own GitLab personal access token with the read_api scope (create it at gitlab.com under user settings, personal access tokens); the token is stored only in the app vault, never requested or shown in chat; this build talks to gitlab.com only, not a self-hosted instance',
+    buildHeaders: function (token) { return { Authorization: 'Bearer ' + token, Accept: 'application/json', 'User-Agent': 'CompanionDesk' }; },
+    actions: [
+      { id: 'search_projects', label: 'Search public and permitted GitLab projects', scope: 'read_api', kind: 'read_only',
+        params: [{ name: 'query', required: true, maxLength: 200 }],
+        build: function (p, token) {
+          if (!/^[A-Za-z0-9_ .,'-]+$/.test(p.query)) return { error: 'param_invalid' };
+          return { method: 'GET', url: 'https://gitlab.com/api/v4/projects?search=' + encodeURIComponent(p.query) + '&per_page=20', headers: this.buildHeaders(token), body: null };
+        } },
+      { id: 'get_project', label: 'Read one GitLab project by id or namespace/project path', scope: 'read_api', kind: 'read_only',
+        params: [{ name: 'project', required: true, maxLength: 200 }],
+        build: function (p, token) {
+          if (!/^[A-Za-z0-9_./-]+$/.test(p.project) || p.project.indexOf('..') !== -1) return { error: 'param_invalid' };
+          return { method: 'GET', url: 'https://gitlab.com/api/v4/projects/' + encodeURIComponent(p.project), headers: this.buildHeaders(token), body: null };
+        } },
+      { id: 'list_recent_commits', label: 'List the recent commits of one GitLab project', scope: 'read_api', kind: 'read_only',
+        params: [{ name: 'project', required: true, maxLength: 200 }],
+        build: function (p, token) {
+          if (!/^[A-Za-z0-9_./-]+$/.test(p.project) || p.project.indexOf('..') !== -1) return { error: 'param_invalid' };
+          return { method: 'GET', url: 'https://gitlab.com/api/v4/projects/' + encodeURIComponent(p.project) + '/repository/commits?per_page=20', headers: this.buildHeaders(token), body: null };
+        } },
+    ],
+  };
+
   ADAPTERS['brave-search'] = {
     id: 'brave-search', name: 'Brave Search', authShape: 'token', setupRequired: false,
     setupNote: 'paste your own API key from brave.com/search/api; the free tier has a monthly query allowance; your key is stored only in the app vault, never requested or shown in chat',
