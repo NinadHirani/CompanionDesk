@@ -12,7 +12,7 @@ const assert = require('node:assert');
 const adapters = require('../src/connector-adapters.js');
 const { createConnectorCatalog } = require('../src/connectors.js');
 
-const IMPLEMENTED = ['anthropic', 'brave-search', 'arxiv', 'crossref', 'discord', 'github', 'gmail', 'google-calendar', 'google-docs', 'google-sheets', 'google-drive', 'google-gemini', 'huggingface', 'microsoft-calendar', 'microsoft-onedrive', 'microsoft-excel', 'microsoft-outlook', 'microsoft-word', 'notion', 'open-meteo', 'openai', 'openalex', 'openlibrary', 'openstreetmap', 'slack', 'tavily', 'telegram', 'wikimedia'];
+const IMPLEMENTED = ['anthropic', 'brave-search', 'arxiv', 'crossref', 'discord', 'github', 'gmail', 'google-calendar', 'google-docs', 'google-sheets', 'google-drive', 'google-gemini', 'huggingface', 'microsoft-calendar', 'microsoft-onedrive', 'microsoft-excel', 'microsoft-outlook', 'microsoft-teams', 'microsoft-word', 'notion', 'open-meteo', 'openai', 'openalex', 'openlibrary', 'openstreetmap', 'slack', 'tavily', 'telegram', 'wikimedia'];
 const OAUTH = ['gmail', 'google-calendar', 'google-drive', 'microsoft-calendar', 'microsoft-onedrive', 'microsoft-outlook'];
 
 test('the adapter registry covers exactly the implemented catalog entries', () => {
@@ -684,4 +684,37 @@ test('microsoft-word consents to exactly Files.Read and reads document metadata'
   const [a] = adapters.listActions('microsoft-word');
   assert.equal(a.kind, 'read_only');
   assert.equal(a.scope, 'documents.read');
+});
+
+// ---- batch 13 (27 Nov 2026): Microsoft Teams readonly chat reads (Graph) ----
+
+test('microsoft-teams consents to exactly Chat.Read and builds validated chat reads', () => {
+  assert.equal(adapters.get('microsoft-teams').oauth.scope, 'Chat.Read offline_access');
+  const au = adapters.authorizeUrl('microsoft-teams', { client_id: 'cid', redirect_uri: 'https://app.example/cb' }, 'st');
+  assert.ok(au.url.indexOf('scope=' + encodeURIComponent('Chat.Read offline_access')) !== -1, 'the consent URL names only Chat.Read');
+  assert.equal(au.url.indexOf('login.microsoftonline.com/common/oauth2/v2.0/authorize') !== -1, true, 'pinned authorize host');
+  const tk = adapters.tokenRequest('microsoft-teams', { client_id: 'cid', client_secret: 'cs', redirect_uri: 'https://app.example/cb' }, 'code1');
+  assert.equal(tk.request.url, 'https://login.microsoftonline.com/common/oauth2/v2.0/token');
+  const blob = { client_id: 'cid', access_token: 'at-1', refresh_token: 'rt-1', expires_at: 3600000 };
+  const lc = adapters.buildRequest('microsoft-teams', 'list_chats', {}, JSON.stringify(blob));
+  assert.equal(lc.ok, true);
+  assert.equal(lc.request.method, 'GET');
+  assert.equal(lc.request.url, 'https://graph.microsoft.com/v1.0/chats?$top=20');
+  assert.equal(lc.request.headers.Authorization, 'Bearer at-1');
+  assert.equal(lc.request.urlContainsSecret, false);
+  const gm = adapters.buildRequest('microsoft-teams', 'get_chat_messages', { chat_id: '19:abcXYZ@thread.v2' }, JSON.stringify(blob));
+  assert.equal(gm.ok, true);
+  assert.equal(gm.request.method, 'GET');
+  assert.equal(gm.request.url, 'https://graph.microsoft.com/v1.0/chats/' + encodeURIComponent('19:abcXYZ@thread.v2') + '/messages?$top=20');
+  assert.equal(gm.request.headers.Authorization, 'Bearer at-1');
+  for (const bad of ['../x', 'id/x', 'id?q=1', 'id q']) {
+    assert.equal(adapters.buildRequest('microsoft-teams', 'get_chat_messages', { chat_id: bad }, JSON.stringify(blob)).reason, 'param_invalid', bad);
+  }
+  assert.equal(adapters.buildRequest('microsoft-teams', 'get_chat_messages', {}, JSON.stringify(blob)).reason, 'param_missing');
+  assert.equal(adapters.validateOnly('microsoft-teams', 'list_chats', {}), null, 'validateOnly needs no credential');
+  assert.equal(adapters.validateOnly('microsoft-teams', 'get_chat_messages', { chat_id: 'x' }), null, 'validateOnly needs no credential');
+  for (const a of adapters.listActions('microsoft-teams')) {
+    assert.equal(a.kind, 'read_only');
+    assert.equal(a.scope, 'chat.read');
+  }
 });

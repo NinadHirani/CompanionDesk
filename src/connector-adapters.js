@@ -774,6 +774,26 @@
     ]),
   };
 
+  ADAPTERS['microsoft-teams'] = {
+    id: 'microsoft-teams', name: 'Microsoft Teams', authShape: 'oauth_json', setupRequired: true,
+    setupNote: 'register your own app in the Azure portal (Microsoft Graph) and complete the in-app sign-in; no shared client exists; consent requests only the read-only Chat.Read Microsoft scope (delegated; a tenant that blocks user consent needs its admin to approve the app once)',
+    oauth: microsoftOauth('Chat.Read offline_access'),
+    buildHeaders: function (blob) { return bearerHeader(blob.access_token); },
+    actions: oauthActions([
+      { id: 'list_chats', label: 'List your recent Teams chats', scope: 'chat.read', kind: 'read_only',
+        params: [],
+        build: function (p, blob) {
+          return { method: 'GET', url: 'https://graph.microsoft.com/v1.0/chats?$top=20', headers: this.buildHeaders(blob), body: null };
+        } },
+      { id: 'get_chat_messages', label: 'Read the recent messages of one Teams chat', scope: 'chat.read', kind: 'read_only',
+        params: [{ name: 'chat_id', required: true, maxLength: 300 }],
+        build: function (p, blob) {
+          if (!/^[A-Za-z0-9:@._-]+$/.test(p.chat_id)) return { error: 'param_invalid' };
+          return { method: 'GET', url: 'https://graph.microsoft.com/v1.0/chats/' + encodeURIComponent(p.chat_id) + '/messages?$top=20', headers: this.buildHeaders(blob), body: null };
+        } },
+    ]),
+  };
+
   ADAPTERS['microsoft-onedrive'] = {
     id: 'microsoft-onedrive', name: 'Microsoft OneDrive', authShape: 'oauth_json', setupRequired: true,
     setupNote: 'register your own app in the Azure portal (Microsoft Graph, delegated Files.ReadWrite) and complete the in-app sign-in; no shared client exists',

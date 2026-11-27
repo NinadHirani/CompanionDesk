@@ -509,3 +509,29 @@ test('microsoft-word refuses unconnected runs and reads metadata after a refresh
   assert.equal(s.recorded[1].headers.Authorization, 'Bearer at-2');
   assert.ok(r.data.echo.indexOf('rt-2') === -1 && r.data.echo.indexOf('REDACTED') !== -1, 'secret-shaped response text is redacted');
 });
+
+// ---- batch 13 (27 Nov 2026): microsoft-teams gates + refresh ----
+
+test('microsoft-teams refuses unconnected runs, connects on the minimal scope, and refreshes before chat reads', async () => {
+  const s = oauthStack(async function (req) {
+    if (req.url.indexOf('login.microsoftonline.com/common/oauth2/v2.0/token') !== -1) {
+      return { status: 200, body: JSON.stringify({ access_token: 'at-2', expires_in: 3600, refresh_token: 'rt-2' }) };
+    }
+    return { status: 200, body: JSON.stringify({ value: [], echo: 'access_token=at-2' }) };
+  }, expiredBlob());
+  assert.equal((await s.engine.run('microsoft-teams', 'list_chats', {})).reason, 'not_connected');
+  assert.equal(s.catalog.connect('microsoft-teams', { userInitiated: true, scopes: ['chat.read'] }).reason, 'credential_ref_required');
+  const c = s.catalog.connect('microsoft-teams', { userInitiated: true, scopes: ['chat.read'], credentialRef: 'vault:mst' });
+  assert.equal(c.ok, true);
+  const r = await s.engine.run('microsoft-teams', 'list_chats', {});
+  assert.equal(r.ok, true, JSON.stringify(r));
+  assert.equal(s.recorded.length, 2, 'one refresh, one action');
+  assert.equal(s.recorded[0].url.indexOf('login.microsoftonline.com/common/oauth2/v2.0/token') !== -1, true, 'refresh goes to the pinned Microsoft token endpoint');
+  assert.equal(s.recorded[1].url.indexOf('https://graph.microsoft.com/v1.0/chats?$top=20') === 0, true, 'pinned Graph host');
+  assert.equal(s.recorded[1].headers.Authorization, 'Bearer at-2', 'the action uses the fresh token');
+  assert.ok(s.recorded[1].url.indexOf('at-2') === -1, 'the access token never rides the URL');
+  assert.ok(r.data.echo.indexOf('at-2') === -1 && r.data.echo.indexOf('REDACTED') !== -1, 'secret-shaped response text is redacted');
+  const r2 = await s.engine.run('microsoft-teams', 'get_chat_messages', { chat_id: '19:abcXYZ@thread.v2' });
+  assert.equal(r2.ok, true, JSON.stringify(r2));
+  assert.ok(s.recorded[s.recorded.length - 1].url.indexOf(encodeURIComponent('19:abcXYZ@thread.v2')) !== -1, 'the chat id is URL-encoded');
+});
