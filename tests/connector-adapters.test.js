@@ -12,7 +12,7 @@ const assert = require('node:assert');
 const adapters = require('../src/connector-adapters.js');
 const { createConnectorCatalog } = require('../src/connectors.js');
 
-const IMPLEMENTED = ['anthropic', 'brave-search', 'arxiv', 'airtable', 'coda', 'circleci', 'crossref', 'discord', 'docker-hub', 'github', 'gitlab', 'gmail', 'google-calendar', 'google-docs', 'google-sheets', 'google-drive', 'google-gemini', 'huggingface', 'internet-archive', 'jira', 'linear', 'microsoft-calendar', 'microsoft-onedrive', 'microsoft-excel', 'microsoft-outlook', 'microsoft-teams', 'microsoft-word', 'musicbrainz', 'notion', 'npm', 'open-meteo', 'openai', 'openalex', 'openlibrary', 'openstreetmap', 'pypi', 'slack', 'tavily', 'telegram', 'trello', 'todoist', 'wikimedia'];
+const IMPLEMENTED = ['anthropic', 'brave-search', 'arxiv', 'airtable', 'coda', 'circleci', 'crossref', 'discord', 'docker-hub', 'github', 'gitlab', 'gmail', 'google-calendar', 'google-docs', 'google-sheets', 'google-drive', 'google-gemini', 'huggingface', 'internet-archive', 'jira', 'mailgun', 'postmark', 'sendgrid', 'linear', 'microsoft-calendar', 'microsoft-onedrive', 'microsoft-excel', 'microsoft-outlook', 'microsoft-teams', 'microsoft-word', 'musicbrainz', 'notion', 'npm', 'open-meteo', 'openai', 'openalex', 'openlibrary', 'openstreetmap', 'pypi', 'slack', 'tavily', 'telegram', 'trello', 'todoist', 'wikimedia'];
 const OAUTH = ['gmail', 'google-calendar', 'google-drive', 'microsoft-calendar', 'microsoft-onedrive', 'microsoft-outlook'];
 
 test('the adapter registry covers exactly the implemented catalog entries', () => {
@@ -1101,5 +1101,57 @@ test('circleci builds Circle-Token reads with strict validation and no write act
   for (const a of adapters.listActions('circleci')) {
     assert.equal(a.kind, 'read_only', 'circleci is read-only');
     assert.equal(a.scope, 'pipelines.read');
+  }
+});
+
+// ---- batch 27 (27 Nov 2026): sendgrid, mailgun, postmark read-only stats adapters ----
+
+test('sendgrid builds bearer stats reads with strict date and bucket validation and no send', () => {
+  const s = adapters.buildRequest('sendgrid', 'get_scopes', {}, 'sg-key');
+  assert.equal(s.ok, true);
+  assert.equal(s.request.url, 'https://api.sendgrid.com/v3/scopes');
+  assert.equal(s.request.headers.Authorization, 'Bearer sg-key');
+  const st = adapters.buildRequest('sendgrid', 'get_stats', { start_date: '2026-11-01' }, 'sg-key');
+  assert.equal(st.ok, true);
+  assert.equal(st.request.url, 'https://api.sendgrid.com/v3/stats?start_date=2026-11-01&aggregated_by=day');
+  const ste = adapters.buildRequest('sendgrid', 'get_stats', { start_date: '2026-11-01', end_date: '2026-11-07', aggregated_by: 'week' }, 'sg-key');
+  assert.equal(ste.request.url, 'https://api.sendgrid.com/v3/stats?start_date=2026-11-01&aggregated_by=week&end_date=2026-11-07');
+  assert.equal(adapters.buildRequest('sendgrid', 'get_stats', { start_date: '2026/11/01' }, 'sg-key').reason, 'param_invalid', 'slash date');
+  assert.equal(adapters.buildRequest('sendgrid', 'get_stats', { start_date: '2026-11-01', aggregated_by: 'hour' }, 'sg-key').reason, 'param_invalid', 'bad bucket');
+  for (const a of adapters.listActions('sendgrid')) {
+    assert.equal(a.kind, 'read_only', 'sendgrid send is not implemented');
+    assert.equal(a.scope, 'stats.read');
+  }
+});
+
+test('mailgun builds basic-auth domain reads with strict validation and no send', () => {
+  const ld = adapters.buildRequest('mailgun', 'list_domains', { limit: '100' }, 'mg-key');
+  assert.equal(ld.ok, true);
+  assert.equal(ld.request.url, 'https://api.mailgun.net/v3/domains?limit=100');
+  assert.ok(ld.request.headers.Authorization.indexOf('Basic ') === 0, 'mailgun uses basic auth as user api');
+  const gd = adapters.buildRequest('mailgun', 'get_domain', { domain: 'mail.example.com' }, 'mg-key');
+  assert.equal(gd.ok, true);
+  assert.equal(gd.request.url, 'https://api.mailgun.net/v3/domains/mail.example.com');
+  assert.equal(adapters.buildRequest('mailgun', 'get_domain', { domain: 'not a domain' }, 'mg-key').reason, 'param_invalid', 'space in domain');
+  assert.equal(adapters.buildRequest('mailgun', 'list_domains', { limit: '101' }, 'mg-key').reason, 'param_invalid', 'limit above the cap');
+  for (const a of adapters.listActions('mailgun')) {
+    assert.equal(a.kind, 'read_only', 'mailgun send is not implemented');
+    assert.equal(a.scope, 'domains.read');
+  }
+});
+
+test('postmark builds server-token bounce reads with strict validation and no send', () => {
+  const gb = adapters.buildRequest('postmark', 'get_bounces', { count: '100' }, 'pm-tok');
+  assert.equal(gb.ok, true);
+  assert.equal(gb.request.url, 'https://api.postmarkapp.com/bounces?count=100&offset=0');
+  assert.equal(gb.request.headers['X-Postmark-Server-Token'], 'pm-tok');
+  const g1 = adapters.buildRequest('postmark', 'get_bounce', { bounce_id: '123456' }, 'pm-tok');
+  assert.equal(g1.ok, true);
+  assert.equal(g1.request.url, 'https://api.postmarkapp.com/bounces/123456');
+  assert.equal(adapters.buildRequest('postmark', 'get_bounce', { bounce_id: 'a12' }, 'pm-tok').reason, 'param_invalid', 'non-numeric bounce id');
+  assert.equal(adapters.buildRequest('postmark', 'get_bounces', { count: '101' }, 'pm-tok').reason, 'param_invalid', 'count above the cap');
+  for (const a of adapters.listActions('postmark')) {
+    assert.equal(a.kind, 'read_only', 'postmark send is not implemented');
+    assert.equal(a.scope, 'bounces.read');
   }
 });

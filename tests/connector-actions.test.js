@@ -769,3 +769,21 @@ test('circleci refuses before connect and reads with the credential in the Circl
   assert.equal(seen.url, 'https://circleci.com/api/v2/me');
   assert.equal(seen.headers['Circle-Token'], 'cci-tok', 'the stored credential rides the read');
 });
+
+// ---- batch 27 (27 Nov 2026): mailer credential gates ----
+
+test('sendgrid, mailgun and postmark refuse before connect and ride their credentials on reads', async () => {
+  let seen = null;
+  const transport = async (req) => { seen = req; return { status: 200, body: JSON.stringify([]) }; };
+  const { catalog, engine } = makeEngine(transport, 'mailer-tok');
+  for (const [id, action, header, scope] of [['sendgrid', 'get_scopes', 'Authorization', 'stats.read'], ['mailgun', 'list_domains', 'Authorization', 'domains.read'], ['postmark', 'get_bounces', 'X-Postmark-Server-Token', 'bounces.read']]) {
+    assert.equal((await engine.run(id, action, {})).reason, 'not_connected', id + ' refuses before connect');
+    const c = catalog.connect(id, { userInitiated: true, scopes: [scope], credentialRef: 'vault:' + id + '-cred' });
+    assert.equal(c.ok, true, id + ' connects');
+    const r = await engine.run(id, action, {});
+    assert.equal(r.ok, true, id + ' reads with a credential');
+    if (header === 'X-Postmark-Server-Token') { assert.equal(seen.headers[header], 'mailer-tok', id + ' header'); }
+    else if (id === 'mailgun') { assert.equal(seen.headers[header], 'Basic ' + Buffer.from('api:mailer-tok').toString('base64'), id + ' credential rides the header'); }
+    else { assert.equal(seen.headers[header], 'Bearer mailer-tok', id + ' credential rides the header'); }
+  }
+});

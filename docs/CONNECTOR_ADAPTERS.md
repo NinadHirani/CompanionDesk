@@ -570,3 +570,15 @@ Actions (pinned to `circleci.com/api/v2`, auth rides the `Circle-Token` header):
 The token is the user's own CircleCI personal API token pasted into the app vault. The row declares no write scope, so there is no approval-gated action: the adapter is read-only end to end. No writes, no triggers, no cancels.
 
 Tests: adapter build/validation (7 assertions incl. charset reject, id requirement, limit cap, read-only sweep), engine gates (not_connected refusal, credential rides the Circle-Token header). Catalog count pins: 129 still-definition-only expanded rows, 133 definition-only total.
+## Batch 27 (27 Nov 2026): SendGrid, Mailgun, Postmark stats reads
+
+Upgraded three mailer connectors to key-bound READ-ONLY adapters (each `auth: api_key`, `authShape: token`); their `mail.send` scope stays NOT implemented in this build: nothing sends.
+
+Actions:
+- SendGrid (pinned `api.sendgrid.com/v3`, Bearer): `get_scopes` token check; `get_stats` with required start_date (validated YYYY-MM-DD), optional end_date, aggregated_by day/week/month (defaults day, invalid values refuse).
+- Mailgun (pinned `api.mailgun.net/v3`, Basic auth as user `api` with the key as password): `list_domains` limit 1-100; `get_domain` by name (charset-validated domain).
+- Postmark (pinned `api.postmarkapp.com`, `X-Postmark-Server-Token` header): `get_bounces` count 1-100 from offset 0; `get_bounce` by numeric id.
+
+The credentials are the user's own keys/tokens pasted into the app vault. No send, no writes anywhere; the adapters expose only the read actions above.
+
+Tests: adapter build/validation per mailer (date and bucket validation, basic-auth header shape, numeric-id validation, caps, read-only sweeps), engine gates (each refuses before connect and rides its credential on a read; Mailgun's header asserted against the computed Basic value). Catalog count pins: 126 still-definition-only expanded rows, 130 definition-only total.

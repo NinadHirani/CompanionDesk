@@ -157,6 +157,76 @@
     ],
   };
 
+  ADAPTERS.sendgrid = {
+    id: 'sendgrid', name: 'SendGrid', authShape: 'token', setupRequired: false,
+    setupNote: 'create a read-scope API key at app.sendgrid.com/settings/api_keys and paste it; your key is stored only in the app vault, never requested or shown in chat',
+    buildHeaders: function (token) { return { Authorization: 'Bearer ' + token, 'User-Agent': 'CompanionDesk' }; },
+    actions: [
+      { id: 'get_scopes', label: 'Check the SendGrid token works', scope: 'stats.read', kind: 'read_only',
+        params: [],
+        build: function (p, token) {
+          return { method: 'GET', url: 'https://api.sendgrid.com/v3/scopes', headers: this.buildHeaders(token), body: null };
+        } },
+      { id: 'get_stats', label: 'Read SendGrid email statistics for a date range', scope: 'stats.read', kind: 'read_only',
+        params: [{ name: 'start_date', required: true, maxLength: 10 }, { name: 'end_date', required: false, maxLength: 10 }, { name: 'aggregated_by', required: false, maxLength: 5 }],
+        build: function (p, token) {
+          if (!/^\d{4}-\d{2}-\d{2}$/.test(p.start_date)) return { error: 'param_invalid' };
+          let url = 'https://api.sendgrid.com/v3/stats?start_date=' + encodeURIComponent(p.start_date) + '&aggregated_by=day';
+          if (p.end_date !== undefined && p.end_date !== '') {
+            if (!/^\d{4}-\d{2}-\d{2}$/.test(p.end_date)) return { error: 'param_invalid' };
+            url += '&end_date=' + encodeURIComponent(p.end_date);
+          }
+          if (p.aggregated_by !== undefined && p.aggregated_by !== '') {
+            if (['day', 'week', 'month'].indexOf(p.aggregated_by) === -1) return { error: 'param_invalid' };
+            url = url.replace('aggregated_by=day', 'aggregated_by=' + p.aggregated_by);
+          }
+          return { method: 'GET', url: url, headers: this.buildHeaders(token), body: null };
+        } },
+    ],
+  };
+
+  ADAPTERS.mailgun = {
+    id: 'mailgun', name: 'Mailgun', authShape: 'token', setupRequired: false,
+    setupNote: 'create a Mailgun API key at app.mailgun.com/settings/api_keys and paste it; your key is stored only in the app vault, never requested or shown in chat',
+    buildHeaders: function (token) { return { Authorization: 'Basic ' + Buffer.from('api:' + token).toString('base64'), 'User-Agent': 'CompanionDesk' }; },
+    actions: [
+      { id: 'list_domains', label: 'List your Mailgun sending domains (capped)', scope: 'domains.read', kind: 'read_only',
+        params: [{ name: 'limit', required: false, maxLength: 3 }],
+        build: function (p, token) {
+          const limit = optionalInt(p, 'limit', 50);
+          if (limit === null || limit < 1 || limit > 100) return { error: 'param_invalid' };
+          return { method: 'GET', url: 'https://api.mailgun.net/v3/domains?limit=' + limit, headers: this.buildHeaders(token), body: null };
+        } },
+      { id: 'get_domain', label: 'Read one Mailgun domain by name', scope: 'domains.read', kind: 'read_only',
+        params: [{ name: 'domain', required: true, maxLength: 253 }],
+        build: function (p, token) {
+          if (!/^[A-Za-z0-9.-]+$/.test(p.domain)) return { error: 'param_invalid' };
+          return { method: 'GET', url: 'https://api.mailgun.net/v3/domains/' + encodeURIComponent(p.domain), headers: this.buildHeaders(token), body: null };
+        } },
+    ],
+  };
+
+  ADAPTERS.postmark = {
+    id: 'postmark', name: 'Postmark', authShape: 'token', setupRequired: false,
+    setupNote: 'paste the server token of the Postmark server you want to read, from app.postmarkapp.com/server/settings; it is stored only in the app vault, never requested or shown in chat',
+    buildHeaders: function (token) { return { 'X-Postmark-Server-Token': token, Accept: 'application/json', 'User-Agent': 'CompanionDesk' }; },
+    actions: [
+      { id: 'get_bounces', label: 'Read recent bounces on your Postmark server (capped)', scope: 'bounces.read', kind: 'read_only',
+        params: [{ name: 'count', required: false, maxLength: 3 }],
+        build: function (p, token) {
+          const count = optionalInt(p, 'count', 50);
+          if (count === null || count < 1 || count > 100) return { error: 'param_invalid' };
+          return { method: 'GET', url: 'https://api.postmarkapp.com/bounces?count=' + count + '&offset=0', headers: this.buildHeaders(token), body: null };
+        } },
+      { id: 'get_bounce', label: 'Read one Postmark bounce by id', scope: 'bounces.read', kind: 'read_only',
+        params: [{ name: 'bounce_id', required: true, maxLength: 20 }],
+        build: function (p, token) {
+          if (!/^\d{1,20}$/.test(p.bounce_id)) return { error: 'param_invalid' };
+          return { method: 'GET', url: 'https://api.postmarkapp.com/bounces/' + encodeURIComponent(p.bounce_id), headers: this.buildHeaders(token), body: null };
+        } },
+    ],
+  };
+
   ADAPTERS.circleci = {
     id: 'circleci', name: 'CircleCI', authShape: 'token', setupRequired: false,
     setupNote: 'create a personal API token at circleci.com/account/api and paste it; your token is stored only in the app vault, never requested or shown in chat',
