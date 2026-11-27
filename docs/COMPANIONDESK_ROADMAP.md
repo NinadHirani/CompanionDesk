@@ -1,6 +1,6 @@
 # CompanionDesk Roadmap (general-purpose desktop companion)
 
-Updated Nov 23, 2026. Direction set Oct 28, 2026: CompanionDesk is a
+Updated Nov 27, 2026 (status refresh). Direction set Oct 28, 2026: CompanionDesk is a
 **general-purpose, local-first desktop AI companion** inspired by the
 companion functionality in potlakai/nus-desktop (floating companion/Knot,
 voice, screen awareness, point-at-element guidance, reusable step workflows,
@@ -14,12 +14,13 @@ M0-M8) with the vision in docs/PRODUCT_BLUEPRINT.md. This file records the
 original direction, the standing constraints, and the completed-work
 history, kept consistent with those documents.
 
-Standing constraints (updated Nov 23, 2026): local-first and free-first; no
+Standing constraints (updated Nov 27, 2026): local-first and free-first; no
 billing/Supabase/Stripe; no required cloud key (optional, disclosed Gemini
-only); default model llama3.2:latest today, becoming a user setting in M0;
-macOS desktop-first for the Electron app, with an Android webview preview
-now in scope (debug-signed APK); App Store/Play Store distribution still out
-of scope.
+only, key in the OS credential vault, double-gated behind cloud_enabled);
+chat and vision models are user settings backed by the provider registry and
+task router; macOS desktop-first for the Electron app, with an Android
+webview preview in scope (debug-signed APK); App Store/Play Store
+distribution still out of scope.
 
 ## Phase 0 - General-purpose foundation (Oct 28, 2026, DONE)
 
@@ -46,8 +47,12 @@ billing, local DB only.
    disk.
 3. **Voice in** - DONE as push-to-talk. Local whisper.cpp with a fixed-path
    allowlist and a visible recording indicator (src/voice.js, src/whisper.js,
-   src/vad.js); cross-platform on desktop, not Windows-only. Multilingual
-   models, wake word, and TTS remain PLANNED (M6); none implemented.
+   src/vad.js); cross-platform on desktop, not Windows-only. Wake word: the
+   milestone-2 engine landed (dynamic companion name, platform gate, honest
+   listener state) and stays DEFAULT-OFF pending physical mic validation on
+   real devices. TTS: resolved to OS-native speechSynthesis only (piper
+   deferred and unbundled). Multilingual recognition models remain planned;
+   the wake lane stays out of the milestone unless Ninad reopens it.
 4. **Reusable step workflows** - NOT DONE. Planned with the workspace UI
    (M8).
 
@@ -83,9 +88,19 @@ propose-then-confirm principle is unchanged.
     adapter, hydrate/export surfaces, audit-plus-anchor written in one
     transaction, startup chain verification, interrupted-run
     reconciliation, and save-on-tick plus quit hooks in main.js).
-    Remaining reviewed gates: the scheduling and file-output tool gates
-    and the run-driver Stage B/C, which stay paused at the proposal per
-    Ninad's 24 Nov direction.
+    Progress since 24 Nov: the scheduling tool gate landed (enabled and
+    tested), the file-access tool is registered as the second agent tool,
+    and the run driver reached Stage B with a review-briefed run entry
+    point; the file-output tool is implemented but stays UNREGISTERED
+    pending Ninad's root/security decision, and run-driver Stage C stays
+    deferred. The connector lane (Ninad's 26-27 Nov decisions): the 20-entry
+    free-first connector catalog with exact per-connector scopes, approval
+    gates and a full lifecycle; the AI connect-request center (the agent can
+    only ASK, an explicit user click resolves it); connector connector
+    persistence so connections last until the user disconnects; and the
+    service-agnostic credential store (OS credential vault, fail-closed,
+    deterministic opaque references). NOTHING is connected: naming services,
+    entering credentials and approving activations remain Ninad's calls.
 
 Risks unchanged: per-OS permissions (Accessibility, Screen Recording,
 Android foreground-service types) must fail closed; privacy expectations are
@@ -103,9 +118,12 @@ the product.
 ## Superseded forward plan
 
 The old Phase 1/2/4 ordering is replaced by docs/IMPLEMENTATION_ROADMAP.md
-(M0-M8 with Gate 1 and Gate 2). Beyond the DONE items above, nothing in that
-plan is implemented; docs/PRODUCT_BLUEPRINT.md section 4 is the
-authoritative planned list.
+(M0-M8 with Gate 1 and Gate 2), which is the LIVE record: M0-M6 slices plus
+the Gate 2 agent foundation, workspace surface and connector lane are
+largely landed there, with the remaining owner-gated items called out in
+docs/NEXT_DECISIONS.md. docs/PRODUCT_BLUEPRINT.md section 4 remains the
+authoritative planned list; this file no longer carries a parallel
+implementation status.
 
 ## Explicitly out of scope (updated Nov 23, 2026)
 

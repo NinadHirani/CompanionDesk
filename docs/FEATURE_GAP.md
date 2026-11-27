@@ -1,12 +1,12 @@
 # FEATURE_GAP.md - CompanionDesk vs nus-desktop companion capabilities
 
 HISTORICAL COMPARISON SNAPSHOT. The nus-desktop comparison below is the
-Oct 28, 2026 snapshot, kept unchanged for reference, and the CompanionDesk
-status and gap lists below were last verified against main `29c1417` (331
-tests at that snapshot). This file is NOT the canonical current status: the
-current baseline is docs/PRODUCT_BLUEPRINT.md and the forward plan is
-docs/IMPLEMENTATION_ROADMAP.md (M0 and M1 complete; that file carries the
-verified head, test count and CI run ids).
+Oct 28, 2026 snapshot, kept unchanged for reference. The CompanionDesk
+status and gap lists below were refreshed 27 Nov 2026 against main `bb9aab9`
+(1372 tests, both main-branch CI workflows green). This file is NOT the
+canonical current status: the current baseline is docs/PRODUCT_BLUEPRINT.md
+and the forward plan is docs/IMPLEMENTATION_ROADMAP.md (that file carries
+the verified head, test count and CI run ids).
 
 ## What nus-desktop documents (verified from its README, Oct 28, 2026)
 
@@ -33,25 +33,35 @@ verified head, test count and CI run ids).
 
 ## CompanionDesk status (historical snapshot, verified Nov 23, 2026 against main 29c1417; current state: docs/PRODUCT_BLUEPRINT.md)
 
-- Local-first chat with local Ollama (llama3.2:latest default); the opt-in
-  Gemini fallback now has secure key setup: the key is encrypted at rest in
-  the OS credential vault via Electron safeStorage, decrypted only in the
-  main process, never returned to the renderer or placed in a URL, and
-  fail-closed when OS encryption is unavailable. VERIFIED in src/ai.js and
-  src/secure-store.js.
+- Local-first chat with local Ollama (llama3.2:latest default, user-settable
+  since M0); the opt-in Gemini fallback has secure key setup: the key is
+  encrypted at rest in the OS credential vault via Electron safeStorage,
+  decrypted only in the main process, never returned to the renderer or
+  placed in a URL, and fail-closed when OS encryption is unavailable.
+  VERIFIED in src/ai.js and src/secure-store.js.
 - General-purpose persona by default; student module optional
   (src/skills.js, docs/SKILLS.md). VERIFIED.
-- Local DB (sql.js) with export to a markdown vault. VERIFIED.
-- Confirm-before-write for data changes; no autonomous writes exist (the app
-  has no computer-control surface at all). VERIFIED by code inspection.
+- Local DB (sql.js) with export to a markdown vault; agent notifications,
+  reminders, audit and run state persist through the versioned P1/P2
+  persistence layer (all-or-nothing hydrate, schema stamp, startup chain
+  verification). VERIFIED.
+- Confirm-before-write for data changes; the agent surface stays inside a
+  typed tool registry with per-scope approval gates, an external policy
+  engine, an append-only audit log and an emergency stop; no computer-control
+  tool exists. VERIFIED by code inspection.
 - Shipped since the Oct 28 snapshot: floating always-on-top overlay
   (src/overlay.js), push-to-talk voice via local whisper.cpp (src/voice.js,
-  src/whisper.js), local About-me memory with propose-then-confirm cards
-  (src/memory.js, src/proposals.js), on-demand single-window screen Q&A with
-  a local vision model (src/screen-service.js), one-click Ollama onboarding
-  (src/ollama-setup.js, PR #9), and the public debug-APK preview. 331 tests
-  passing and three main-branch CI workflows green at that snapshot (437 tests at the current baseline; the blueprint carries the
-  exact head and run ids).
+  src/whisper.js), local About-me memory with propose-then-confirm cards,
+  per-search sensitive-memory consent with auto-reset (M4), the proactive
+  scheduler and delivery loop with quiet hours (M5), the wake-word engine
+  milestone 2 (default-off pending physical mic validation) and the
+  OS-native-only TTS decision (M6), the M7 policy slice and observation
+  session machine (capture engine stays unbuilt by decision), one-click
+  Ollama onboarding (PR #9), the public debug-APK preview, the Gate 2
+  workspace surface (row stores + nine wired views), the 20-entry connector
+  catalog, the AI connect-request flow and the service-agnostic OS-vault
+  credential store. 1372 tests passing and both main-branch CI workflows
+  green at bb9aab9; the roadmap carries the exact run ids.
 
 ## Gaps (current, mapped to docs/IMPLEMENTATION_ROADMAP.md)
 
@@ -92,17 +102,25 @@ verified head, test count and CI run ids).
    network call is bounded; the web bridge routes the same way and fails
    closed.
 5. Reusable step workflows - ABSENT (planned with the workspace UI, M8).
-6. Safe computer assistance (propose-then-confirm OS actions) - PLANNED as
-   the Gate 2 agent foundation: typed tool registry, external policy engine,
-   approval classes, audit log, and emergency stop BEFORE any
-   computer-control tool exists. Nothing of this is implemented yet.
+6. Safe computer assistance (propose-then-confirm OS actions) - the Gate 2
+   agent foundation is IMPLEMENTED: typed tool registry (notifications,
+   reminders, file access and connector status registered; file output
+   implemented but unregistered pending the owner's security decision), the
+   external policy engine with per-scope approval classes, the append-only
+   audit log, the emergency stop, and the run driver Stage A/B with a
+   review-briefed run entry point. No computer-control tool exists.
 7. Meeting-listening / continuous awareness - deliberately NOT planned
    without explicit opt-in, visible indicators, and platform-compliant
    foreground services.
-8. Proactive scheduler and notifications, wake word, text-to-speech,
-   multilingual speech recognition, Android on-device AI, secure desktop
-   gateway, live session screen observation, integrations - PLANNED per the
-   gated roadmap (M4-M8); none implemented today.
+8. Proactive scheduler and notifications - DONE (M5: scheduler, delivery
+   loop, quiet hours, per-channel routing). Wake word - engine landed,
+   default-off pending physical mic validation. Text-to-speech - OS-native
+   speechSynthesis decision landed (M6). Multilingual speech recognition,
+   Android on-device AI, secure desktop gateway, live session screen
+   observation, reusable step workflows, integrations and real connector
+   activations - PLANNED per the gated roadmap (M7/M9 deferred; connector
+   activations need the owner to name services, enter credentials and
+   approve scopes; the credential layer itself is DONE).
 
 ## Deliberate divergences (unchanged)
 
