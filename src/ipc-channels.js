@@ -125,6 +125,12 @@ const IPC_CHANNELS = Object.freeze([
   'workspace:connectorDisconnect',
   'workspace:connectorRevoke',
   'workspace:connectorReadmit',
+  // Gate 2 credential step (27 Nov 2026): the user's own credential entry
+  // for a connector. The secret goes straight into the OS credential vault
+  // in main; the renderer only gets an ok/reason and hasCredential answer,
+  // never the stored material.
+  'workspace:connectorCredentialSet',
+  'workspace:connectorCredentialRemove',
   // Gate 2 AI-access connector flow (27 Nov 2026): the request center's
   // user surface. list is read-only; resolve is main-built userInitiated
   // from an explicit renderer click, and approval runs the SAME explicit

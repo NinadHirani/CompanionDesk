@@ -88,6 +88,7 @@ const { createAgentSurface } = require('./agent-surface');
 const { createWorkspaceRows } = require('./workspace-rows');
 const { createWorkspaceStore } = require('./workspace-stores');
 const { createConnectorCatalog } = require('./connectors');
+const { createConnectorCredentialStore, refFor } = require('./connector-credential-store');
 const { createConnectorRequestCenter } = require('./connector-requests');
 const { createIntegrationRegistry } = require('./integrations');
 const { createDeviceAccessCentre } = require('./device-access');
@@ -107,6 +108,7 @@ let hardwareRaw = null;
 // the streaming reader, and no retry follows.
 const askControllers = new Map();
 let secureStore = null;
+let connectorCredentialStore = null;
 let win = null;
 let overlay = null;
 let wakeEngine = null;
@@ -172,9 +174,13 @@ const workspaceModelsStore = createWorkspaceStore({ clock: () => Date.now(), nam
 // through explicit app actions, never background scans or auto-exposure.
 const workspaceDatabasesStore = createWorkspaceStore({ clock: () => Date.now(), name: 'databases', prefix: 'db', fields: ['name', 'kind', 'state', 'updatedAt', 'detail'], types: { name: 'string', kind: 'string', state: 'string', updatedAt: 'number', detail: 'string' }, enums: { kind: ['sqlite', 'json', 'other'], state: ['available', 'configured', 'unavailable'] } });
 const workspaceAppDataStore = createWorkspaceStore({ clock: () => Date.now(), name: 'appdata', prefix: 'ad', fields: ['name', 'kind', 'state', 'updatedAt', 'detail'], types: { name: 'string', kind: 'string', state: 'string', updatedAt: 'number', detail: 'string' }, enums: { kind: ['kv', 'document', 'other'], state: ['active', 'archived'] } });
-// Empty by design: a connector's credential reference lands here only
-// when a real credential store exists (a later Gate 2 step). Until then
-// every connect honestly refuses credential_ref_required, visibly.
+// A connector's credential reference lands here only when the user
+// saved a credential for it in the OS credential vault
+// (src/connector-credential-store.js). The ref is deterministic from the
+// id, so nothing about it is persisted in settings; a restart re-derives
+// it from the vault after the catalog snapshot is restored. Until a
+// credential exists every connect honestly refuses
+// credential_ref_required, visibly.
 const CONNECTOR_CREDENTIAL_REFS = new Map();
 // Gate 2 AI-access connector flow (approved by Ninad on 27 Nov 2026): the
 // request center behind the AI's ask. The agent tool can only RAISE a
@@ -285,6 +291,16 @@ async function init() {
   // this process only when a cloud call needs it. Without a saved key the
   // cloud fallback is off.
   secureStore = createSecureStore({ safeStorage, filePath: path.join(app.getPath('userData'), 'gemini.key.bin'), platform: process.platform });
+  // Gate 2 credential step (27 Nov 2026): the connector credential vault.
+  // One opaque secret per connector, encrypted by the OS credential vault
+  // and never rendered, logged or persisted anywhere else. Created before
+  // any connector UI can ask for it; nothing connects here.
+  connectorCredentialStore = createConnectorCredentialStore({
+    safeStorage,
+    dir: path.join(app.getPath('userData'), 'connector-vault'),
+    platform: process.platform,
+    log: (m) => console.log('[connectors] ' + m),
+  });
   // Cloud fallback is double-gated: the saved key AND the explicit
   // cloud_enabled setting (default false). A key alone arms nothing.
   ai = createAi({ geminiKey: () => secureStore.readKey(), cloudEnabled: P.getSettings(db).cloud_enabled === true });
@@ -1110,6 +1126,18 @@ app.whenReady().then(async () => {
   }
 
   restoreConnectorState();
+  // Gate 2 credential step: re-derive the credential refs for the
+  // connections the snapshot restored. A connection whose vault entry is
+  // missing (OS reinstall, profile move, manual cleanup) stays connected
+  // in name but its connect gate stays fail-closed for any future
+  // reconnect that would need the credential again.
+  try {
+    for (const e of workspaceConnectorCatalog.list()) {
+      if (workspaceConnectorCatalog.state(e.id) === 'connected' && connectorCredentialStore && connectorCredentialStore.hasCredential(e.id)) {
+        CONNECTOR_CREDENTIAL_REFS.set(e.id, refFor(e.id));
+      }
+    }
+  } catch (e) { console.warn('[connectors] credential ref restore skipped:', e && e.message); }
   // Gate 3/8 workspace surface (approved by Ninad on 26 Nov 2026): the
   // wired views' rows through the pure rows provider, and the connector
   // catalog's lifecycle controls. Every connector action exists only as a
@@ -1119,7 +1147,26 @@ app.whenReady().then(async () => {
   // any action lacking the user flag. No credential store exists yet, so
   // every connect honestly refuses credential_ref_required.
   ipcMain.handle('workspace:rows', async (_e, name) => workspaceRows.rows(typeof name === 'string' ? name : ''));
-  ipcMain.handle('workspace:connectors', async () => workspaceConnectorCatalog.list().map((e) => Object.assign({}, e, { state: workspaceConnectorCatalog.state(e.id) || 'discovered' })));
+  // Gate 2 credential step: disconnect and revoke both end the
+  // authorization ("persistent until the user disconnects"), so both also
+  // delete the stored credential: a reconnect is a fresh explicit connect
+  // with a fresh credential entry. Best-effort removal; if the file
+  // removal fails the map ref is still dropped, so nothing can silently
+  // reuse a stale credential.
+  function dropConnectorCredential(id) {
+    try {
+      if (connectorCredentialStore) {
+        const cr = connectorCredentialStore.removeCredential(id);
+        if (cr && cr.ok === false) return false;
+      }
+    } catch { return false; }
+    CONNECTOR_CREDENTIAL_REFS.delete(id);
+    return true;
+  }
+  ipcMain.handle('workspace:connectors', async () => workspaceConnectorCatalog.list().map((e) => Object.assign({}, e, {
+    state: workspaceConnectorCatalog.state(e.id) || 'discovered',
+    hasCredential: connectorCredentialStore ? connectorCredentialStore.hasCredential(e.id) : false,
+  })));
   ipcMain.handle('workspace:connectorConnect', async (_e, id, scopes) => {
     if (typeof id !== 'string' || id.length === 0) return { ok: false, reason: 'bad_request' };
     const clean = Array.isArray(scopes) ? scopes.filter((x) => typeof x === 'string') : [];
@@ -1127,8 +1174,8 @@ app.whenReady().then(async () => {
     if (r && r.ok) saveConnectorState();
     return r;
   });
-  ipcMain.handle('workspace:connectorDisconnect', async (_e, id) => { const r = (typeof id === 'string' && id.length > 0 ? workspaceConnectorCatalog.disconnect(id, { userInitiated: true }) : { ok: false, reason: 'bad_request' }); if (r && r.ok) saveConnectorState(); return r; });
-  ipcMain.handle('workspace:connectorRevoke', async (_e, id) => { const r = (typeof id === 'string' && id.length > 0 ? workspaceConnectorCatalog.revoke(id, { userInitiated: true }) : { ok: false, reason: 'bad_request' }); if (r && r.ok) saveConnectorState(); return r; });
+  ipcMain.handle('workspace:connectorDisconnect', async (_e, id) => { const r = (typeof id === 'string' && id.length > 0 ? workspaceConnectorCatalog.disconnect(id, { userInitiated: true }) : { ok: false, reason: 'bad_request' }); if (r && r.ok) { saveConnectorState(); r.credentialRemoved = dropConnectorCredential(id); } return r; });
+  ipcMain.handle('workspace:connectorRevoke', async (_e, id) => { const r = (typeof id === 'string' && id.length > 0 ? workspaceConnectorCatalog.revoke(id, { userInitiated: true }) : { ok: false, reason: 'bad_request' }); if (r && r.ok) { saveConnectorState(); r.credentialRemoved = dropConnectorCredential(id); } return r; });
   ipcMain.handle('workspace:connectorReadmit', async (_e, id) => { const r = (typeof id === 'string' && id.length > 0 ? workspaceConnectorCatalog.readmit(id, { userInitiated: true }) : { ok: false, reason: 'bad_request' }); if (r && r.ok) saveConnectorState(); return r; });
   ipcMain.handle('workspace:connectorRequests', async () => workspaceConnectorRequests.list());
   ipcMain.handle('workspace:connectorRequestResolve', async (_e, requestId, decision) => {
@@ -1136,6 +1183,27 @@ app.whenReady().then(async () => {
     const r = workspaceConnectorRequests.resolve(requestId, { userInitiated: true, decision: typeof decision === 'string' ? decision : '' });
     if (r && r.ok) saveConnectorState();
     return r;
+  });
+  // Gate 2 credential step: the user's own credential entry for a
+  // connector. The secret goes straight into the OS credential vault in
+  // this process; the renderer gets only ok/reason and hasCredential,
+  // never the stored material. Set requires the connector to exist in the
+  // catalog; remove is refused while connected so a live connection
+  // cannot be silently unauthenticated behind its own back.
+  ipcMain.handle('workspace:connectorCredentialSet', async (_e, id, secret) => {
+    if (typeof id !== 'string' || !workspaceConnectorCatalog.describe(id)) return { ok: false, reason: 'unknown_connector' };
+    if (!connectorCredentialStore) return { ok: false, reason: 'unavailable' };
+    const r = connectorCredentialStore.setCredential(id, secret);
+    if (r && r.ok) CONNECTOR_CREDENTIAL_REFS.set(id, refFor(id));
+    return r && r.ok ? { ok: true, hasCredential: true } : r;
+  });
+  ipcMain.handle('workspace:connectorCredentialRemove', async (_e, id) => {
+    if (typeof id !== 'string' || !workspaceConnectorCatalog.describe(id)) return { ok: false, reason: 'unknown_connector' };
+    if (workspaceConnectorCatalog.state(id) === 'connected') return { ok: false, reason: 'disconnect_first' };
+    if (!connectorCredentialStore) return { ok: false, reason: 'unavailable' };
+    const r = connectorCredentialStore.removeCredential(id);
+    if (r && r.ok) CONNECTOR_CREDENTIAL_REFS.delete(id);
+    return r && r.ok ? { ok: true, hasCredential: false } : r;
   });
   // M5 slice 1: start the proactive delivery loop only after the surfaces
   // are registered. With no schedules and delivery off by default it is

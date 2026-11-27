@@ -35,4 +35,37 @@ Sorted free-first: local and self-hostable free/open-source entries first, free-
 
 Status 27 Nov 2026: shipped and documented, nothing connected, no credentials requested, no permissions granted. Naming a real service to activate and approving each per-connector activation remain the owner's calls.
 
+## Credential storage (Gate 2 credential step, 27 Nov 2026)
+
+Connecting requires a stored credential, and the credential lives in the OS
+credential vault only. src/connector-credential-store.js holds ONE opaque
+secret per connector id (an API key, a token, whatever the service layer of a
+later step needs), encrypted by Electron's safeStorage (Keychain on macOS,
+DPAPI on Windows, libsecret/KWallet on Linux) into a 0600 file under the
+app's userData directory. Fail closed: if the OS cannot encrypt (or on Linux
+the backend is not a real secret service), nothing is saved and the connect
+keeps refusing with `credential_ref_required`.
+
+What is stored where, and where it never goes:
+
+- The plaintext secret: only in the OS-vault-encrypted file, decrypted in the
+  main process when a service call needs it. Never in settings, SQLite,
+  localStorage, logs or the renderer.
+- Settings: only connection ids, states, exact scopes and request text. The
+  credential reference is deterministic from the id
+  (`keychain:companiondesk-<id>`), so a restart re-derives it from the vault
+  after the snapshot is restored; nothing about credentials is persisted.
+- Disconnect and revoke both delete the stored credential: authorization is
+  persistent until the user disconnects, and a reconnect is a fresh explicit
+  connect with a fresh credential entry. Removing a credential is refused
+  while the connector is connected (disconnect first).
+- The Connectors panel shows a password field for a connector with no stored
+  credential; the typed value goes straight to main's vault and is never
+  rendered or kept. A connector that already has one connects with the plain
+  button, no repeated prompt.
+
+The store is service-agnostic and performs no network calls; nothing is
+connected by this step. Naming a real service, providing its credential and
+approving each activation remain the owner's calls.
+
 The AI can also ASK for a connection (27 Nov 2026 decision): its connector_status tool lists the catalog's live states and may raise a user-facing connect request naming one catalog connector and a short reason. The request appears in the Workspace panel's Connectors section; approving it is an explicit click that runs the SAME connect gate as the user's own pick, dismissing it just resolves the request. A request is never a grant and nothing auto-connects.

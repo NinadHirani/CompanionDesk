@@ -61,6 +61,16 @@ and a request is never a grant. Connections persist in the settings table
 strict snapshot/restore pair on the catalog. No service is connected and
 no credential exists yet, so nothing is granted today.
 
+
+Follow-on (27 Nov 2026, credential-store slice, landed under Ninad's
+continuous implementation authorization): the service-agnostic credential
+store exists (src/connector-credential-store.js, OS credential vault,
+fail-closed) and the connect gate reads its deterministic references, so the
+approval flow and the storage layer are now wired end to end. Connecting a
+REAL service still needs exactly what it needed before: Ninad names the
+service, enters its credential in the Connectors panel, and approves the
+scopes. Nothing is connected, nothing is granted.
+
 ## 3. Workspace renderer UI -- RESOLVED (26 Nov 2026 late evening)
 
 Settings-view wiring, owner hard stop (27 Nov 2026, 00:27 IST): Ninad ruled the settings view stays UNWIRED. Do not reopen settings.js (m84 checkpoint-closed) and do not create a new settings row-store category without owner approval. This closes the last renderer-wiring candidate; the five row-store views (files, databases, appdata, workflows, models) remain the complete wired set, exactly as the c94dbb4 slice shipped them.

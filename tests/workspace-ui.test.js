@@ -228,7 +228,7 @@ test('the connector wait state states the activation rule up front: explicit pic
 test('connecting is an explicit click that passes the entry scopes and surfaces a refusal verbatim', async () => {
   installDom();
   try {
-    const connectors = [{ id: 'rss', name: 'RSS feeds', state: 'discovered', costNote: 'Free; RSS feeds are open by design', limits: 'Bound by each feed publisher', scopes: [{ name: 'feed.read', class: 'read_only' }] }];
+    const connectors = [{ id: 'rss', name: 'RSS feeds', state: 'discovered', hasCredential: true, costNote: 'Free; RSS feeds are open by design', limits: 'Bound by each feed publisher', scopes: [{ name: 'feed.read', class: 'read_only' }] }];
     const bridge = bridgeStub({ rows: () => [], connectors, connectResult: { ok: false, reason: 'credential_ref_required' } });
     const P = await loadPanel();
     P.mount({ api: bridge, initialView: 'conversations' });
@@ -370,5 +370,78 @@ test('a failed connect after approval surfaces the refusal verbatim and keeps th
     assert.ok(await until(() => connectorText().some((n) => n.textContent === 'Approve request for RSS feeds')));
     connectorText().find((n) => n.textContent === 'Approve request for RSS feeds').handlers.click[0]();
     assert.ok(await until(() => statusText() === 'workspace: connect refused: credential_ref_required'), 'the honest refusal, verbatim');
+  } finally { uninstallDom(); }
+});
+
+test('a row without a stored credential shows a password field and an empty click refuses honestly', async () => {
+  installDom();
+  try {
+    const connectors = [{ id: 'rss', name: 'RSS feeds', state: 'discovered', hasCredential: false, costNote: 'Free; RSS feeds are open by design', limits: 'Bound by each feed publisher', scopes: [{ name: 'feed.read', class: 'read_only' }] }];
+    const bridge = bridgeStub({ rows: () => [], connectors });
+    const P = await loadPanel();
+    P.mount({ api: bridge, initialView: 'conversations' });
+    const box = global.document.getElementById('ws-connectors');
+    assert.ok(await until(() => box.children.some((c) => c.tagName === 'input')), 'password field rendered');
+    const connectBtn = box.children.find((c) => c.tagName === 'button' && /Connect RSS feeds/.test(c.textContent));
+    connectBtn.handlers.click[0]();
+    assert.ok(await until(() => /workspace: enter a credential for RSS feeds to connect/.test(statusText())));
+    assert.strictEqual(bridge.__calls.connect.length, 0, 'no connect without a credential');
+  } finally { uninstallDom(); }
+});
+
+test('a typed credential is saved through the bridge, the connect runs, and the field is cleared', async () => {
+  installDom();
+  try {
+    const connectors = [{ id: 'rss', name: 'RSS feeds', state: 'discovered', hasCredential: false, costNote: 'Free; RSS feeds are open by design', limits: 'Bound by each feed publisher', scopes: [{ name: 'feed.read', class: 'read_only' }] }];
+    const bridge = bridgeStub({ rows: () => [], connectors, bridge: { workspace_connectorCredentialSet: (id, secret) => { bridge.__calls.credSet.push([id, secret]); return Promise.resolve({ ok: true, hasCredential: true }); } } });
+    bridge.__calls.credSet = [];
+    const P = await loadPanel();
+    P.mount({ api: bridge, initialView: 'conversations' });
+    const box = global.document.getElementById('ws-connectors');
+    assert.ok(await until(() => box.children.some((c) => c.tagName === 'input')));
+    const input = box.children.find((c) => c.tagName === 'input');
+    input.value = 'sk-secret-token';
+    const connectBtn = box.children.find((c) => c.tagName === 'button' && /Connect RSS feeds/.test(c.textContent));
+    connectBtn.handlers.click[0]();
+    assert.ok(await until(() => bridge.__calls.connect.length === 1));
+    assert.deepStrictEqual(bridge.__calls.credSet[0], ['rss', 'sk-secret-token'], 'the secret went to main only');
+    assert.strictEqual(input.value, '', 'the field is cleared right after the click');
+    assert.ok(await until(() => /workspace: connect requested for RSS feeds/.test(statusText())));
+    assert.ok(!statusText().includes('sk-secret-token'), 'the status line never shows the secret');
+  } finally { uninstallDom(); }
+});
+
+test('a failed credential save surfaces the reason verbatim and never connects', async () => {
+  installDom();
+  try {
+    const connectors = [{ id: 'rss', name: 'RSS feeds', state: 'discovered', hasCredential: false, costNote: 'Free; RSS feeds are open by design', limits: 'Bound by each feed publisher', scopes: [{ name: 'feed.read', class: 'read_only' }] }];
+    const bridge = bridgeStub({ rows: () => [], connectors, bridge: { workspace_connectorCredentialSet: () => Promise.resolve({ ok: false, reason: 'encryption_unavailable' }) } });
+    const P = await loadPanel();
+    P.mount({ api: bridge, initialView: 'conversations' });
+    const box = global.document.getElementById('ws-connectors');
+    assert.ok(await until(() => box.children.some((c) => c.tagName === 'input')));
+    const input = box.children.find((c) => c.tagName === 'input');
+    input.value = 'sk-secret-token';
+    const connectBtn = box.children.find((c) => c.tagName === 'button' && /Connect RSS feeds/.test(c.textContent));
+    connectBtn.handlers.click[0]();
+    assert.ok(await until(() => /workspace: credential not saved: encryption_unavailable/.test(statusText())));
+    assert.strictEqual(bridge.__calls.connect.length, 0, 'no connect when the credential did not save');
+    assert.strictEqual(input.value, '', 'the field is cleared either way');
+  } finally { uninstallDom(); }
+});
+
+test('a row with a stored credential renders no credential field and connects on one click', async () => {
+  installDom();
+  try {
+    const connectors = [{ id: 'rss', name: 'RSS feeds', state: 'discovered', hasCredential: true, costNote: 'Free; RSS feeds are open by design', limits: 'Bound by each feed publisher', scopes: [{ name: 'feed.read', class: 'read_only' }] }];
+    const bridge = bridgeStub({ rows: () => [], connectors });
+    const P = await loadPanel();
+    P.mount({ api: bridge, initialView: 'conversations' });
+    const box = global.document.getElementById('ws-connectors');
+    assert.ok(await until(() => box.children.some((c) => c.tagName === 'button' && /Connect RSS feeds/.test(c.textContent))));
+    assert.strictEqual(box.children.some((c) => c.tagName === 'input'), false, 'no credential field when one is already stored');
+    const connectBtn = box.children.find((c) => c.tagName === 'button' && /Connect RSS feeds/.test(c.textContent));
+    connectBtn.handlers.click[0]();
+    assert.ok(await until(() => bridge.__calls.connect.length === 1));
   } finally { uninstallDom(); }
 });

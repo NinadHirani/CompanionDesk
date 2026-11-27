@@ -18,10 +18,11 @@ const CHANNELS = [
   'workspace:connectorRevoke',
   'workspace:connectorReadmit',
   'workspace:connectorRequests',
-  'workspace:connectorRequestResolve',
+  'workspace:connectorCredentialSet',
+  'workspace:connectorCredentialRemove',
 ];
 
-test('the allowlist, preload mirror and main handlers carry exactly the eight workspace channels', () => {
+test('the allowlist, preload mirror and main handlers carry exactly the ten workspace channels', () => {
   const channelsSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'ipc-channels.js'), 'utf8');
   const preloadSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'preload.js'), 'utf8');
   const mainSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'main.js'), 'utf8');

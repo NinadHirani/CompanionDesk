@@ -56,6 +56,14 @@
     if (statusEl) statusEl.textContent = text;
   }
 
+  function passwordField(placeholder) {
+    const i = el('input');
+    i.type = 'password';
+    i.setAttribute('placeholder', placeholder);
+    i.setAttribute('autocomplete', 'off');
+    return i;
+  }
+
   function button(label, ariaLabel, onClick) {
     const b = el('button');
     b.type = 'button';
@@ -164,11 +172,39 @@
         const state = e.state || 'discovered';
         const scopeNames = (Array.isArray(e.scopes) ? e.scopes : []).map((s) => s.name);
         if (state === 'discovered') {
-          connEl.appendChild(button('Connect ' + e.name, 'Connect ' + e.name, async () => {
-            const r = await a.workspace_connector_connect(e.id, scopeNames);
-            say(r && r.ok ? 'workspace: connect requested for ' + e.name : 'workspace: connect refused: ' + ((r && r.reason) || 'unknown'));
-            await renderConnectors(a);
-          }));
+          // Gate 2 credential step: a connect needs a stored credential.
+          // Without one, this row shows a password field; the typed value
+          // goes straight to main's OS credential vault and is never
+          // rendered, logged or kept here. A row that already has one
+          // connects with the plain button, no repeated prompt.
+          if (e.hasCredential !== true) {
+            const credInput = passwordField('credential for ' + (e.name || e.id));
+            connEl.appendChild(credInput);
+            connEl.appendChild(button('Connect ' + e.name, 'Connect ' + e.name, async () => {
+              const secret = credInput.value;
+              credInput.value = '';
+              if (!secret) {
+                say('workspace: enter a credential for ' + (e.name || e.id) + ' to connect');
+                return;
+              }
+              const sr = typeof a.workspace_connectorCredentialSet === 'function'
+                ? await a.workspace_connectorCredentialSet(e.id, secret)
+                : null;
+              if (sr && sr.ok !== true) {
+                say('workspace: credential not saved: ' + ((sr && sr.reason) || 'unknown'));
+                return;
+              }
+              const r = await a.workspace_connector_connect(e.id, scopeNames);
+              say(r && r.ok ? 'workspace: connect requested for ' + e.name : 'workspace: connect refused: ' + ((r && r.reason) || 'unknown'));
+              await renderConnectors(a);
+            }));
+          } else {
+            connEl.appendChild(button('Connect ' + e.name, 'Connect ' + e.name, async () => {
+              const r = await a.workspace_connector_connect(e.id, scopeNames);
+              say(r && r.ok ? 'workspace: connect requested for ' + e.name : 'workspace: connect refused: ' + ((r && r.reason) || 'unknown'));
+              await renderConnectors(a);
+            }));
+          }
         } else if (state === 'connected') {
           connEl.appendChild(button('Disconnect ' + e.name, 'Disconnect ' + e.name, async () => {
             const r = await a.workspace_connector_disconnect(e.id);

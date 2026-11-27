@@ -115,6 +115,8 @@ const IPC_CHANNELS = [
   'workspace:connectorDisconnect',
   'workspace:connectorRevoke',
   'workspace:connectorReadmit',
+  'workspace:connectorCredentialSet',
+  'workspace:connectorCredentialRemove',
   'workspace:connectorRequests',
   'workspace:connectorRequestResolve',
 ];
