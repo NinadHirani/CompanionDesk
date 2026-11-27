@@ -629,3 +629,16 @@ Actions:
 The credentials are the user's own tokens pasted into the app vault. No writes, no DNS changes, no purges, no rebuilds, no deletes anywhere. DigitalOcean's page cap aligns with the shared integer helper's 100 bound (the DO API's own 200 per page is not reachable through this helper).
 
 Tests: adapter build/validation per connector (caps, numeric-id reject, required param, header shapes, read-only sweeps), engine gates (each refuses before connect and rides its credential on a read). Catalog count pins: 119 still-definition-only expanded rows, 123 definition-only total.
+## Batch 32 (27 Nov 2026): TMDB, Unsplash
+
+Upgraded two media connectors to token-bound READ-ONLY adapters (each `auth: api_key`, `authShape: token`).
+
+Actions:
+- TMDB (pinned `api.themoviedb.org/3`, Bearer with the v3 read access token): `search_movies` (query required maxLength 100, page 1-100); `get_movie` by numeric id (charset-validated).
+- Unsplash (pinned `api.unsplash.com`, `Authorization: Client-ID` header): `search_photos` (query required, per_page 1-30); `get_photo` by id (charset-validated).
+
+The credentials are the user's own keys pasted into the app vault. No writes anywhere.
+
+PostHog deliberately stays definition-only: it is self-hostable, so it has no single pinned host, the same setup-shape reasoning as Jenkins.
+
+Tests: adapter build/validation per connector (required query, numeric-id reject, page and per-page caps, percent-encoding, header shapes, read-only sweeps), engine gates (each refuses before connect and rides its credential on a read). Catalog count pins: 117 still-definition-only expanded rows, 121 definition-only total.

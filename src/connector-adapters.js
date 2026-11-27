@@ -157,6 +157,52 @@
     ],
   };
 
+  ADAPTERS.tmdb = {
+    id: 'tmdb', name: 'TMDB', authShape: 'token', setupRequired: false,
+    setupNote: 'paste the v3 API read access token from themoviedb.org/settings/api; it is stored only in the app vault, never requested or shown in chat',
+    buildHeaders: function (token) { return { Authorization: 'Bearer ' + token, 'User-Agent': 'CompanionDesk' }; },
+    actions: [
+      { id: 'search_movies', label: 'Search TMDB for movies (capped)', scope: 'movies.read', kind: 'read_only',
+        params: [{ name: 'query', required: true, maxLength: 100 }, { name: 'page', required: false, maxLength: 3 }],
+        build: function (p, token) {
+          if (!p.query) return { error: 'param_missing' };
+          if (p.query.length > 100) return { error: 'param_invalid' };
+          const page = optionalInt(p, 'page', 1);
+          if (page === null || page < 1 || page > 100) return { error: 'param_invalid' };
+          return { method: 'GET', url: 'https://api.themoviedb.org/3/search/movie?query=' + encodeURIComponent(p.query) + '&page=' + page, headers: this.buildHeaders(token), body: null };
+        } },
+      { id: 'get_movie', label: 'Read one TMDB movie by id', scope: 'movies.read', kind: 'read_only',
+        params: [{ name: 'movie_id', required: true, maxLength: 12 }],
+        build: function (p, token) {
+          if (!/^\d{1,12}$/.test(p.movie_id)) return { error: 'param_invalid' };
+          return { method: 'GET', url: 'https://api.themoviedb.org/3/movie/' + encodeURIComponent(p.movie_id), headers: this.buildHeaders(token), body: null };
+        } },
+    ],
+  };
+
+  ADAPTERS.unsplash = {
+    id: 'unsplash', name: 'Unsplash', authShape: 'token', setupRequired: false,
+    setupNote: 'create an access key at unsplash.com/api-dashboard and paste it; your key is stored only in the app vault, never requested or shown in chat',
+    buildHeaders: function (token) { return { Authorization: 'Client-ID ' + token, 'User-Agent': 'CompanionDesk' }; },
+    actions: [
+      { id: 'search_photos', label: 'Search Unsplash for photos (capped)', scope: 'photos.read', kind: 'read_only',
+        params: [{ name: 'query', required: true, maxLength: 100 }, { name: 'per_page', required: false, maxLength: 2 }],
+        build: function (p, token) {
+          if (!p.query) return { error: 'param_missing' };
+          if (p.query.length > 100) return { error: 'param_invalid' };
+          const perPage = optionalInt(p, 'per_page', 10);
+          if (perPage === null || perPage < 1 || perPage > 30) return { error: 'param_invalid' };
+          return { method: 'GET', url: 'https://api.unsplash.com/search/photos?query=' + encodeURIComponent(p.query) + '&per_page=' + perPage, headers: this.buildHeaders(token), body: null };
+        } },
+      { id: 'get_photo', label: 'Read one Unsplash photo by id', scope: 'photos.read', kind: 'read_only',
+        params: [{ name: 'photo_id', required: true, maxLength: 80 }],
+        build: function (p, token) {
+          if (!/^[A-Za-z0-9_-]+$/.test(p.photo_id)) return { error: 'param_invalid' };
+          return { method: 'GET', url: 'https://api.unsplash.com/photos/' + encodeURIComponent(p.photo_id), headers: this.buildHeaders(token), body: null };
+        } },
+    ],
+  };
+
   ADAPTERS.cloudflare = {
     id: 'cloudflare', name: 'Cloudflare', authShape: 'token', setupRequired: false,
     setupNote: 'create an API token at dash.cloudflare.com/profile/api-tokens and paste it; your token is stored only in the app vault, never requested or shown in chat',

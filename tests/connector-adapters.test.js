@@ -12,7 +12,7 @@ const assert = require('node:assert');
 const adapters = require('../src/connector-adapters.js');
 const { createConnectorCatalog } = require('../src/connectors.js');
 
-const IMPLEMENTED = ['anthropic', 'brave-search', 'arxiv', 'airtable', 'coda', 'circleci', 'cloudflare', 'crossref', 'digitalocean', 'discord', 'docker-hub', 'github', 'gitlab', 'gmail', 'heroku', 'google-calendar', 'google-docs', 'google-sheets', 'google-drive', 'google-gemini', 'huggingface', 'internet-archive', 'jira', 'mailgun', 'postmark', 'sendgrid', 'linear', 'microsoft-calendar', 'microsoft-onedrive', 'microsoft-excel', 'microsoft-outlook', 'microsoft-teams', 'microsoft-word', 'musicbrainz', 'notion', 'npm', 'open-meteo', 'openai', 'openalex', 'openlibrary', 'openstreetmap', 'pypi', 'render', 'slack', 'supabase', 'sentry', 'pagerduty', 'tavily', 'telegram', 'trello', 'todoist', 'wikimedia'];
+const IMPLEMENTED = ['anthropic', 'brave-search', 'arxiv', 'airtable', 'coda', 'circleci', 'cloudflare', 'crossref', 'digitalocean', 'discord', 'docker-hub', 'github', 'gitlab', 'gmail', 'heroku', 'google-calendar', 'google-docs', 'google-sheets', 'google-drive', 'google-gemini', 'huggingface', 'internet-archive', 'jira', 'mailgun', 'postmark', 'sendgrid', 'linear', 'microsoft-calendar', 'microsoft-onedrive', 'microsoft-excel', 'microsoft-outlook', 'microsoft-teams', 'microsoft-word', 'musicbrainz', 'notion', 'npm', 'open-meteo', 'openai', 'openalex', 'openlibrary', 'openstreetmap', 'pypi', 'render', 'slack', 'supabase', 'sentry', 'pagerduty', 'tmdb', 'unsplash', 'tavily', 'telegram', 'trello', 'todoist', 'wikimedia'];
 const OAUTH = ['gmail', 'google-calendar', 'google-drive', 'microsoft-calendar', 'microsoft-onedrive', 'microsoft-outlook'];
 
 test('the adapter registry covers exactly the implemented catalog entries', () => {
@@ -1283,5 +1283,41 @@ test('digitalocean builds bearer droplet reads with strict validation and no wri
   for (const a of adapters.listActions('digitalocean')) {
     assert.equal(a.kind, 'read_only', 'digitalocean is read-only');
     assert.equal(a.scope, 'droplets.read');
+  }
+});
+
+// ---- batch 32 (27 Nov 2026): tmdb + unsplash read-only adapters ----
+
+test('tmdb builds bearer movie reads with strict validation and no writes', () => {
+  const sm = adapters.buildRequest('tmdb', 'search_movies', { query: 'star wars', page: '100' }, 'tm-tok');
+  assert.equal(sm.ok, true);
+  assert.equal(sm.request.url, 'https://api.themoviedb.org/3/search/movie?query=star%20wars&page=100');
+  assert.equal(sm.request.headers.Authorization, 'Bearer tm-tok');
+  const gm = adapters.buildRequest('tmdb', 'get_movie', { movie_id: '11' }, 'tm-tok');
+  assert.equal(gm.ok, true);
+  assert.equal(gm.request.url, 'https://api.themoviedb.org/3/movie/11');
+  assert.equal(adapters.buildRequest('tmdb', 'search_movies', {}, 'tm-tok').reason, 'param_missing', 'query required');
+  assert.equal(adapters.buildRequest('tmdb', 'get_movie', { movie_id: 'tt011' }, 'tm-tok').reason, 'param_invalid', 'non-numeric movie id');
+  assert.equal(adapters.buildRequest('tmdb', 'search_movies', { query: 'x', page: '101' }, 'tm-tok').reason, 'param_invalid', 'page above the cap');
+  for (const a of adapters.listActions('tmdb')) {
+    assert.equal(a.kind, 'read_only', 'tmdb is read-only');
+    assert.equal(a.scope, 'movies.read');
+  }
+});
+
+test('unsplash builds client-id photo reads with strict validation and no writes', () => {
+  const sp = adapters.buildRequest('unsplash', 'search_photos', { query: 'mountains', per_page: '30' }, 'un-key');
+  assert.equal(sp.ok, true);
+  assert.equal(sp.request.url, 'https://api.unsplash.com/search/photos?query=mountains&per_page=30');
+  assert.equal(sp.request.headers.Authorization, 'Client-ID un-key');
+  const gp = adapters.buildRequest('unsplash', 'get_photo', { photo_id: 'abc123-def' }, 'un-key');
+  assert.equal(gp.ok, true);
+  assert.equal(gp.request.url, 'https://api.unsplash.com/photos/abc123-def');
+  assert.equal(adapters.buildRequest('unsplash', 'search_photos', {}, 'un-key').reason, 'param_missing', 'query required');
+  assert.equal(adapters.buildRequest('unsplash', 'get_photo', { photo_id: 'a b!' }, 'un-key').reason, 'param_invalid', 'bad photo id');
+  assert.equal(adapters.buildRequest('unsplash', 'search_photos', { query: 'x', per_page: '31' }, 'un-key').reason, 'param_invalid', 'per_page above the cap');
+  for (const a of adapters.listActions('unsplash')) {
+    assert.equal(a.kind, 'read_only', 'unsplash is read-only');
+    assert.equal(a.scope, 'photos.read');
   }
 });

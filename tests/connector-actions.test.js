@@ -849,3 +849,19 @@ test('cloudflare and digitalocean refuse before connect and ride their credentia
     assert.equal(seen.headers.Authorization, 'Bearer cloud-tok', id + ' credential rides the header');
   }
 });
+
+// ---- batch 32 (27 Nov 2026): tmdb + unsplash credential gates ----
+
+test('tmdb and unsplash refuse before connect and ride their credentials on reads', async () => {
+  let seen = null;
+  const transport = async (req) => { seen = req; return { status: 200, body: JSON.stringify([]) }; };
+  const { catalog, engine } = makeEngine(transport, 'media-tok');
+  for (const [id, action, scope] of [['tmdb', 'search_movies', 'movies.read'], ['unsplash', 'search_photos', 'photos.read']]) {
+    assert.equal((await engine.run(id, action, { query: 'test' })).reason, 'not_connected', id + ' refuses before connect');
+    const c = catalog.connect(id, { userInitiated: true, scopes: [scope], credentialRef: 'vault:' + id + '-cred' });
+    assert.equal(c.ok, true, id + ' connects');
+    const r = await engine.run(id, action, { query: 'test' });
+    assert.equal(r.ok, true, id + ' reads with a credential');
+    assert.ok(seen.headers.Authorization.indexOf('media-tok') > 0, id + ' credential rides the header');
+  }
+});
