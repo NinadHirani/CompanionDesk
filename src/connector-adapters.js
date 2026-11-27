@@ -157,6 +157,52 @@
     ],
   };
 
+  ADAPTERS.pexels = {
+    id: 'pexels', name: 'Pexels', authShape: 'token', setupRequired: false,
+    setupNote: 'paste your Pexels API key from pexels.com/api; it is stored only in the app vault, never requested or shown in chat',
+    buildHeaders: function (token) { return { Authorization: token, 'User-Agent': 'CompanionDesk' }; },
+    actions: [
+      { id: 'search_photos', label: 'Search Pexels for photos (capped)', scope: 'photos.read', kind: 'read_only',
+        params: [{ name: 'query', required: true, maxLength: 100 }, { name: 'per_page', required: false, maxLength: 2 }],
+        build: function (p, token) {
+          if (!p.query) return { error: 'param_missing' };
+          if (p.query.length > 100) return { error: 'param_invalid' };
+          const perPage = optionalInt(p, 'per_page', 15);
+          if (perPage === null || perPage < 1 || perPage > 80) return { error: 'param_invalid' };
+          return { method: 'GET', url: 'https://api.pexels.com/v1/search?query=' + encodeURIComponent(p.query) + '&per_page=' + perPage, headers: this.buildHeaders(token), body: null };
+        } },
+      { id: 'get_photo', label: 'Read one Pexels photo by id', scope: 'photos.read', kind: 'read_only',
+        params: [{ name: 'photo_id', required: true, maxLength: 12 }],
+        build: function (p, token) {
+          if (!/^\d{1,12}$/.test(p.photo_id)) return { error: 'param_invalid' };
+          return { method: 'GET', url: 'https://api.pexels.com/v1/photos/' + encodeURIComponent(p.photo_id), headers: this.buildHeaders(token), body: null };
+        } },
+    ],
+  };
+
+  ADAPTERS.kaggle = {
+    id: 'kaggle', name: 'Kaggle', authShape: 'token', setupRequired: false,
+    setupNote: 'paste your Kaggle credentials as username:key (create a token at kaggle.com/settings); they are stored only in the app vault, never requested or shown in chat',
+    buildHeaders: function (token) {
+      const sep = token.indexOf(':');
+      const user = sep > 0 ? token.slice(0, sep) : '';
+      const key = sep > 0 ? token.slice(sep + 1) : token;
+      const basic = Buffer.from(user + ':' + key).toString('base64');
+      return { Authorization: 'Basic ' + basic, 'User-Agent': 'CompanionDesk' };
+    },
+    actions: [
+      { id: 'list_datasets', label: 'Search Kaggle datasets (capped)', scope: 'datasets.read', kind: 'read_only',
+        params: [{ name: 'search', required: false, maxLength: 80 }, { name: 'page', required: false, maxLength: 3 }],
+        build: function (p, token) {
+          if (p.search !== undefined && p.search !== '' && p.search.length > 80) return { error: 'param_invalid' };
+          const page = optionalInt(p, 'page', 1);
+          if (page === null || page < 1 || page > 20) return { error: 'param_invalid' };
+          const q = p.search ? '?search=' + encodeURIComponent(p.search) + '&page=' + page : '?page=' + page;
+          return { method: 'GET', url: 'https://www.kaggle.com/api/v1/datasets/list' + q, headers: this.buildHeaders(token), body: null };
+        } },
+    ],
+  };
+
   ADAPTERS['new-relic'] = {
     id: 'new-relic', name: 'New Relic', authShape: 'token', setupRequired: false,
     setupNote: 'create a User API key at one.newrelic.com/menu/My-Account/api-keys and paste it; your key is stored only in the app vault, never requested or shown in chat',

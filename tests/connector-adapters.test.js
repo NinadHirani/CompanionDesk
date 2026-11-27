@@ -12,7 +12,7 @@ const assert = require('node:assert');
 const adapters = require('../src/connector-adapters.js');
 const { createConnectorCatalog } = require('../src/connectors.js');
 
-const IMPLEMENTED = ['anthropic', 'brave-search', 'arxiv', 'airtable', 'coda', 'circleci', 'cloudflare', 'crossref', 'digitalocean', 'discord', 'docker-hub', 'github', 'gitlab', 'gmail', 'heroku', 'google-calendar', 'google-docs', 'google-sheets', 'google-drive', 'google-gemini', 'huggingface', 'internet-archive', 'jira', 'mailgun', 'postmark', 'sendgrid', 'linear', 'microsoft-calendar', 'microsoft-onedrive', 'microsoft-excel', 'microsoft-outlook', 'microsoft-teams', 'microsoft-word', 'musicbrainz', 'notion', 'npm', 'open-meteo', 'openai', 'openalex', 'openlibrary', 'openstreetmap', 'pypi', 'render', 'slack', 'supabase', 'sentry', 'pagerduty', 'tmdb', 'unsplash', 'new-relic', 'pinecone', 'tavily', 'telegram', 'trello', 'todoist', 'wikimedia'];
+const IMPLEMENTED = ['anthropic', 'brave-search', 'arxiv', 'airtable', 'coda', 'circleci', 'cloudflare', 'crossref', 'digitalocean', 'discord', 'docker-hub', 'github', 'gitlab', 'gmail', 'heroku', 'google-calendar', 'google-docs', 'google-sheets', 'google-drive', 'google-gemini', 'huggingface', 'internet-archive', 'jira', 'mailgun', 'postmark', 'sendgrid', 'linear', 'microsoft-calendar', 'microsoft-onedrive', 'microsoft-excel', 'microsoft-outlook', 'microsoft-teams', 'microsoft-word', 'musicbrainz', 'notion', 'npm', 'open-meteo', 'openai', 'openalex', 'openlibrary', 'openstreetmap', 'pypi', 'render', 'slack', 'supabase', 'sentry', 'pagerduty', 'tmdb', 'unsplash', 'new-relic', 'pinecone', 'pexels', 'kaggle', 'tavily', 'telegram', 'trello', 'todoist', 'wikimedia'];
 const OAUTH = ['gmail', 'google-calendar', 'google-drive', 'microsoft-calendar', 'microsoft-onedrive', 'microsoft-outlook'];
 
 test('the adapter registry covers exactly the implemented catalog entries', () => {
@@ -1355,5 +1355,40 @@ test('pinecone builds api-key index reads with strict validation and no writes',
   for (const a of adapters.listActions('pinecone')) {
     assert.equal(a.kind, 'read_only', 'pinecone is read-only');
     assert.equal(a.scope, 'vectors.read');
+  }
+});
+
+// ---- batch 34 (27 Nov 2026): pexels + kaggle read-only adapters ----
+
+test('pexels builds key-header photo reads with strict validation and no writes', () => {
+  const sp = adapters.buildRequest('pexels', 'search_photos', { query: 'desert', per_page: '80' }, 'px-key');
+  assert.equal(sp.ok, true);
+  assert.equal(sp.request.url, 'https://api.pexels.com/v1/search?query=desert&per_page=80');
+  assert.equal(sp.request.headers.Authorization, 'px-key');
+  const gp = adapters.buildRequest('pexels', 'get_photo', { photo_id: '201533' }, 'px-key');
+  assert.equal(gp.ok, true);
+  assert.equal(gp.request.url, 'https://api.pexels.com/v1/photos/201533');
+  assert.equal(adapters.buildRequest('pexels', 'search_photos', {}, 'px-key').reason, 'param_missing', 'query required');
+  assert.equal(adapters.buildRequest('pexels', 'get_photo', { photo_id: 'img123' }, 'px-key').reason, 'param_invalid', 'non-numeric photo id');
+  assert.equal(adapters.buildRequest('pexels', 'search_photos', { query: 'x', per_page: '81' }, 'px-key').reason, 'param_invalid', 'per_page above the cap');
+  for (const a of adapters.listActions('pexels')) {
+    assert.equal(a.kind, 'read_only', 'pexels is read-only');
+    assert.equal(a.scope, 'photos.read');
+  }
+});
+
+test('kaggle builds basic-auth dataset reads with strict validation and no writes', () => {
+  const ld = adapters.buildRequest('kaggle', 'list_datasets', { search: 'quantum', page: '2' }, 'ninad:ktok');
+  assert.equal(ld.ok, true);
+  assert.equal(ld.request.url, 'https://www.kaggle.com/api/v1/datasets/list?search=quantum&page=2');
+  assert.equal(ld.request.headers.Authorization, 'Basic ' + Buffer.from('ninad:ktok').toString('base64'));
+  const lb = adapters.buildRequest('kaggle', 'list_datasets', {}, 'ninad:ktok');
+  assert.equal(lb.ok, true);
+  assert.equal(lb.request.url, 'https://www.kaggle.com/api/v1/datasets/list?page=1');
+  assert.equal(adapters.buildRequest('kaggle', 'list_datasets', { search: 'x'.repeat(81) }, 'ninad:ktok').reason, 'param_invalid', 'search above the cap');
+  assert.equal(adapters.buildRequest('kaggle', 'list_datasets', { page: '21' }, 'ninad:ktok').reason, 'param_invalid', 'page above the cap');
+  for (const a of adapters.listActions('kaggle')) {
+    assert.equal(a.kind, 'read_only', 'kaggle is read-only');
+    assert.equal(a.scope, 'datasets.read');
   }
 });

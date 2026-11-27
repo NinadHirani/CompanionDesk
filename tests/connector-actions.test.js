@@ -881,3 +881,24 @@ test('new-relic and pinecone refuse before connect and ride their credentials on
     assert.ok(Object.values(seen.headers).some(function (v) { return String(v).indexOf('mon-tok') >= 0; }), id + ' credential rides the headers');
   }
 });
+
+// ---- batch 34 (27 Nov 2026): pexels + kaggle credential gates ----
+
+test('pexels and kaggle refuse before connect and ride their credentials on reads', async () => {
+  let seen = null;
+  const transport = async (req) => { seen = req; return { status: 200, body: JSON.stringify([]) }; };
+  const { catalog, engine } = makeEngine(transport, 'media-key');
+  const paramsByAction = { pexels: { query: 'test' }, kaggle: { search: 'test' } };
+  for (const [id, action, scope] of [['pexels', 'search_photos', 'photos.read'], ['kaggle', 'list_datasets', 'datasets.read']]) {
+    assert.equal((await engine.run(id, action, paramsByAction[id])).reason, 'not_connected', id + ' refuses before connect');
+    const c = catalog.connect(id, { userInitiated: true, scopes: [scope], credentialRef: 'vault:' + id + '-cred' });
+    assert.equal(c.ok, true, id + ' connects');
+    const r = await engine.run(id, action, paramsByAction[id]);
+    assert.equal(r.ok, true, id + ' reads with a credential');
+    if (id === 'kaggle') {
+      assert.equal(seen.headers.Authorization, 'Basic ' + Buffer.from(':media-key').toString('base64'), 'kaggle rides the computed Basic value');
+    } else {
+      assert.ok(Object.values(seen.headers).some(function (v) { return String(v).indexOf('media-key') >= 0; }), id + ' credential rides the headers');
+    }
+  }
+});

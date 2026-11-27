@@ -653,3 +653,14 @@ Actions:
 The credentials are the user's own keys pasted into the app vault.
 
 Tests: adapter build/validation per connector (caps, numeric-id reject, required param, header shapes including the pinned Pinecone version header, read-only sweeps), engine gates (each refuses before connect and rides its credential on a read). One test-side fix: the gate test's header check now uses a substring test over the header values instead of an array index bound. Catalog count pins: 115 still-definition-only expanded rows, 119 definition-only total.
+## Batch 34 (27 Nov 2026): Pexels, Kaggle
+
+Upgraded two connectors to credential-bound READ-ONLY adapters (each `auth: api_key`, `authShape: token`).
+
+Actions:
+- Pexels (pinned `api.pexels.com/v1`, key directly in the `Authorization` header): `search_photos` (query required maxLength 100, per_page 1-80); `get_photo` by numeric id (charset-validated).
+- Kaggle (pinned `www.kaggle.com/api/v1`, Basic auth computed from the pasted `username:key` credential, the same one-secret shape as Trello's key&token): `list_datasets` (optional search maxLength 80, page 1-20).
+
+The credentials are the user's own keys pasted into the app vault. Kaggle's `notebooks.write` scope is never requested and nothing is uploaded anywhere.
+
+Tests: adapter build/validation per connector (caps, numeric-id reject, required query, computed Basic value assertion for Kaggle, read-only sweeps), engine gates (each refuses before connect and rides its credential on a read; per-action params kept strict so undeclared params fail). Catalog count pins: 113 still-definition-only expanded rows, 117 definition-only total.
