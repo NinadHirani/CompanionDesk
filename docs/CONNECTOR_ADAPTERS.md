@@ -546,3 +546,15 @@ Actions (pinned to `api.trello.com/1`; the power-up key and token ride the query
 The credential is one vault string the user pastes in the documented format `key=YOURKEY&token=YOURTOKEN` (their own Trello power-up key and token); a malformed string refuses with `credential_invalid` before any request is built, and both halves are charset- and length-validated. The write action is single-use approval gated by the policy engine (refused without an approval, dead after one use). No updates, no deletes, no moves.
 
 Tests: adapter build/validation (10 assertions incl. malformed-credential refusal, key/token in the query string, charset rejects, limit cap), engine gates (not_connected refusal, key/token ride the url on a read, write refused without an approval, approved write runs once, spent approval is dead). Catalog count pins: 131 still-definition-only expanded rows, 135 definition-only total.
+## Batch 25 (27 Nov 2026): Coda
+
+Upgraded `coda` from definition-only to a key-bound adapter (`auth: api_key`, `authShape: token`).
+
+Actions (pinned to `coda.io/apis/v1`, Bearer token):
+- `list_docs` (read_only, `docs.read`): your docs, limit 1-100.
+- `get_doc` (read_only, `docs.read`): one doc by id (charset-validated).
+- `create_doc` (write, `docs.write`): create a doc with a required title; the body is a rebuilt `{ title }` object.
+
+The token is the user's own Coda API token pasted into the app vault. The write action is single-use approval gated by the policy engine (refused without an approval, dead after one use). No edits to existing docs, no deletes, no rows or table writes.
+
+Tests: adapter build/validation (9 assertions incl. charset reject, title requirement, limit cap), engine gates (not_connected refusal, credential rides the read, write refused without an approval, approved write runs once, spent approval is dead). Catalog count pins: 130 still-definition-only expanded rows, 134 definition-only total.

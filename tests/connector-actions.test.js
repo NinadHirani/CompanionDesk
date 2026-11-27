@@ -734,3 +734,23 @@ test('trello refuses before connect, reads with the key+token credential, and ga
   assert.equal(w.ok, true);
   assert.equal((await engine.run('trello', 'create_card', { list_id: 'l', name: 'y' }, { approvalId: a.approvalId })).reason, 'approval_required', 'the spent approval is dead');
 });
+
+// ---- batch 25 (27 Nov 2026): coda credential + approval gates ----
+
+test('coda refuses before connect, reads with a credential, and gates its create behind one approval', async () => {
+  let seen = null;
+  const transport = async (req) => { seen = req; return { status: 200, body: JSON.stringify({ items: [] }) }; };
+  const { catalog, engine } = makeEngine(transport, 'cod-tok');
+  assert.equal((await engine.run('coda', 'list_docs', {})).reason, 'not_connected');
+  const c = catalog.connect('coda', { userInitiated: true, scopes: ['docs.read', 'docs.write'], credentialRef: 'vault:coda-cred' });
+  assert.equal(c.ok, true);
+  const r = await engine.run('coda', 'list_docs', {});
+  assert.equal(r.ok, true);
+  assert.equal(seen.url, 'https://coda.io/apis/v1/docs?limit=25');
+  assert.equal(seen.headers.Authorization, 'Bearer cod-tok', 'the stored credential rides the read');
+  assert.equal((await engine.run('coda', 'create_doc', { title: 'x' })).reason, 'approval_required', 'write without an approval refuses');
+  const a = catalog.approve('coda', 'docs.write', { userInitiated: true });
+  const w = await engine.run('coda', 'create_doc', { title: 'x' }, { approvalId: a.approvalId });
+  assert.equal(w.ok, true);
+  assert.equal((await engine.run('coda', 'create_doc', { title: 'y' }, { approvalId: a.approvalId })).reason, 'approval_required', 'the spent approval is dead');
+});

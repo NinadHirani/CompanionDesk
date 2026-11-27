@@ -12,7 +12,7 @@ const assert = require('node:assert');
 const adapters = require('../src/connector-adapters.js');
 const { createConnectorCatalog } = require('../src/connectors.js');
 
-const IMPLEMENTED = ['anthropic', 'brave-search', 'arxiv', 'airtable', 'crossref', 'discord', 'docker-hub', 'github', 'gitlab', 'gmail', 'google-calendar', 'google-docs', 'google-sheets', 'google-drive', 'google-gemini', 'huggingface', 'internet-archive', 'jira', 'linear', 'microsoft-calendar', 'microsoft-onedrive', 'microsoft-excel', 'microsoft-outlook', 'microsoft-teams', 'microsoft-word', 'musicbrainz', 'notion', 'npm', 'open-meteo', 'openai', 'openalex', 'openlibrary', 'openstreetmap', 'pypi', 'slack', 'tavily', 'telegram', 'trello', 'todoist', 'wikimedia'];
+const IMPLEMENTED = ['anthropic', 'brave-search', 'arxiv', 'airtable', 'coda', 'crossref', 'discord', 'docker-hub', 'github', 'gitlab', 'gmail', 'google-calendar', 'google-docs', 'google-sheets', 'google-drive', 'google-gemini', 'huggingface', 'internet-archive', 'jira', 'linear', 'microsoft-calendar', 'microsoft-onedrive', 'microsoft-excel', 'microsoft-outlook', 'microsoft-teams', 'microsoft-word', 'musicbrainz', 'notion', 'npm', 'open-meteo', 'openai', 'openalex', 'openlibrary', 'openstreetmap', 'pypi', 'slack', 'tavily', 'telegram', 'trello', 'todoist', 'wikimedia'];
 const OAUTH = ['gmail', 'google-calendar', 'google-drive', 'microsoft-calendar', 'microsoft-onedrive', 'microsoft-outlook'];
 
 test('the adapter registry covers exactly the implemented catalog entries', () => {
@@ -1052,5 +1052,31 @@ test('trello parses the key+token vault string and builds url-token reads and on
     if (a.id === 'create_card') { assert.equal(a.scope, 'boards.write'); continue; }
     assert.equal(a.kind, 'read_only');
     assert.equal(a.scope, 'boards.read');
+  }
+});
+
+// ---- batch 25 (27 Nov 2026): coda key-bound read + create-only adapter ----
+
+test('coda builds bearer reads and a title-only create with strict validation', () => {
+  const ld = adapters.buildRequest('coda', 'list_docs', { limit: '100' }, 'cod-key');
+  assert.equal(ld.ok, true);
+  assert.equal(ld.request.method, 'GET');
+  assert.equal(ld.request.url, 'https://coda.io/apis/v1/docs?limit=100');
+  assert.equal(ld.request.headers.Authorization, 'Bearer cod-key');
+  const gd = adapters.buildRequest('coda', 'get_doc', { doc_id: 'AbCd_123' }, 'cod-key');
+  assert.equal(gd.ok, true);
+  assert.equal(gd.request.url, 'https://coda.io/apis/v1/docs/AbCd_123');
+  const cd = adapters.buildRequest('coda', 'create_doc', { title: 'T' }, 'cod-key');
+  assert.equal(cd.ok, true);
+  assert.equal(cd.request.method, 'POST');
+  assert.deepEqual(JSON.parse(cd.request.body), { title: 'T' });
+  assert.equal(adapters.buildRequest('coda', 'get_doc', { doc_id: 'a b' }, 'cod-key').reason, 'param_invalid', 'space in doc id');
+  assert.equal(adapters.buildRequest('coda', 'create_doc', {}).reason, 'param_missing', 'title required');
+  assert.equal(adapters.buildRequest('coda', 'list_docs', { limit: '101' }, 'cod-key').reason, 'param_invalid', 'limit above the cap');
+  assert.equal(adapters.listActions('coda').find((a) => a.id === 'create_doc').kind, 'write');
+  for (const a of adapters.listActions('coda')) {
+    if (a.id === 'create_doc') { assert.equal(a.scope, 'docs.write'); continue; }
+    assert.equal(a.kind, 'read_only');
+    assert.equal(a.scope, 'docs.read');
   }
 });

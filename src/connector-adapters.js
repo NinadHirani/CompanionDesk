@@ -157,6 +157,32 @@
     ],
   };
 
+  ADAPTERS.coda = {
+    id: 'coda', name: 'Coda', authShape: 'token', setupRequired: false,
+    setupNote: 'create an API token at coda.io/account and paste it; your token is stored only in the app vault, never requested or shown in chat',
+    buildHeaders: function (token) { return { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json', 'User-Agent': 'CompanionDesk' }; },
+    actions: [
+      { id: 'list_docs', label: 'List your Coda docs (capped)', scope: 'docs.read', kind: 'read_only',
+        params: [{ name: 'limit', required: false, maxLength: 3 }],
+        build: function (p, token) {
+          const limit = optionalInt(p, 'limit', 25);
+          if (limit === null || limit < 1 || limit > 100) return { error: 'param_invalid' };
+          return { method: 'GET', url: 'https://coda.io/apis/v1/docs?limit=' + limit, headers: this.buildHeaders(token), body: null };
+        } },
+      { id: 'get_doc', label: 'Read one Coda doc by id', scope: 'docs.read', kind: 'read_only',
+        params: [{ name: 'doc_id', required: true, maxLength: 80 }],
+        build: function (p, token) {
+          if (!/^[A-Za-z0-9_-]+$/.test(p.doc_id)) return { error: 'param_invalid' };
+          return { method: 'GET', url: 'https://coda.io/apis/v1/docs/' + encodeURIComponent(p.doc_id), headers: this.buildHeaders(token), body: null };
+        } },
+      { id: 'create_doc', label: 'Create a Coda doc', scope: 'docs.write', kind: 'write',
+        params: [{ name: 'title', required: true, maxLength: 200 }],
+        build: function (p, token) {
+          return { method: 'POST', url: 'https://coda.io/apis/v1/docs', headers: this.buildHeaders(token), body: JSON.stringify({ title: p.title }) };
+        } },
+    ],
+  };
+
   function parseTrelloCred(token) {
     if (typeof token !== 'string') return null;
     const m = /^key=([A-Za-z0-9]{16,64})&token=([A-Za-z0-9]{16,128})$/.exec(token);
