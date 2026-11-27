@@ -12,7 +12,7 @@ const assert = require('node:assert');
 const adapters = require('../src/connector-adapters.js');
 const { createConnectorCatalog } = require('../src/connectors.js');
 
-const IMPLEMENTED = ['anthropic', 'brave-search', 'arxiv', 'airtable', 'crossref', 'discord', 'docker-hub', 'github', 'gitlab', 'gmail', 'google-calendar', 'google-docs', 'google-sheets', 'google-drive', 'google-gemini', 'huggingface', 'internet-archive', 'jira', 'microsoft-calendar', 'microsoft-onedrive', 'microsoft-excel', 'microsoft-outlook', 'microsoft-teams', 'microsoft-word', 'musicbrainz', 'notion', 'npm', 'open-meteo', 'openai', 'openalex', 'openlibrary', 'openstreetmap', 'pypi', 'slack', 'tavily', 'telegram', 'todoist', 'wikimedia'];
+const IMPLEMENTED = ['anthropic', 'brave-search', 'arxiv', 'airtable', 'crossref', 'discord', 'docker-hub', 'github', 'gitlab', 'gmail', 'google-calendar', 'google-docs', 'google-sheets', 'google-drive', 'google-gemini', 'huggingface', 'internet-archive', 'jira', 'linear', 'microsoft-calendar', 'microsoft-onedrive', 'microsoft-excel', 'microsoft-outlook', 'microsoft-teams', 'microsoft-word', 'musicbrainz', 'notion', 'npm', 'open-meteo', 'openai', 'openalex', 'openlibrary', 'openstreetmap', 'pypi', 'slack', 'tavily', 'telegram', 'todoist', 'wikimedia'];
 const OAUTH = ['gmail', 'google-calendar', 'google-drive', 'microsoft-calendar', 'microsoft-onedrive', 'microsoft-outlook'];
 
 test('the adapter registry covers exactly the implemented catalog entries', () => {
@@ -994,5 +994,36 @@ test('airtable builds bearer reads and a rebuilt-fields create with strict valid
     if (a.id === 'create_record') { assert.equal(a.scope, 'records.write'); continue; }
     assert.equal(a.kind, 'read_only');
     assert.equal(a.scope, 'records.read');
+  }
+});
+
+// ---- batch 23 (27 Nov 2026): linear key-bound read + create-only adapter ----
+
+test('linear builds variables-based GraphQL reads and one gated create with strict validation', () => {
+  const li = adapters.buildRequest('linear', 'list_issues', { limit: '25' }, 'lin-key');
+  assert.equal(li.ok, true);
+  assert.equal(li.request.method, 'POST');
+  assert.equal(li.request.url, 'https://api.linear.app/graphql');
+  assert.equal(li.request.headers.Authorization, 'lin-key', 'Linear takes the key in the raw Authorization header');
+  const body = JSON.parse(li.request.body);
+  assert.deepEqual(body.variables, { first: 25 });
+  assert.ok(body.query.indexOf('$first: Int!') !== -1, 'the query is static text with variables');
+  const gi = adapters.buildRequest('linear', 'get_issue', { issue_id: 'abc-123' }, 'lin-key');
+  assert.equal(gi.ok, true);
+  assert.deepEqual(JSON.parse(gi.request.body).variables, { id: 'abc-123' });
+  const ci = adapters.buildRequest('linear', 'create_issue', { team_id: 'team-1', title: 'T', description: 'D' }, 'lin-key');
+  assert.equal(ci.ok, true);
+  const cb = JSON.parse(ci.request.body);
+  assert.deepEqual(cb.variables, { input: { teamId: 'team-1', title: 'T', description: 'D' } });
+  assert.ok(cb.query.indexOf('issueCreate') !== -1);
+  assert.equal(adapters.buildRequest('linear', 'create_issue', { team_id: 'team/1', title: 'T' }, 'lin-key').reason, 'param_invalid', 'team id charset');
+  assert.equal(adapters.buildRequest('linear', 'create_issue', { team_id: 'team-1' }, 'lin-key').reason, 'param_missing', 'title required');
+  assert.equal(adapters.buildRequest('linear', 'get_issue', { issue_id: 'a b' }, 'lin-key').reason, 'param_invalid', 'space in issue id');
+  assert.equal(adapters.buildRequest('linear', 'list_issues', { limit: '26' }, 'lin-key').reason, 'param_invalid', 'limit above the cap');
+  assert.equal(adapters.listActions('linear').find((a) => a.id === 'create_issue').kind, 'write');
+  for (const a of adapters.listActions('linear')) {
+    if (a.id === 'create_issue') { assert.equal(a.scope, 'issues.write'); continue; }
+    assert.equal(a.kind, 'read_only');
+    assert.equal(a.scope, 'issues.read');
   }
 });

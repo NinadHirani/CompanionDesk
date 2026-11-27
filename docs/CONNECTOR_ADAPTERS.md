@@ -521,3 +521,15 @@ Actions:
 The token is the user's own Airtable personal access token pasted into the app vault; requests carry only `Authorization: Bearer`, pinned to `api.airtable.com` with a CompanionDesk user agent. The write action is single-use approval gated by the policy engine (refused without an approval, dead after one use). No updates, no deletes, no schema writes.
 
 Tests: adapter build/validation (16 assertions incl. base-id length, cap bounds, JSON shape and primitive-value rejection), engine gates (not_connected refusal, credential rides the read, write refused without an approval, approved write runs once, spent approval is dead). Catalog count pins: 133 still-definition-only expanded rows, 137 definition-only total.
+## Batch 23 (27 Nov 2026): Linear
+
+Upgraded `linear` from definition-only to a key-bound adapter (`auth: api_key`, `authShape: token`).
+
+Actions (all GraphQL POSTs to the pinned `api.linear.app/graphql`; user input travels in GraphQL variables, never interpolated into the query text):
+- `list_issues` (read_only, `issues.read`): recent issues, limit 1-25.
+- `get_issue` (read_only, `issues.read`): one issue by id (charset-validated).
+- `create_issue` (write, `issues.write`): create an issue with team_id (charset-validated), title (required) and optional description.
+
+The key is the user's own Linear personal API key pasted into the app vault; requests carry only `Authorization: <key>` per Linear's documented header form, plus a CompanionDesk user agent. The write action is single-use approval gated by the policy engine (refused without an approval, dead after one use). No updates, no deletes, no status changes.
+
+Tests: adapter build/validation (12 assertions incl. variable-based bodies, charset rejects, limit cap), engine gates (not_connected refusal, credential rides the read, write refused without an approval, approved write runs once, spent approval is dead). Catalog count pins: 132 still-definition-only expanded rows, 136 definition-only total.

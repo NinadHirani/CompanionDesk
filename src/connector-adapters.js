@@ -157,6 +157,35 @@
     ],
   };
 
+  ADAPTERS.linear = {
+    id: 'linear', name: 'Linear', authShape: 'token', setupRequired: false,
+    setupNote: 'create a personal API key at linear.app/settings/account/security and paste it; your key is stored only in the app vault, never requested or shown in chat',
+    buildHeaders: function (token) { return { Authorization: token, 'Content-Type': 'application/json', 'User-Agent': 'CompanionDesk' }; },
+    actions: [
+      { id: 'list_issues', label: 'List recent issues in Linear (capped)', scope: 'issues.read', kind: 'read_only',
+        params: [{ name: 'limit', required: false, maxLength: 3 }],
+        build: function (p, token) {
+          const limit = optionalInt(p, 'limit', 20);
+          if (limit === null || limit < 1 || limit > 25) return { error: 'param_invalid' };
+          return { method: 'POST', url: 'https://api.linear.app/graphql', headers: this.buildHeaders(token), body: JSON.stringify({ query: 'query($first: Int!) { issues(first: $first) { nodes { id title identifier state { name } } } }', variables: { first: limit } }) };
+        } },
+      { id: 'get_issue', label: 'Read one Linear issue by id', scope: 'issues.read', kind: 'read_only',
+        params: [{ name: 'issue_id', required: true, maxLength: 80 }],
+        build: function (p, token) {
+          if (!/^[A-Za-z0-9-]+$/.test(p.issue_id)) return { error: 'param_invalid' };
+          return { method: 'POST', url: 'https://api.linear.app/graphql', headers: this.buildHeaders(token), body: JSON.stringify({ query: 'query($id: String!) { issue(id: $id) { id title identifier description state { name } assignee { name } } }', variables: { id: p.issue_id } }) };
+        } },
+      { id: 'create_issue', label: 'Create an issue in Linear', scope: 'issues.write', kind: 'write',
+        params: [{ name: 'team_id', required: true, maxLength: 80 }, { name: 'title', required: true, maxLength: 200 }, { name: 'description', required: false, maxLength: 5000 }],
+        build: function (p, token) {
+          if (!/^[A-Za-z0-9-]+$/.test(p.team_id)) return { error: 'param_invalid' };
+          const input = { teamId: p.team_id, title: p.title };
+          if (p.description) input.description = p.description;
+          return { method: 'POST', url: 'https://api.linear.app/graphql', headers: this.buildHeaders(token), body: JSON.stringify({ query: 'mutation($input: IssueCreateInput!) { issueCreate(input: $input) { success issue { id identifier } } }', variables: { input: input } }) };
+        } },
+    ],
+  };
+
   ADAPTERS.airtable = {
     id: 'airtable', name: 'Airtable', authShape: 'token', setupRequired: false,
     setupNote: 'create a personal access token at airtable.com/create/tokens with the data records scopes for your bases and paste it; your token is stored only in the app vault, never requested or shown in chat',

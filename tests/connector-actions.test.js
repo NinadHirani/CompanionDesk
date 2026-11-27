@@ -696,3 +696,22 @@ test('airtable refuses before connect, reads with a credential, and gates its cr
   assert.equal(w.ok, true);
   assert.equal((await engine.run('airtable', 'create_record', { base_id: 'appabcdefghijkl12', table: 'T', fields_json: '{"Name":"y"}' }, { approvalId: a.approvalId })).reason, 'approval_required', 'the spent approval is dead');
 });
+// ---- batch 23 (27 Nov 2026): linear credential + approval gates ----
+
+test('linear refuses before connect, reads with a credential, and gates its create behind one approval', async () => {
+  let seen = null;
+  const transport = async (req) => { seen = req; return { status: 200, body: JSON.stringify({ data: { issues: { nodes: [] } } }) }; };
+  const { catalog, engine } = makeEngine(transport, 'lin-tok');
+  assert.equal((await engine.run('linear', 'list_issues', {})).reason, 'not_connected');
+  const c = catalog.connect('linear', { userInitiated: true, scopes: ['issues.read', 'issues.write'], credentialRef: 'vault:lin-cred' });
+  assert.equal(c.ok, true);
+  const r = await engine.run('linear', 'list_issues', { limit: '20' });
+  assert.equal(r.ok, true);
+  assert.equal(seen.url, 'https://api.linear.app/graphql');
+  assert.equal(seen.headers.Authorization, 'lin-tok', 'the stored credential rides the request');
+  assert.equal((await engine.run('linear', 'create_issue', { team_id: 't', title: 'x' })).reason, 'approval_required', 'write without an approval refuses');
+  const a = catalog.approve('linear', 'issues.write', { userInitiated: true });
+  const w = await engine.run('linear', 'create_issue', { team_id: 't', title: 'x' }, { approvalId: a.approvalId });
+  assert.equal(w.ok, true);
+  assert.equal((await engine.run('linear', 'create_issue', { team_id: 't', title: 'y' }, { approvalId: a.approvalId })).reason, 'approval_required', 'the spent approval is dead');
+});
