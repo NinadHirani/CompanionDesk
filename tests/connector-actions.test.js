@@ -625,3 +625,18 @@ test('internet-archive connects keyless and reads on the pinned host', async () 
   assert.equal(seen.url, 'https://archive.org/metadata/nasa_apollo');
   assert.equal(r.data.metadata.identifier, 'nasa_apollo');
 });
+
+// ---- batch 19 (27 Nov 2026): docker-hub public gates ----
+
+test('docker-hub connects keyless and reads on the pinned host', async () => {
+  let seen = null;
+  const transport = async (req) => { seen = req; return { status: 200, body: JSON.stringify({ name: 'nginx', pull_count: 1000000 }) }; };
+  const { catalog, engine } = makeEngine(transport, () => null);
+  assert.equal((await engine.run('docker-hub', 'get_repository', { namespace: 'library', repository: 'nginx' })).reason, 'not_connected');
+  const c = catalog.connect('docker-hub', { userInitiated: true, scopes: ['images.read'] });
+  assert.equal(c.ok, true);
+  const r = await engine.run('docker-hub', 'get_repository', { namespace: 'library', repository: 'nginx' });
+  assert.equal(r.ok, true);
+  assert.equal(seen.url, 'https://hub.docker.com/v2/repositories/library/nginx/');
+  assert.equal(r.data.name, 'nginx');
+});

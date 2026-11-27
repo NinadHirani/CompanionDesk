@@ -412,6 +412,36 @@
     ],
   };
 
+  ADAPTERS['docker-hub'] = {
+    id: 'docker-hub', name: 'Docker Hub', authShape: 'public', setupRequired: false,
+    setupNote: 'no account or key needed: the Docker Hub v2 API is public and keyless for public repositories; private repositories need authentication this build never requests, and image pulls stay out of scope (the adapter reads metadata only)',
+    buildHeaders: function () { return { 'User-Agent': 'CompanionDesk', Accept: 'application/json' }; },
+    actions: [
+      { id: 'search_repositories', label: 'Search Docker Hub public repositories', scope: 'images.read', kind: 'read_only',
+        params: [{ name: 'query', required: true, maxLength: 200 }, { name: 'limit', required: false, maxLength: 3 }],
+        build: function (p) {
+          if (!/^[ -~]+$/.test(p.query)) return { error: 'param_invalid' };
+          const limit = optionalInt(p, 'limit', 20);
+          if (limit === null || limit < 1 || limit > 25) return { error: 'param_invalid' };
+          return { method: 'GET', url: 'https://hub.docker.com/v2/search/repositories/?query=' + encodeURIComponent(p.query) + '&page_size=' + limit, headers: this.buildHeaders(), body: null };
+        } },
+      { id: 'get_repository', label: 'Read one Docker Hub public repository by namespace and name', scope: 'images.read', kind: 'read_only',
+        params: [{ name: 'namespace', required: true, maxLength: 100 }, { name: 'repository', required: true, maxLength: 100 }],
+        build: function (p) {
+          if (!/^[a-z0-9](?:[a-z0-9._-]*[a-z0-9])?$/.test(p.namespace)) return { error: 'param_invalid' };
+          if (!/^[a-z0-9](?:[a-z0-9._-]*[a-z0-9])?$/.test(p.repository)) return { error: 'param_invalid' };
+          return { method: 'GET', url: 'https://hub.docker.com/v2/repositories/' + encodeURIComponent(p.namespace) + '/' + encodeURIComponent(p.repository) + '/', headers: this.buildHeaders(), body: null };
+        } },
+      { id: 'get_tags', label: 'List tags of a Docker Hub public repository', scope: 'images.read', kind: 'read_only',
+        params: [{ name: 'namespace', required: true, maxLength: 100 }, { name: 'repository', required: true, maxLength: 100 }],
+        build: function (p) {
+          if (!/^[a-z0-9](?:[a-z0-9._-]*[a-z0-9])?$/.test(p.namespace)) return { error: 'param_invalid' };
+          if (!/^[a-z0-9](?:[a-z0-9._-]*[a-z0-9])?$/.test(p.repository)) return { error: 'param_invalid' };
+          return { method: 'GET', url: 'https://hub.docker.com/v2/repositories/' + encodeURIComponent(p.namespace) + '/' + encodeURIComponent(p.repository) + '/tags?page_size=20', headers: this.buildHeaders(), body: null };
+        } },
+    ],
+  };
+
   ADAPTERS['internet-archive'] = {
     id: 'internet-archive', name: 'Internet Archive', authShape: 'public', setupRequired: false,
     setupNote: 'no account or key needed: the Internet Archive advanced search and metadata APIs are public and keyless for reads; uploading items is an authenticated API this build never touches',

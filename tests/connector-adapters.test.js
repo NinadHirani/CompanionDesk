@@ -12,7 +12,7 @@ const assert = require('node:assert');
 const adapters = require('../src/connector-adapters.js');
 const { createConnectorCatalog } = require('../src/connectors.js');
 
-const IMPLEMENTED = ['anthropic', 'brave-search', 'arxiv', 'crossref', 'discord', 'github', 'gitlab', 'gmail', 'google-calendar', 'google-docs', 'google-sheets', 'google-drive', 'google-gemini', 'huggingface', 'internet-archive', 'jira', 'microsoft-calendar', 'microsoft-onedrive', 'microsoft-excel', 'microsoft-outlook', 'microsoft-teams', 'microsoft-word', 'musicbrainz', 'notion', 'open-meteo', 'openai', 'openalex', 'openlibrary', 'openstreetmap', 'pypi', 'slack', 'tavily', 'telegram', 'wikimedia'];
+const IMPLEMENTED = ['anthropic', 'brave-search', 'arxiv', 'crossref', 'discord', 'docker-hub', 'github', 'gitlab', 'gmail', 'google-calendar', 'google-docs', 'google-sheets', 'google-drive', 'google-gemini', 'huggingface', 'internet-archive', 'jira', 'microsoft-calendar', 'microsoft-onedrive', 'microsoft-excel', 'microsoft-outlook', 'microsoft-teams', 'microsoft-word', 'musicbrainz', 'notion', 'open-meteo', 'openai', 'openalex', 'openlibrary', 'openstreetmap', 'pypi', 'slack', 'tavily', 'telegram', 'wikimedia'];
 const OAUTH = ['gmail', 'google-calendar', 'google-drive', 'microsoft-calendar', 'microsoft-onedrive', 'microsoft-outlook'];
 
 test('the adapter registry covers exactly the implemented catalog entries', () => {
@@ -873,5 +873,37 @@ test('internet-archive builds pinned-host keyless item reads and validates param
   for (const a of adapters.listActions('internet-archive')) {
     assert.equal(a.kind, 'read_only');
     assert.equal(a.scope, 'metadata.read');
+  }
+});
+
+// ---- batch 19 (27 Nov 2026): Docker Hub keyless public read-only adapter ----
+
+test('docker-hub builds pinned-host keyless repository reads and validates params', () => {
+  assert.equal(adapters.get('docker-hub').authShape, 'public');
+  assert.ok(adapters.get('docker-hub').setupNote.indexOf('keyless') !== -1, 'the setup note is honest about keyless public reads');
+  const sr = adapters.buildRequest('docker-hub', 'search_repositories', { query: 'alpine' });
+  assert.equal(sr.ok, true);
+  assert.equal(sr.request.method, 'GET');
+  assert.equal(sr.request.url, 'https://hub.docker.com/v2/search/repositories/?query=alpine&page_size=20');
+  assert.equal(sr.request.headers['User-Agent'], 'CompanionDesk');
+  assert.equal(sr.request.urlContainsSecret, false);
+  const capped = adapters.buildRequest('docker-hub', 'search_repositories', { query: 'x', limit: '25' });
+  assert.equal(capped.ok, true);
+  assert.equal(capped.request.url, 'https://hub.docker.com/v2/search/repositories/?query=x&page_size=25');
+  assert.equal(adapters.buildRequest('docker-hub', 'search_repositories', { query: 'x', limit: '26' }).reason, 'param_invalid', 'limit above the cap');
+  assert.equal(adapters.buildRequest('docker-hub', 'search_repositories', { query: 'a\nb' }).reason, 'param_invalid', 'control char in query');
+  const gr = adapters.buildRequest('docker-hub', 'get_repository', { namespace: 'library', repository: 'nginx' });
+  assert.equal(gr.ok, true);
+  assert.equal(gr.request.url, 'https://hub.docker.com/v2/repositories/library/nginx/');
+  const gt = adapters.buildRequest('docker-hub', 'get_tags', { namespace: 'library', repository: 'nginx' });
+  assert.equal(gt.ok, true);
+  assert.equal(gt.request.url, 'https://hub.docker.com/v2/repositories/library/nginx/tags?page_size=20');
+  assert.equal(adapters.buildRequest('docker-hub', 'get_repository', { namespace: 'a/b', repository: 'nginx' }).reason, 'param_invalid', 'path traversal in namespace');
+  assert.equal(adapters.buildRequest('docker-hub', 'get_tags', { namespace: 'library', repository: 'NGINX!' }).reason, 'param_invalid', 'invalid repository name');
+  assert.equal(adapters.buildRequest('docker-hub', 'get_repository', { namespace: 'library' }).reason, 'param_missing');
+  assert.equal(adapters.validateOnly('docker-hub', 'get_tags', { namespace: 'l', repository: 'n' }), null, 'validateOnly needs no credential');
+  for (const a of adapters.listActions('docker-hub')) {
+    assert.equal(a.kind, 'read_only');
+    assert.equal(a.scope, 'images.read');
   }
 });
