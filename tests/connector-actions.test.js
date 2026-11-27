@@ -595,3 +595,18 @@ test('musicbrainz connects keyless, reads on the pinned host, and redacts', asyn
   assert.ok(seen.headers['User-Agent'] === 'CompanionDesk', 'the pinned user agent rides along');
   assert.deepEqual(r.data.artists, [{ name: 'Radiohead' }], 'the public response passes through; a keyless connector holds no secret to redact');
 });
+
+// ---- batch 17 (27 Nov 2026): pypi public gates ----
+
+test('pypi connects keyless and reads on the pinned host', async () => {
+  let seen = null;
+  const transport = async (req) => { seen = req; return { status: 200, body: JSON.stringify({ info: { name: 'qiskit', version: '1.0.0' } }) }; };
+  const { catalog, engine } = makeEngine(transport, () => null);
+  assert.equal((await engine.run('pypi', 'get_package', { package: 'qiskit' })).reason, 'not_connected');
+  const c = catalog.connect('pypi', { userInitiated: true, scopes: ['packages.read'] });
+  assert.equal(c.ok, true);
+  const r = await engine.run('pypi', 'get_package', { package: 'qiskit' });
+  assert.equal(r.ok, true);
+  assert.equal(seen.url, 'https://pypi.org/pypi/qiskit/json');
+  assert.equal(r.data.info.name, 'qiskit');
+});

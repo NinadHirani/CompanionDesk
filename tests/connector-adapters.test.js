@@ -12,7 +12,7 @@ const assert = require('node:assert');
 const adapters = require('../src/connector-adapters.js');
 const { createConnectorCatalog } = require('../src/connectors.js');
 
-const IMPLEMENTED = ['anthropic', 'brave-search', 'arxiv', 'crossref', 'discord', 'github', 'gitlab', 'gmail', 'google-calendar', 'google-docs', 'google-sheets', 'google-drive', 'google-gemini', 'huggingface', 'jira', 'microsoft-calendar', 'microsoft-onedrive', 'microsoft-excel', 'microsoft-outlook', 'microsoft-teams', 'microsoft-word', 'musicbrainz', 'notion', 'open-meteo', 'openai', 'openalex', 'openlibrary', 'openstreetmap', 'slack', 'tavily', 'telegram', 'wikimedia'];
+const IMPLEMENTED = ['anthropic', 'brave-search', 'arxiv', 'crossref', 'discord', 'github', 'gitlab', 'gmail', 'google-calendar', 'google-docs', 'google-sheets', 'google-drive', 'google-gemini', 'huggingface', 'jira', 'microsoft-calendar', 'microsoft-onedrive', 'microsoft-excel', 'microsoft-outlook', 'microsoft-teams', 'microsoft-word', 'musicbrainz', 'notion', 'open-meteo', 'openai', 'openalex', 'openlibrary', 'openstreetmap', 'pypi', 'slack', 'tavily', 'telegram', 'wikimedia'];
 const OAUTH = ['gmail', 'google-calendar', 'google-drive', 'microsoft-calendar', 'microsoft-onedrive', 'microsoft-outlook'];
 
 test('the adapter registry covers exactly the implemented catalog entries', () => {
@@ -819,5 +819,31 @@ test('musicbrainz builds pinned-host keyless reads and validates params', () => 
   for (const a of adapters.listActions('musicbrainz')) {
     assert.equal(a.kind, 'read_only');
     assert.equal(a.scope, 'recordings.read');
+  }
+});
+
+// ---- batch 17 (27 Nov 2026): PyPI keyless public read-only adapter ----
+
+test('pypi builds pinned-host keyless package reads and validates params', () => {
+  assert.equal(adapters.get('pypi').authShape, 'public');
+  assert.ok(adapters.get('pypi').setupNote.indexOf('keyless') !== -1, 'the setup note is honest about keyless reads');
+  const gp = adapters.buildRequest('pypi', 'get_package', { package: 'qiskit' });
+  assert.equal(gp.ok, true);
+  assert.equal(gp.request.method, 'GET');
+  assert.equal(gp.request.url, 'https://pypi.org/pypi/qiskit/json');
+  assert.equal(gp.request.headers['User-Agent'], 'CompanionDesk');
+  assert.equal(gp.request.urlContainsSecret, false);
+  const gr = adapters.buildRequest('pypi', 'get_release', { package: 'numpy', version: '1.26.0' });
+  assert.equal(gr.ok, true);
+  assert.equal(gr.request.url, 'https://pypi.org/pypi/numpy/1.26.0/json');
+  assert.equal(adapters.buildRequest('pypi', 'get_package', { package: '-bad-' }).reason, 'param_invalid', 'leading hyphen is not a package name');
+  assert.equal(adapters.buildRequest('pypi', 'get_package', { package: 'a/b' }).reason, 'param_invalid', 'path traversal in package name');
+  assert.equal(adapters.buildRequest('pypi', 'get_package', {}).reason, 'param_missing');
+  assert.equal(adapters.buildRequest('pypi', 'get_release', { package: 'numpy', version: '1..x/y' }).reason, 'param_invalid', 'path traversal in version');
+  assert.equal(adapters.buildRequest('pypi', 'get_release', { package: 'numpy' }).reason, 'param_missing');
+  assert.equal(adapters.validateOnly('pypi', 'get_package', { package: 'x' }), null, 'validateOnly needs no credential');
+  for (const a of adapters.listActions('pypi')) {
+    assert.equal(a.kind, 'read_only');
+    assert.equal(a.scope, 'packages.read');
   }
 });

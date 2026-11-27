@@ -412,6 +412,27 @@
     ],
   };
 
+  ADAPTERS.pypi = {
+    id: 'pypi', name: 'PyPI', authShape: 'public', setupRequired: false,
+    setupNote: 'no account or key needed: the PyPI JSON API is public and keyless for reads; uploading packages is a different, authenticated API this build never touches',
+    buildHeaders: function () { return { 'User-Agent': 'CompanionDesk', Accept: 'application/json' }; },
+    actions: [
+      { id: 'get_package', label: 'Read a PyPI package: latest release metadata', scope: 'packages.read', kind: 'read_only',
+        params: [{ name: 'package', required: true, maxLength: 100 }],
+        build: function (p) {
+          if (!/^[A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?$/.test(p.package)) return { error: 'param_invalid' };
+          return { method: 'GET', url: 'https://pypi.org/pypi/' + encodeURIComponent(p.package) + '/json', headers: this.buildHeaders(), body: null };
+        } },
+      { id: 'get_release', label: 'Read one PyPI release by package and version', scope: 'packages.read', kind: 'read_only',
+        params: [{ name: 'package', required: true, maxLength: 100 }, { name: 'version', required: true, maxLength: 50 }],
+        build: function (p) {
+          if (!/^[A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?$/.test(p.package)) return { error: 'param_invalid' };
+          if (!/^[A-Za-z0-9.!+_-]+$/.test(p.version)) return { error: 'param_invalid' };
+          return { method: 'GET', url: 'https://pypi.org/pypi/' + encodeURIComponent(p.package) + '/' + encodeURIComponent(p.version) + '/json', headers: this.buildHeaders(), body: null };
+        } },
+    ],
+  };
+
   ADAPTERS.musicbrainz = {
     id: 'musicbrainz', name: 'MusicBrainz', authShape: 'public', setupRequired: false,
     setupNote: 'no account or key needed: the MusicBrainz web service is public and free; this build keeps to its one-request-per-second rate limit',
