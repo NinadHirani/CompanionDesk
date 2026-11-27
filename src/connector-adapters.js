@@ -624,6 +624,37 @@
 
   function oauthActions(list) { return list; }
 
+  ADAPTERS['google-docs'] = {
+    id: 'google-docs', name: 'Google Docs', authShape: 'oauth_json', setupRequired: true,
+    setupNote: 'create your own OAuth client in Google Cloud Console (Docs API enabled) and complete the in-app sign-in; no shared client exists; consent requests only the read-only documents scope',
+    oauth: googleOauth('https://www.googleapis.com/auth/documents.readonly'),
+    buildHeaders: function (blob) { return bearerHeader(blob.access_token); },
+    actions: oauthActions([
+      { id: 'get_document_content', label: 'Read one Google Docs document by id', scope: 'documents.read', kind: 'read_only',
+        params: [{ name: 'document_id', required: true, maxLength: 120 }],
+        build: function (p, blob) {
+          if (!/^[A-Za-z0-9_-]+$/.test(p.document_id)) return { error: 'param_invalid' };
+          return { method: 'GET', url: 'https://docs.googleapis.com/v1/documents/' + encodeURIComponent(p.document_id) + '?fields=documentId,title,body', headers: this.buildHeaders(blob), body: null };
+        } },
+    ]),
+  };
+
+  ADAPTERS['google-sheets'] = {
+    id: 'google-sheets', name: 'Google Sheets', authShape: 'oauth_json', setupRequired: true,
+    setupNote: 'create your own OAuth client in Google Cloud Console (Sheets API enabled) and complete the in-app sign-in; no shared client exists; consent requests only the read-only spreadsheets scope',
+    oauth: googleOauth('https://www.googleapis.com/auth/spreadsheets.readonly'),
+    buildHeaders: function (blob) { return bearerHeader(blob.access_token); },
+    actions: oauthActions([
+      { id: 'get_values', label: 'Read cell values from one Google Sheets range', scope: 'spreadsheets.read', kind: 'read_only',
+        params: [{ name: 'spreadsheet_id', required: true, maxLength: 120 }, { name: 'range', required: true, maxLength: 200 }],
+        build: function (p, blob) {
+          if (!/^[A-Za-z0-9_-]+$/.test(p.spreadsheet_id)) return { error: 'param_invalid' };
+          if (!/^[A-Za-z0-9_ '!:.$,-]+$/.test(p.range)) return { error: 'param_invalid' };
+          return { method: 'GET', url: 'https://sheets.googleapis.com/v4/spreadsheets/' + encodeURIComponent(p.spreadsheet_id) + '/values/' + encodeURIComponent(p.range) + '?majorDimension=ROWS', headers: this.buildHeaders(blob), body: null };
+        } },
+    ]),
+  };
+
   ADAPTERS['google-drive'] = {
     id: 'google-drive', name: 'Google Drive', authShape: 'oauth_json', setupRequired: true,
     setupNote: 'create your own OAuth client in Google Cloud Console (Drive API enabled) and complete the in-app sign-in; no shared client exists',

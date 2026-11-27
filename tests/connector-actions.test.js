@@ -432,3 +432,38 @@ test('brave-search and tavily refuse unconnected/unauthorized runs and redact se
   assert.equal(second.catalog.connect('tavily', { userInitiated: true, scopes: ['search.read'], credentialRef: 'vault:k' }).ok, true);
   assert.equal((await second.engine.run('tavily', 'web_search', { query: 'q' })).reason, 'credential_missing');
 });
+
+// ---- batch 11 (27 Nov 2026): google-docs and google-sheets gates + refresh ----
+
+test('google-docs and google-sheets refuse unconnected runs and refresh expired tokens', async () => {
+  const s = oauthStack(async function (req) {
+    if (req.url.indexOf('oauth2.googleapis.com/token') !== -1) {
+      return { status: 200, body: JSON.stringify({ access_token: 'at-2', expires_in: 3600, refresh_token: 'rt-2' }) };
+    }
+    return { status: 200, body: JSON.stringify({ values: [['A1', 'B1']], echo: 'access_token=at-2' }) };
+  }, expiredBlob());
+  assert.equal((await s.engine.run('google-sheets', 'get_values', { spreadsheet_id: '1Bxi', range: 'A1:B2' })).reason, 'not_connected');
+  assert.equal(s.catalog.connect('google-sheets', { userInitiated: true, scopes: ['spreadsheets.read'] }).reason, 'credential_ref_required');
+  const c = s.catalog.connect('google-sheets', { userInitiated: true, scopes: ['spreadsheets.read'], credentialRef: 'vault:gs' });
+  assert.equal(c.ok, true);
+  const r = await s.engine.run('google-sheets', 'get_values', { spreadsheet_id: '1Bxi', range: 'A1:B2' });
+  assert.equal(r.ok, true, JSON.stringify(r));
+  assert.equal(s.recorded.length, 2, 'one refresh, one action');
+  assert.equal(s.recorded[0].url.indexOf('oauth2.googleapis.com/token') !== -1, true, 'refresh goes to the pinned token endpoint');
+  assert.equal(s.recorded[1].url.indexOf('https://sheets.googleapis.com/v4/spreadsheets/1Bxi/values/') === 0, true, 'pinned sheets host');
+  assert.equal(s.recorded[1].headers.Authorization, 'Bearer at-2', 'the action uses the fresh token');
+  assert.ok(s.recorded[1].url.indexOf('at-2') === -1, 'the access token never rides the URL');
+  assert.ok(r.data.echo.indexOf('at-2') === -1 && r.data.echo.indexOf('REDACTED') !== -1, 'secret-shaped response text is redacted');
+  const s2 = oauthStack(async function (req) {
+    if (req.url.indexOf('oauth2.googleapis.com/token') !== -1) {
+      return { status: 200, body: JSON.stringify({ access_token: 'at-2', expires_in: 3600 }) };
+    }
+    return { status: 200, body: JSON.stringify({ documentId: 'abc' }) };
+  }, expiredBlob());
+  assert.equal((await s2.engine.run('google-docs', 'get_document_content', { document_id: 'abc' })).reason, 'not_connected');
+  const c2 = s2.catalog.connect('google-docs', { userInitiated: true, scopes: ['documents.read'], credentialRef: 'vault:gd' });
+  assert.equal(c2.ok, true);
+  const r2 = await s2.engine.run('google-docs', 'get_document_content', { document_id: 'abc' });
+  assert.equal(r2.ok, true);
+  assert.equal(s2.recorded[1].url.indexOf('https://docs.googleapis.com/v1/documents/abc') === 0, true, 'pinned docs host');
+});

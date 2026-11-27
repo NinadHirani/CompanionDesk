@@ -14,7 +14,7 @@ const assert = require('node:assert');
 const { createConnectorCatalog } = require('../src/connectors.js');
 
 const EXPECTED_TOTAL = 185; // batch 10: brave-search and tavily join
-const EXPECTED_DEFINITION_ONLY = 147; // definition-only curated + expanded after the 27 Nov adapter batch
+const EXPECTED_DEFINITION_ONLY = 145; // google-docs + google-sheets read adapters landed in batch 11 // definition-only curated + expanded after the 27 Nov adapter batch
 
 test('the catalog is the expanded set with no duplicate ids or names', () => {
   const c = createConnectorCatalog({});
@@ -53,7 +53,7 @@ test('every entry carries complete metadata: provider, category, auth, cost, lim
 test('every new expanded entry is least-privilege with a read-only baseline scope', () => {
   const c = createConnectorCatalog({});
   const expanded = c.list().filter(e => e.integrationImplemented === false && e.id !== 'slack' && e.id !== 'discord' && e.id !== 'notion' && e.id !== 'dropbox' && e.id !== 'google-drive' && e.id !== 'gmail' && e.id !== 'google-calendar' && e.id !== 'microsoft-onedrive' && e.id !== 'microsoft-outlook' && e.id !== 'telegram' && e.id !== 'youtube' && e.id !== 'spotify' && e.id !== 'zoom');
-  assert.equal(expanded.length, 143, 'the 143 still-definition-only expanded entries carry the marker (OpenStreetMap now has an adapter; Open-Meteo sits in the legacy tier)');
+  assert.equal(expanded.length, 141, 'the 141 still-definition-only expanded entries carry the marker (google-docs and google-sheets read adapters landed in batch 11; OpenStreetMap now has an adapter; Open-Meteo sits in the legacy tier)');
   for (const e of expanded) {
     assert.ok(e.scopes.some(s => s.class === 'read_only'), e.id + ' has a read-only baseline scope');
   }

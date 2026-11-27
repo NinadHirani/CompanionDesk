@@ -12,7 +12,7 @@ const assert = require('node:assert');
 const adapters = require('../src/connector-adapters.js');
 const { createConnectorCatalog } = require('../src/connectors.js');
 
-const IMPLEMENTED = ['anthropic', 'brave-search', 'arxiv', 'crossref', 'discord', 'github', 'gmail', 'google-calendar', 'google-drive', 'google-gemini', 'huggingface', 'microsoft-calendar', 'microsoft-onedrive', 'microsoft-outlook', 'notion', 'open-meteo', 'openai', 'openalex', 'openlibrary', 'openstreetmap', 'slack', 'tavily', 'telegram', 'wikimedia'];
+const IMPLEMENTED = ['anthropic', 'brave-search', 'arxiv', 'crossref', 'discord', 'github', 'gmail', 'google-calendar', 'google-docs', 'google-sheets', 'google-drive', 'google-gemini', 'huggingface', 'microsoft-calendar', 'microsoft-onedrive', 'microsoft-outlook', 'notion', 'open-meteo', 'openai', 'openalex', 'openlibrary', 'openstreetmap', 'slack', 'tavily', 'telegram', 'wikimedia'];
 const OAUTH = ['gmail', 'google-calendar', 'google-drive', 'microsoft-calendar', 'microsoft-onedrive', 'microsoft-outlook'];
 
 test('the adapter registry covers exactly the implemented catalog entries', () => {
@@ -585,4 +585,49 @@ test('brave and tavily accept no user-controlled host (no SSRF path)', () => {
   const t = adapters.buildRequest('tavily', 'web_search', { query: nasty }, 'k');
   assert.equal(t.ok, true);
   assert.equal(t.request.url, 'https://api.tavily.com/search', 'tavily stays on its pinned host');
+});
+
+// ---- batch 11 (27 Nov 2026): Google Docs + Google Sheets readonly reads ----
+
+test('google docs requests only the readonly scope and reads one document', () => {
+  assert.equal(adapters.get('google-docs').oauth.scope, 'https://www.googleapis.com/auth/documents.readonly');
+  const au = adapters.authorizeUrl('google-docs', { client_id: 'cid', redirect_uri: 'https://app.example/cb' }, 'st');
+  assert.equal(au.ok, true);
+  assert.ok(au.url.indexOf('scope=' + encodeURIComponent('https://www.googleapis.com/auth/documents.readonly')) !== -1, 'the consent URL names the readonly scope');
+  const tk = adapters.tokenRequest('google-docs', { client_id: 'cid', client_secret: 'cs', redirect_uri: 'https://app.example/cb' }, 'code1');
+  assert.equal(tk.ok, true);
+  assert.equal(tk.request.url, 'https://oauth2.googleapis.com/token');
+  const blob = { client_id: 'cid', access_token: 'at-1', refresh_token: 'rt-1', expires_at: 3600000 };
+  const s = adapters.buildRequest('google-docs', 'get_document_content', { document_id: '1AbC_dEf-9GhI' }, JSON.stringify(blob));
+  assert.equal(s.ok, true);
+  assert.equal(s.request.method, 'GET');
+  assert.equal(s.request.url, 'https://docs.googleapis.com/v1/documents/1AbC_dEf-9GhI?fields=documentId,title,body');
+  assert.equal(s.request.headers.Authorization, 'Bearer at-1');
+  assert.equal(s.request.urlContainsSecret, false);
+  for (const bad of ['../etc/passwd', 'a/b', 'id?x=1', 'id x']) {
+    assert.equal(adapters.buildRequest('google-docs', 'get_document_content', { document_id: bad }, JSON.stringify(blob)).reason, 'param_invalid', bad);
+  }
+  assert.equal(adapters.validateOnly('google-docs', 'get_document_content', { document_id: 'x' }), null, 'validateOnly needs no credential');
+  const [a] = adapters.listActions('google-docs');
+  assert.equal(a.kind, 'read_only');
+  assert.equal(a.scope, 'documents.read');
+});
+
+test('google sheets validates spreadsheet ids and ranges and stays on the pinned host', () => {
+  assert.equal(adapters.get('google-sheets').oauth.scope, 'https://www.googleapis.com/auth/spreadsheets.readonly');
+  const blob = { client_id: 'cid', access_token: 'at-1', refresh_token: 'rt-1', expires_at: 3600000 };
+  const s = adapters.buildRequest('google-sheets', 'get_values', { spreadsheet_id: '1BxiMVs0XRA5', range: "Sheet 1!A1:C10" }, JSON.stringify(blob));
+  assert.equal(s.ok, true);
+  assert.equal(s.request.url, 'https://sheets.googleapis.com/v4/spreadsheets/1BxiMVs0XRA5/values/' + encodeURIComponent('Sheet 1!A1:C10') + '?majorDimension=ROWS');
+  assert.equal(s.request.headers.Authorization, 'Bearer at-1');
+  for (const bad of ['../x', 'id/y', 'id;drop', 'id?q=1']) {
+    assert.equal(adapters.buildRequest('google-sheets', 'get_values', { spreadsheet_id: bad, range: 'A1' }, JSON.stringify(blob)).reason, 'param_invalid', bad);
+  }
+  for (const bad of ['A1;DROP', 'A1?x', '../A1', 'a\nb']) {
+    assert.equal(adapters.buildRequest('google-sheets', 'get_values', { spreadsheet_id: '1Bxi', range: bad }, JSON.stringify(blob)).reason, 'param_invalid', bad);
+  }
+  assert.equal(adapters.buildRequest('google-sheets', 'get_values', { spreadsheet_id: '1Bxi' }, JSON.stringify(blob)).reason, 'param_missing');
+  const [a] = adapters.listActions('google-sheets');
+  assert.equal(a.kind, 'read_only');
+  assert.equal(a.scope, 'spreadsheets.read');
 });

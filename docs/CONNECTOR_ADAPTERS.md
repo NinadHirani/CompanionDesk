@@ -399,3 +399,37 @@ a vault ref, credential_missing when connected but the vault is empty,
 and secret-shaped response text scrubbed to REDACTED). Catalog count
 pin 183 -> 185 and the category pin gains `search` (27 categories).
 Suite 1501/1501.
+
+## Batch 11 (27 Nov 2026): Google Docs + Google Sheets read-only adapters
+
+Both rows existed as definition-only entries in the expanded tier and
+were upgraded in place (definition-only counts: expanded 143 -> 141,
+overall 147 -> 145). Both run on the existing `oauth_json` shape and
+the Google token endpoint the Drive/Gmail adapters already use, so
+refresh and rotation behaviour is shared and unchanged.
+
+- **Google Docs** (`documents.read`): `get_document_content` (GET
+  docs.googleapis.com/v1/documents/{id}?fields=documentId,title,body,
+  document id validated to [A-Za-z0-9_-]+, engine truncation bounds
+  the payload). The consent URL requests ONLY the exact least-privilege
+  scope `https://www.googleapis.com/auth/documents.readonly`.
+- **Google Sheets** (`spreadsheets.read`): `get_values` (GET
+  sheets.googleapis.com/v4/spreadsheets/{id}/values/{range},
+  spreadsheet id validated to [A-Za-z0-9_-]+, range validated to the
+  A1-notation character set and URL-encoded; engine truncation bounds
+  the payload). Consent requests ONLY
+  `https://www.googleapis.com/auth/spreadsheets.readonly`.
+
+No reconnection is needed for existing accounts: neither entry was
+previously connectable, so no old grant exists, and the consent screen
+requests only the readonly scopes. The Sheets write scope stays
+declared in the catalog but no write action is implemented. No writes
+anywhere in this batch; no credentials are requested or shown in chat;
+nothing connects or activates by itself.
+
+Tests: exact-scope assertions on both consent URLs, pinned token
+endpoint, pinned action hosts, id/range validation (hostile strings
+refused), key never in a URL, the gate ladder (not_connected,
+credential_ref_required without a vault ref), refresh-before-action
+with rotation persisted, and secret-shaped response text scrubbed to
+REDACTED. Suite 1504/1504.
