@@ -554,3 +554,28 @@ test('gitlab refuses unconnected runs, connects on the vault token, and never le
   assert.equal(second.catalog.connect('gitlab', { userInitiated: true, scopes: ['read_api'], credentialRef: 'vault:k' }).ok, true);
   assert.equal((await second.engine.run('gitlab', 'search_projects', { query: 'q' })).reason, 'credential_missing');
 });
+
+// ---- batch 15 (27 Nov 2026): jira gates + secret handling ----
+
+test('jira refuses unconnected runs, connects on the vault payload, and never leaks the token', async () => {
+  let seen = null;
+  const cred = JSON.stringify({ host: 'https://example.atlassian.net', email: 'user@example.com', token: 'at3t-secret-token-42' });
+  const transport = async (req) => { seen = req; return { status: 200, body: JSON.stringify({ key: 'PROJ-42', echo: 'token=at3t-secret-token-42' }) }; };
+  const { catalog, engine } = makeEngine(transport, () => cred);
+  assert.equal((await engine.run('jira', 'get_issue', { issue_key: 'PROJ-42' })).reason, 'not_connected');
+  assert.equal(catalog.connect('jira', { userInitiated: true, scopes: ['issues.read'] }).reason, 'credential_ref_required');
+  const c = catalog.connect('jira', { userInitiated: true, scopes: ['issues.read'], credentialRef: 'vault:jira-cred' });
+  assert.equal(c.ok, true);
+  const r = await engine.run('jira', 'get_issue', { issue_key: 'PROJ-42' });
+  assert.equal(r.ok, true);
+  assert.equal(seen.url.indexOf('https://example.atlassian.net/rest/api/3/issue/PROJ-42') === 0, true, 'pinned tenant host from the validated payload');
+  assert.ok(seen.url.indexOf('at3t-secret') === -1, 'the vault token never appears in the request URL');
+  assert.ok(seen.headers.Authorization.indexOf('Basic ') === 0, 'the token rides only in the Basic Authorization header');
+  assert.ok(r.data.echo.indexOf('at3t-secret-token-42') === -1 && r.data.echo.indexOf('REDACTED') !== -1, 'secret-shaped response text is redacted');
+  const evil = makeEngine(async () => ({ status: 200, body: '{}' }), () => JSON.stringify({ host: 'https://evil.com', email: 'u@e.com', token: 'at3t-token-1234567890' }));
+  assert.equal(evil.catalog.connect('jira', { userInitiated: true, scopes: ['issues.read'], credentialRef: 'vault:j' }).ok, true);
+  assert.equal((await evil.engine.run('jira', 'get_issue', { issue_key: 'PROJ-42' })).reason, 'credential_invalid', 'a non-Atlassian tenant host is refused');
+  const empty = makeEngine(async () => ({ status: 200, body: '{}' }), () => null);
+  assert.equal(empty.catalog.connect('jira', { userInitiated: true, scopes: ['issues.read'], credentialRef: 'vault:k' }).ok, true);
+  assert.equal((await empty.engine.run('jira', 'get_issue', { issue_key: 'PROJ-42' })).reason, 'credential_missing');
+});

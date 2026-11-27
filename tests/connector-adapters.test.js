@@ -12,7 +12,7 @@ const assert = require('node:assert');
 const adapters = require('../src/connector-adapters.js');
 const { createConnectorCatalog } = require('../src/connectors.js');
 
-const IMPLEMENTED = ['anthropic', 'brave-search', 'arxiv', 'crossref', 'discord', 'github', 'gitlab', 'gmail', 'google-calendar', 'google-docs', 'google-sheets', 'google-drive', 'google-gemini', 'huggingface', 'microsoft-calendar', 'microsoft-onedrive', 'microsoft-excel', 'microsoft-outlook', 'microsoft-teams', 'microsoft-word', 'notion', 'open-meteo', 'openai', 'openalex', 'openlibrary', 'openstreetmap', 'slack', 'tavily', 'telegram', 'wikimedia'];
+const IMPLEMENTED = ['anthropic', 'brave-search', 'arxiv', 'crossref', 'discord', 'github', 'gitlab', 'gmail', 'google-calendar', 'google-docs', 'google-sheets', 'google-drive', 'google-gemini', 'huggingface', 'jira', 'microsoft-calendar', 'microsoft-onedrive', 'microsoft-excel', 'microsoft-outlook', 'microsoft-teams', 'microsoft-word', 'notion', 'open-meteo', 'openai', 'openalex', 'openlibrary', 'openstreetmap', 'slack', 'tavily', 'telegram', 'wikimedia'];
 const OAUTH = ['gmail', 'google-calendar', 'google-drive', 'microsoft-calendar', 'microsoft-onedrive', 'microsoft-outlook'];
 
 test('the adapter registry covers exactly the implemented catalog entries', () => {
@@ -750,5 +750,44 @@ test('gitlab adapter pins the host, validates identifiers, and builds three read
   for (const a of adapters.listActions('gitlab')) {
     assert.equal(a.kind, 'read_only');
     assert.equal(a.scope, 'read_api');
+  }
+});
+
+// ---- batch 15 (27 Nov 2026): Jira Cloud readonly adapter (vault JSON + tenant host validation) ----
+
+test('jira validates tenant hosts strictly and builds basic-auth reads on the tenant host', () => {
+  assert.equal(adapters.get('jira').authShape, 'token');
+  assert.ok(adapters.get('jira').setupNote.indexOf('app vault') !== -1, 'the setup note says the secrets live only in the app vault');
+  const ok = ['https://example.atlassian.net', 'https://my-site.atlassian.net', 'https://EXAMPLE.Atlassian.NET'];
+  for (const h of ok) assert.equal(adapters.get('jira').hostValid(h), true, h);
+  const bad = ['http://example.atlassian.net', 'https://example.atlassian.net:8443', 'https://example.atlassian.net.evil.com', 'https://evil.com', 'https://user:pass@example.atlassian.net', 'https://example.atlassian.net/path', 'https://example.atlassian.net?q=1', 'https://example.atlassian.net#f', 'example.atlassian.net', 'https://a.b.atlassian.net', 'https://example.atlassian.com'];
+  for (const h of bad) assert.equal(adapters.get('jira').hostValid(h), false, h);
+  const cred = JSON.stringify({ host: 'https://example.atlassian.net', email: 'user@example.com', token: 'at3t-token-1234567890' });
+  const expectedBasic = 'Basic ' + Buffer.from('user@example.com:at3t-token-1234567890').toString('base64');
+  const gi = adapters.buildRequest('jira', 'get_issue', { issue_key: 'PROJ-42' }, cred);
+  assert.equal(gi.ok, true);
+  assert.equal(gi.request.method, 'GET');
+  assert.equal(gi.request.url, 'https://example.atlassian.net/rest/api/3/issue/PROJ-42?fields=summary,status,issuetype,assignee,created,updated');
+  assert.equal(gi.request.headers.Authorization, expectedBasic);
+  assert.equal(gi.request.urlContainsSecret, false);
+  assert.ok(gi.request.url.indexOf('at3t-token') === -1, 'the token never rides the URL');
+  const si = adapters.buildRequest('jira', 'search_issues', { jql: 'project = DEMO AND status = "In Progress"' }, cred);
+  assert.equal(si.ok, true);
+  assert.equal(si.request.url, 'https://example.atlassian.net/rest/api/3/search?jql=' + encodeURIComponent('project = DEMO AND status = "In Progress"') + '&maxResults=20');
+  for (const payload of ['not json', '{}', JSON.stringify({ host: 'https://evil.com', email: 'user@example.com', token: 'at3t-token-1234567890' }), JSON.stringify({ host: 'https://example.atlassian.net', email: 'nope', token: 'at3t-token-1234567890' }), JSON.stringify({ host: 'https://example.atlassian.net', email: 'user@example.com', token: 'short' })]) {
+    assert.equal(adapters.buildRequest('jira', 'get_issue', { issue_key: 'PROJ-42' }, payload).reason, 'credential_invalid', payload);
+    assert.equal(adapters.buildRequest('jira', 'search_issues', { jql: 'x' }, payload).reason, 'credential_invalid', payload);
+  }
+  for (const badKey of ['../x', 'a b', 'KEY!1', 'PROJ-']) {
+    assert.equal(adapters.buildRequest('jira', 'get_issue', { issue_key: badKey }, cred).reason, 'param_invalid', badKey);
+  }
+  assert.equal(adapters.buildRequest('jira', 'get_issue', {}, cred).reason, 'param_missing');
+  assert.equal(adapters.buildRequest('jira', 'search_issues', { jql: 'a\nb' }, cred).reason, 'param_invalid', 'control char in jql');
+  assert.equal(adapters.buildRequest('jira', 'search_issues', {}, cred).reason, 'param_missing');
+  assert.equal(adapters.validateOnly('jira', 'get_issue', { issue_key: 'A-1' }), null, 'validateOnly needs no credential');
+  assert.equal(adapters.validateOnly('jira', 'search_issues', { jql: 'x' }), null, 'validateOnly needs no credential');
+  for (const a of adapters.listActions('jira')) {
+    assert.equal(a.kind, 'read_only');
+    assert.equal(a.scope, 'issues.read');
   }
 });

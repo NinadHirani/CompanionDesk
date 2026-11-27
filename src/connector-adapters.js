@@ -530,6 +530,44 @@
     ],
   };
 
+  ADAPTERS.jira = {
+    id: 'jira', name: 'Jira', authShape: 'token', setupRequired: false,
+    setupNote: 'in the app, enter your Atlassian account email, your API token (create one at id.atlassian.com) and your tenant site address (https://your-site.atlassian.net); all three are stored only in the app vault, never requested or shown in chat; this build reads Jira Cloud only',
+    hostValid: function (h) {
+      return typeof h === 'string' && /^https:\/\/[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.atlassian\.net$/i.test(h);
+    },
+    credentialPayload: function (cred) {
+      let p;
+      try { p = JSON.parse(cred); } catch (e) { return null; }
+      if (!p || typeof p !== 'object') return null;
+      if (typeof p.email !== 'string' || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(p.email)) return null;
+      if (typeof p.token !== 'string' || p.token.length < 10) return null;
+      if (!this.hostValid(p.host)) return null;
+      return p;
+    },
+    buildHeaders: function (c) {
+      return { Authorization: 'Basic ' + Buffer.from(c.email + ':' + c.token, 'utf8').toString('base64'), Accept: 'application/json', 'User-Agent': 'CompanionDesk' };
+    },
+    actions: [
+      { id: 'get_issue', label: 'Read one Jira issue by key', scope: 'issues.read', kind: 'read_only',
+        params: [{ name: 'issue_key', required: true, maxLength: 100 }],
+        build: function (p, cred) {
+          if (!/^[A-Za-z0-9]+-[0-9]+$/.test(p.issue_key)) return { error: 'param_invalid' };
+          const c = this.credentialPayload(cred);
+          if (!c) return { error: 'credential_invalid' };
+          return { method: 'GET', url: c.host + '/rest/api/3/issue/' + encodeURIComponent(p.issue_key) + '?fields=summary,status,issuetype,assignee,created,updated', headers: this.buildHeaders(c), body: null };
+        } },
+      { id: 'search_issues', label: 'Search Jira issues with a JQL query', scope: 'issues.read', kind: 'read_only',
+        params: [{ name: 'jql', required: true, maxLength: 500 }],
+        build: function (p, cred) {
+          if (!/^[ -~]+$/.test(p.jql)) return { error: 'param_invalid' };
+          const c = this.credentialPayload(cred);
+          if (!c) return { error: 'credential_invalid' };
+          return { method: 'GET', url: c.host + '/rest/api/3/search?jql=' + encodeURIComponent(p.jql) + '&maxResults=20', headers: this.buildHeaders(c), body: null };
+        } },
+    ],
+  };
+
   ADAPTERS.gitlab = {
     id: 'gitlab', name: 'GitLab', authShape: 'token', setupRequired: false,
     setupNote: 'paste your own GitLab personal access token with the read_api scope (create it at gitlab.com under user settings, personal access tokens); the token is stored only in the app vault, never requested or shown in chat; this build talks to gitlab.com only, not a self-hosted instance',
