@@ -480,6 +480,56 @@
     ],
   };
 
+  ADAPTERS.wikimedia = {
+    id: 'wikimedia', name: 'Wikimedia', authShape: 'public', setupRequired: false,
+    setupNote: 'no account or key needed: the MediaWiki and Wikipedia REST APIs are public; Wikimedia asks for a descriptive User-Agent (this build sends one) and polite-use rates',
+    buildHeaders: function () { return { 'User-Agent': 'CompanionDesk/1.0 (https://github.com/NinadHirani/CompanionDesk)', Accept: 'application/json' }; },
+    actions: [
+      { id: 'search_pages', label: 'Search Wikipedia articles', scope: 'search.read', kind: 'read_only',
+        params: [{ name: 'query', required: true, maxLength: 200 }, { name: 'limit', required: false, maxLength: 3 }],
+        build: function (p) {
+          const limit = optionalInt(p, 'limit', 10);
+          if (limit === null || limit > 50) return { error: 'param_invalid' };
+          return { method: 'GET', url: 'https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=' + encodeURIComponent(p.query) + '&format=json&srlimit=' + limit, headers: this.buildHeaders(), body: null };
+        } },
+      { id: 'get_page_summary', label: 'Read the summary of one Wikipedia page', scope: 'search.read', kind: 'read_only',
+        params: [{ name: 'title', required: true, maxLength: 200 }],
+        build: function (p) {
+          return { method: 'GET', url: 'https://en.wikipedia.org/api/rest_v1/page/summary/' + encodeURIComponent(p.title), headers: this.buildHeaders(), body: null };
+        } },
+    ],
+  };
+
+  ADAPTERS.openlibrary = {
+    id: 'openlibrary', name: 'Open Library', authShape: 'public', setupRequired: false,
+    setupNote: 'no account or key needed: the Open Library search and metadata APIs are public and polite-use rate limited',
+    buildHeaders: function () { return { 'User-Agent': 'CompanionDesk/1.0 (https://github.com/NinadHirani/CompanionDesk)', Accept: 'application/json' }; },
+    actions: [
+      { id: 'search_books', label: 'Search Open Library for books', scope: 'books.read', kind: 'read_only',
+        params: [{ name: 'query', required: true, maxLength: 200 }, { name: 'limit', required: false, maxLength: 3 }],
+        build: function (p) {
+          const limit = optionalInt(p, 'limit', 20);
+          if (limit === null || limit > 100) return { error: 'param_invalid' };
+          return { method: 'GET', url: 'https://openlibrary.org/search.json?q=' + encodeURIComponent(p.query) + '&limit=' + limit, headers: this.buildHeaders(), body: null };
+        } },
+      { id: 'get_book', label: 'Read one book by ISBN or Open Library id', scope: 'books.read', kind: 'read_only',
+        params: [{ name: 'identifier', required: true, maxLength: 40 }],
+        build: function (p) {
+          const id = p.identifier;
+          if (/^[0-9]{9}([0-9]|X|x)$/.test(id) || /^[0-9]{13}$/.test(id)) {
+            return { method: 'GET', url: 'https://openlibrary.org/isbn/' + encodeURIComponent(id) + '.json', headers: this.buildHeaders(), body: null };
+          }
+          if (/^OL[0-9]+M$/.test(id)) {
+            return { method: 'GET', url: 'https://openlibrary.org/books/' + encodeURIComponent(id) + '.json', headers: this.buildHeaders(), body: null };
+          }
+          if (/^OL[0-9]+W$/.test(id)) {
+            return { method: 'GET', url: 'https://openlibrary.org/works/' + encodeURIComponent(id) + '.json', headers: this.buildHeaders(), body: null };
+          }
+          return { error: 'param_invalid' };
+        } },
+    ],
+  };
+
   ADAPTERS['google-gemini'] = {
     id: 'google-gemini', name: 'Google Gemini', authShape: 'url_token', setupRequired: false,
     setupNote: 'paste your own API key from aistudio.google.com; the free tier has request limits',

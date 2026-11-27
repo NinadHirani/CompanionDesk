@@ -395,3 +395,15 @@ test('open-meteo and openstreetmap reads run with no credential once connected',
   assert.equal((await engine.run('openstreetmap', 'search_places', { query: 'Rajkot' })).ok, true);
   assert.equal((await engine.run('openstreetmap', 'reverse_geocode', { latitude: '22.3', longitude: '70.8' })).ok, true);
 });
+
+// ---- batch 9 (27 Nov 2026): wikimedia and openlibrary run keyless behind the gate ----
+
+test('wikimedia and openlibrary reads run with no credential once connected', async () => {
+  const { catalog, engine } = makeEngine(async () => ({ status: 200, body: '{}' }), null);
+  assert.equal((await engine.run('wikimedia', 'search_pages', { query: 'qaoa' })).reason, 'not_connected');
+  assert.equal(catalog.connect('wikimedia', { userInitiated: true, scopes: ['search.read'] }).ok, true);
+  assert.equal((await engine.run('wikimedia', 'search_pages', { query: 'qaoa' })).ok, true);
+  assert.equal(catalog.connect('openlibrary', { userInitiated: true, scopes: ['books.read'] }).ok, true);
+  assert.equal((await engine.run('openlibrary', 'search_books', { query: 'qaoa' })).ok, true);
+  assert.equal((await engine.run('openlibrary', 'get_book', { identifier: '9780262033848' })).ok, true);
+});

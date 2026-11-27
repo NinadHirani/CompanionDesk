@@ -12,7 +12,7 @@ const assert = require('node:assert');
 const adapters = require('../src/connector-adapters.js');
 const { createConnectorCatalog } = require('../src/connectors.js');
 
-const IMPLEMENTED = ['anthropic', 'arxiv', 'crossref', 'discord', 'github', 'gmail', 'google-calendar', 'google-drive', 'google-gemini', 'huggingface', 'microsoft-calendar', 'microsoft-onedrive', 'microsoft-outlook', 'notion', 'open-meteo', 'openai', 'openalex', 'openstreetmap', 'slack', 'telegram'];
+const IMPLEMENTED = ['anthropic', 'arxiv', 'crossref', 'discord', 'github', 'gmail', 'google-calendar', 'google-drive', 'google-gemini', 'huggingface', 'microsoft-calendar', 'microsoft-onedrive', 'microsoft-outlook', 'notion', 'open-meteo', 'openai', 'openalex', 'openlibrary', 'openstreetmap', 'slack', 'telegram', 'wikimedia'];
 const OAUTH = ['gmail', 'google-calendar', 'google-drive', 'microsoft-calendar', 'microsoft-onedrive', 'microsoft-outlook'];
 
 test('the adapter registry covers exactly the implemented catalog entries', () => {
@@ -497,5 +497,46 @@ test('openstreetmap Nominatim reads validate params and cap results', () => {
   for (const a of adapters.listActions('open-meteo')) {
     assert.equal(a.kind, 'read_only');
     assert.equal(a.scope, 'weather.read');
+  }
+});
+
+// ---- batch 9 (27 Nov 2026): Wikipedia + Open Library, keyless reads ----
+
+test('wikimedia search and summary build pinned-host public GETs', () => {
+  const s = adapters.buildRequest('wikimedia', 'search_pages', { query: 'quantum computing' });
+  assert.equal(s.ok, true);
+  assert.equal(s.request.method, 'GET');
+  assert.equal(s.request.url, 'https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=' + encodeURIComponent('quantum computing') + '&format=json&srlimit=10');
+  assert.equal(s.request.headers.Authorization, undefined, 'no credential rides a public call');
+  assert.ok(s.request.headers['User-Agent'].indexOf('CompanionDesk') === 0, 'a descriptive User-Agent rides every Wikimedia call');
+  const g = adapters.buildRequest('wikimedia', 'get_page_summary', { title: 'Qiskit' });
+  assert.equal(g.request.url, 'https://en.wikipedia.org/api/rest_v1/page/summary/Qiskit');
+  assert.equal(adapters.buildRequest('wikimedia', 'search_pages', { query: 'q', limit: '99' }).reason, 'param_invalid');
+  assert.equal(adapters.buildRequest('wikimedia', 'search_pages', {}).reason, 'param_missing');
+  assert.equal(adapters.validateOnly('wikimedia', 'get_page_summary', { title: 'X' }), null, 'validateOnly needs no credential');
+});
+
+test('openlibrary search and book lookup validate identifiers', () => {
+  const s = adapters.buildRequest('openlibrary', 'search_books', { query: 'quantum algorithms', limit: '5' });
+  assert.equal(s.ok, true);
+  assert.equal(s.request.url, 'https://openlibrary.org/search.json?q=' + encodeURIComponent('quantum algorithms') + '&limit=5');
+  const isbn = adapters.buildRequest('openlibrary', 'get_book', { identifier: '9780262033848' });
+  assert.equal(isbn.request.url, 'https://openlibrary.org/isbn/9780262033848.json');
+  const isbn10 = adapters.buildRequest('openlibrary', 'get_book', { identifier: '0262033844' });
+  assert.equal(isbn10.request.url, 'https://openlibrary.org/isbn/0262033844.json');
+  const edition = adapters.buildRequest('openlibrary', 'get_book', { identifier: 'OL1234567M' });
+  assert.equal(edition.request.url, 'https://openlibrary.org/books/OL1234567M.json');
+  const work = adapters.buildRequest('openlibrary', 'get_book', { identifier: 'OL1234567W' });
+  assert.equal(work.request.url, 'https://openlibrary.org/works/OL1234567W.json');
+  assert.equal(adapters.buildRequest('openlibrary', 'get_book', { identifier: '../etc/passwd' }).reason, 'param_invalid');
+  assert.equal(adapters.buildRequest('openlibrary', 'get_book', { identifier: 'not-an-id' }).reason, 'param_invalid');
+  assert.equal(adapters.buildRequest('openlibrary', 'search_books', { query: 'q', limit: '500' }).reason, 'param_invalid');
+  for (const a of adapters.listActions('openlibrary')) {
+    assert.equal(a.kind, 'read_only');
+    assert.equal(a.scope, 'books.read');
+  }
+  for (const a of adapters.listActions('wikimedia')) {
+    assert.equal(a.kind, 'read_only');
+    assert.equal(a.scope, 'search.read');
   }
 });

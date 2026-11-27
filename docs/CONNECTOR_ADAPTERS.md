@@ -338,3 +338,32 @@ descriptive User-Agent on Nominatim, declarations, the registry-parity
 set extended, keyless runs behind the connect gate, and the
 definition-only counts updated (147 curated+expanded, 143 expanded-only).
 Suite 1494/1494.
+
+## Batch 9 (27 Nov 2026): Wikipedia + Open Library keyless reads
+
+Two more keyless public adapters on the batch 7 `public` authShape. Both
+catalog rows already existed as definition-only entries and were upgraded
+in place; no new rows, so the tier counts are unchanged.
+
+- **Wikimedia** (`search.read`): `search_pages` (MediaWiki
+  action=query&list=search against the pinned host en.wikipedia.org,
+  srlimit capped at 50, default 10) and `get_page_summary` (Wikipedia
+  REST v1 page summary, title URL-encoded, same pinned host). Every
+  call sends the descriptive User-Agent Wikimedia's policy requires.
+- **Open Library** (`books.read`): `search_books` (search.json, limit
+  capped at 100, default 20) and `get_book`, which accepts an ISBN-10,
+  ISBN-13, or an Open Library id (edition `OL...M` -> /books/,
+  work `OL...W` -> /works/) and refuses everything else, so the path
+  can never be shaped by user input. Both actions pin openlibrary.org.
+
+No user-controlled host anywhere: both adapters build their URLs from
+their own constants plus encoded, validated parameters. No write
+actions, no credentials requested or stored, nothing auto-connects.
+Rate limits (Wikimedia polite use, Open Library polite use) live on the
+catalog rows.
+
+Tests: pinned-host build shapes for all four actions, identifier
+validation (ISBN-10/13, OL...M, OL...W, traversal and junk refused),
+limit caps, missing params, no Authorization header, descriptive
+User-Agent, declarations, the registry-parity set extended, and keyless
+runs behind the connect gate. Suite 1497/1497.
