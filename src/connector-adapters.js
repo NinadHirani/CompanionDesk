@@ -157,6 +157,32 @@
     ],
   };
 
+  ADAPTERS.mistral = {
+    id: 'mistral', name: 'Mistral AI', authShape: 'token', setupRequired: false,
+    setupNote: 'paste a Mistral API key from console.mistral.ai; it is stored only in the app vault, never requested or shown in chat',
+    buildHeaders: function (token) { return { Authorization: 'Bearer ' + token, 'User-Agent': 'CompanionDesk' }; },
+    actions: [
+      { id: 'list_models', label: 'List the Mistral models your key can use', scope: 'models.read', kind: 'read_only',
+        params: [],
+        build: function (p, token) {
+          return { method: 'GET', url: 'https://api.mistral.ai/v1/models', headers: this.buildHeaders(token), body: null };
+        } },
+    ],
+  };
+
+  ADAPTERS.openrouter = {
+    id: 'openrouter', name: 'OpenRouter', authShape: 'token', setupRequired: false,
+    setupNote: 'paste an OpenRouter API key from openrouter.ai/keys; it is stored only in the app vault, never requested or shown in chat',
+    buildHeaders: function (token) { return { Authorization: 'Bearer ' + token, 'User-Agent': 'CompanionDesk' }; },
+    actions: [
+      { id: 'list_models', label: 'List the models OpenRouter offers', scope: 'models.read', kind: 'read_only',
+        params: [],
+        build: function (p, token) {
+          return { method: 'GET', url: 'https://openrouter.ai/api/v1/models', headers: this.buildHeaders(token), body: null };
+        } },
+    ],
+  };
+
   ADAPTERS.cohere = {
     id: 'cohere', name: 'Cohere', authShape: 'token', setupRequired: false,
     setupNote: 'paste a Cohere API key from dashboard.cohere.com/api-keys; it is stored only in the app vault, never requested or shown in chat',

@@ -12,7 +12,7 @@ const assert = require('node:assert');
 const adapters = require('../src/connector-adapters.js');
 const { createConnectorCatalog } = require('../src/connectors.js');
 
-const IMPLEMENTED = ['anthropic', 'brave-search', 'arxiv', 'airtable', 'coda', 'circleci', 'cloudflare', 'crossref', 'digitalocean', 'discord', 'docker-hub', 'github', 'gitlab', 'gmail', 'heroku', 'google-calendar', 'google-docs', 'google-sheets', 'google-drive', 'google-gemini', 'huggingface', 'internet-archive', 'jira', 'mailgun', 'postmark', 'sendgrid', 'linear', 'microsoft-calendar', 'microsoft-onedrive', 'microsoft-excel', 'microsoft-outlook', 'microsoft-teams', 'microsoft-word', 'musicbrainz', 'notion', 'npm', 'open-meteo', 'openai', 'openalex', 'openlibrary', 'openstreetmap', 'pypi', 'render', 'slack', 'supabase', 'sentry', 'pagerduty', 'tmdb', 'unsplash', 'new-relic', 'pinecone', 'pexels', 'kaggle', 'stripe', 'groq', 'cohere', 'xai', 'tavily', 'telegram', 'trello', 'todoist', 'wikimedia'];
+const IMPLEMENTED = ['anthropic', 'brave-search', 'arxiv', 'airtable', 'coda', 'circleci', 'cloudflare', 'crossref', 'digitalocean', 'discord', 'docker-hub', 'github', 'gitlab', 'gmail', 'heroku', 'google-calendar', 'google-docs', 'google-sheets', 'google-drive', 'google-gemini', 'huggingface', 'internet-archive', 'jira', 'mailgun', 'postmark', 'sendgrid', 'linear', 'microsoft-calendar', 'microsoft-onedrive', 'microsoft-excel', 'microsoft-outlook', 'microsoft-teams', 'microsoft-word', 'musicbrainz', 'notion', 'npm', 'open-meteo', 'openai', 'openalex', 'openlibrary', 'openstreetmap', 'pypi', 'render', 'slack', 'supabase', 'sentry', 'pagerduty', 'tmdb', 'unsplash', 'new-relic', 'pinecone', 'pexels', 'kaggle', 'stripe', 'groq', 'cohere', 'xai', 'mistral', 'openrouter', 'tavily', 'telegram', 'trello', 'todoist', 'wikimedia'];
 const OAUTH = ['gmail', 'google-calendar', 'google-drive', 'microsoft-calendar', 'microsoft-onedrive', 'microsoft-outlook'];
 
 test('the adapter registry covers exactly the implemented catalog entries', () => {
@@ -1437,6 +1437,27 @@ test('cohere and xai build bearer model reads with no completions and no writes'
   assert.equal(xm.request.url, 'https://api.x.ai/v1/models');
   assert.equal(xm.request.headers.Authorization, 'Bearer xa-tok');
   for (const id of ['cohere', 'xai']) {
+    assert.equal(adapters.listActions(id).length, 1, id + ' implements only the model read');
+    for (const a of adapters.listActions(id)) {
+      assert.equal(a.kind, 'read_only', id + ' is read-only');
+      assert.equal(a.scope, 'models.read');
+      assert.notEqual(a.scope, 'completions.send', id + ' completions never implemented');
+    }
+  }
+});
+
+// ---- batch 37 (27 Nov 2026): mistral + openrouter read-only adapters ----
+
+test('mistral and openrouter build bearer model reads with no completions and no writes', () => {
+  const mm = adapters.buildRequest('mistral', 'list_models', {}, 'mi-tok');
+  assert.equal(mm.ok, true);
+  assert.equal(mm.request.url, 'https://api.mistral.ai/v1/models');
+  assert.equal(mm.request.headers.Authorization, 'Bearer mi-tok');
+  const om = adapters.buildRequest('openrouter', 'list_models', {}, 'or-tok');
+  assert.equal(om.ok, true);
+  assert.equal(om.request.url, 'https://openrouter.ai/api/v1/models');
+  assert.equal(om.request.headers.Authorization, 'Bearer or-tok');
+  for (const id of ['mistral', 'openrouter']) {
     assert.equal(adapters.listActions(id).length, 1, id + ' implements only the model read');
     for (const a of adapters.listActions(id)) {
       assert.equal(a.kind, 'read_only', id + ' is read-only');

@@ -686,3 +686,14 @@ Actions:
 The credentials are the user's own keys pasted into the app vault.
 
 Tests: adapter build/validation (one-action pins, header shapes, read-only sweeps, completions never present), engine gates (each refuses before connect and rides its credential on a read). Catalog count pins: 109 still-definition-only expanded rows, 113 definition-only total.
+## Batch 37 (27 Nov 2026): Mistral AI, OpenRouter
+
+Upgraded two ai_cloud connectors to token-bound READ-ONLY adapters (each `auth: api_key`, `authShape: token`).
+
+Actions:
+- Mistral AI (pinned `api.mistral.ai/v1`, Bearer): `list_models` only. The `completions.send` scope is never requested and nothing is sent to a model.
+- OpenRouter (pinned `openrouter.ai/api/v1`, Bearer): `list_models` only. Same completions rule.
+
+The credentials are the user's own keys pasted into the app vault.
+
+Tests: adapter build/validation (one-action pins, header shapes, read-only sweeps, completions never present), engine gates (each refuses before connect and rides its credential on a read). Catalog count pins: 107 still-definition-only expanded rows, 111 definition-only total.
