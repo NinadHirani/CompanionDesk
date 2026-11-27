@@ -119,6 +119,13 @@
         build: function (p, token) {
           return { method: 'GET', url: 'https://api.github.com/repos/' + encodeURIComponent(p.owner) + '/' + encodeURIComponent(p.repo) + '/issues?state=open&per_page=20', headers: this.buildHeaders(token), body: null };
         } },
+      { id: 'get_issue', label: 'Read one issue by number', scope: 'issues.read', kind: 'read_only',
+        params: [{ name: 'owner', required: true, maxLength: 100 }, { name: 'repo', required: true, maxLength: 100 }, { name: 'number', required: true, maxLength: 12 }],
+        build: function (p, token) {
+          const n = parseInt(p.number, 10);
+          if (!isFinite(n) || n < 1) return { error: 'param_invalid' };
+          return { method: 'GET', url: 'https://api.github.com/repos/' + encodeURIComponent(p.owner) + '/' + encodeURIComponent(p.repo) + '/issues/' + n, headers: this.buildHeaders(token), body: null };
+        } },
     ],
   };
 
@@ -156,6 +163,11 @@
         params: [],
         build: function (p, token) {
           return { method: 'GET', url: 'https://slack.com/api/conversations.list?limit=50&types=public_channel', headers: this.buildHeaders(token), body: null };
+        } },
+      { id: 'get_channel', label: 'Read one channel by id', scope: 'channels.read', kind: 'read_only',
+        params: [{ name: 'channel', required: true, maxLength: 80 }],
+        build: function (p, token) {
+          return { method: 'GET', url: 'https://slack.com/api/conversations.info?channel=' + encodeURIComponent(p.channel), headers: this.buildHeaders(token), body: null };
         } },
       { id: 'post_message', label: 'Post a message to a channel', scope: 'message.send', kind: 'send',
         params: [{ name: 'channel', required: true, maxLength: 80 }, { name: 'text', required: true, maxLength: 4000 }],
@@ -321,6 +333,11 @@
           if (p.query) url += '&q=' + encodeURIComponent(p.query);
           return { method: 'GET', url: url, headers: this.buildHeaders(blob), body: null };
         } },
+      { id: 'get_file_meta', label: 'Read one file by id', scope: 'files.read', kind: 'read_only',
+        params: [{ name: 'file_id', required: true, maxLength: 120 }],
+        build: function (p, blob) {
+          return { method: 'GET', url: 'https://www.googleapis.com/drive/v3/files/' + encodeURIComponent(p.file_id) + '?fields=id,name,mimeType,size,modifiedTime', headers: this.buildHeaders(blob), body: null };
+        } },
     ]),
   };
 
@@ -336,6 +353,11 @@
           const n = optionalInt(p, 'max_results', 10);
           if (n === null) return { error: 'param_invalid' };
           return { method: 'GET', url: 'https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=' + n, headers: this.buildHeaders(blob), body: null };
+        } },
+      { id: 'search_messages', label: 'Search messages with a Gmail query', scope: 'mail.read', kind: 'read_only',
+        params: [{ name: 'query', required: true, maxLength: 300 }],
+        build: function (p, blob) {
+          return { method: 'GET', url: 'https://gmail.googleapis.com/gmail/v1/users/me/messages?q=' + encodeURIComponent(p.query), headers: this.buildHeaders(blob), body: null };
         } },
       { id: 'send_message', label: 'Send an email from the connected account', scope: 'mail.send', kind: 'send',
         params: [{ name: 'to', required: true, maxLength: 320 }, { name: 'subject', required: true, maxLength: 200 }, { name: 'text', required: true, maxLength: 8000 }],
@@ -364,6 +386,11 @@
           const timeMax = new Date(Date.now() + days * 86400000).toISOString();
           return { method: 'GET', url: 'https://www.googleapis.com/calendar/v3/calendars/primary/events?maxResults=20&singleEvents=true&orderBy=startTime&timeMin=' + encodeURIComponent(timeMin) + '&timeMax=' + encodeURIComponent(timeMax), headers: this.buildHeaders(blob), body: null };
         } },
+      { id: 'get_event', label: 'Read one event by id', scope: 'events.read', kind: 'read_only',
+        params: [{ name: 'event_id', required: true, maxLength: 120 }],
+        build: function (p, blob) {
+          return { method: 'GET', url: 'https://www.googleapis.com/calendar/v3/calendars/primary/events/' + encodeURIComponent(p.event_id), headers: this.buildHeaders(blob), body: null };
+        } },
       { id: 'create_event', label: 'Create an event on the primary calendar', scope: 'events.write', kind: 'write',
         params: [{ name: 'summary', required: true, maxLength: 200 }, { name: 'start', required: true, maxLength: 40 }, { name: 'end', required: true, maxLength: 40 }],
         build: function (p, blob) {
@@ -384,6 +411,11 @@
         build: function (p, blob) {
           return { method: 'GET', url: 'https://graph.microsoft.com/v1.0/me/drive/root/children?$top=20', headers: this.buildHeaders(blob), body: null };
         } },
+      { id: 'get_file_meta', label: 'Read one item by id', scope: 'files.read', kind: 'read_only',
+        params: [{ name: 'item_id', required: true, maxLength: 180 }],
+        build: function (p, blob) {
+          return { method: 'GET', url: 'https://graph.microsoft.com/v1.0/me/drive/items/' + encodeURIComponent(p.item_id) + '?select=id,name,size,lastModifiedDateTime', headers: this.buildHeaders(blob), body: null };
+        } },
     ]),
   };
 
@@ -399,6 +431,11 @@
           const n = optionalInt(p, 'max_results', 10);
           if (n === null) return { error: 'param_invalid' };
           return { method: 'GET', url: 'https://graph.microsoft.com/v1.0/me/messages?$top=' + n + '&$select=subject,from,receivedDateTime', headers: this.buildHeaders(blob), body: null };
+        } },
+      { id: 'search_messages', label: 'Search messages with a Graph $search query', scope: 'mail.read', kind: 'read_only',
+        params: [{ name: 'query', required: true, maxLength: 300 }],
+        build: function (p, blob) {
+          return { method: 'GET', url: 'https://graph.microsoft.com/v1.0/me/messages?$search=' + encodeURIComponent('"' + p.query + '"') + '&$top=20&$select=subject,from,receivedDateTime', headers: this.buildHeaders(blob), body: null };
         } },
       { id: 'send_message', label: 'Send an email from the connected account', scope: 'mail.send', kind: 'send',
         params: [{ name: 'to', required: true, maxLength: 320 }, { name: 'subject', required: true, maxLength: 200 }, { name: 'text', required: true, maxLength: 8000 }],
@@ -426,6 +463,11 @@
           const end = new Date(Date.now() + days * 86400000).toISOString();
           return { method: 'GET', url: 'https://graph.microsoft.com/v1.0/me/calendarview?startDateTime=' + encodeURIComponent(start) + '&endDateTime=' + encodeURIComponent(end) + '&$top=20', headers: this.buildHeaders(blob), body: null };
         } },
+      { id: 'get_event', label: 'Read one event by id', scope: 'events.read', kind: 'read_only',
+        params: [{ name: 'event_id', required: true, maxLength: 120 }],
+        build: function (p, blob) {
+          return { method: 'GET', url: 'https://graph.microsoft.com/v1.0/me/events/' + encodeURIComponent(p.event_id), headers: this.buildHeaders(blob), body: null };
+        } },
       { id: 'create_event', label: 'Create an event on the default calendar', scope: 'events.write', kind: 'write',
         params: [{ name: 'subject', required: true, maxLength: 200 }, { name: 'start', required: true, maxLength: 40 }, { name: 'end', required: true, maxLength: 40 }],
         build: function (p, blob) {
@@ -443,7 +485,10 @@
 
   function listActions(id) {
     const a = get(id);
-    return a ? a.actions.map(function (x) { return { id: x.id, label: x.label, scope: x.scope, kind: x.kind }; }) : null;
+    return a ? a.actions.map(function (x) {
+      return { id: x.id, label: x.label, scope: x.scope, kind: x.kind,
+        params: (x.params || []).map(function (q) { return { name: q.name, required: !!q.required }; }) };
+    }) : null;
   }
 
   function buildRequest(id, actionId, params, credential) {

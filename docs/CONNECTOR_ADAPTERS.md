@@ -84,3 +84,61 @@ surface differs from the catalog gate and needs its own design before any
 send. The panel has no action-invocation UI yet (the engine is reachable
 through IPC); that UI and an AI action-calling surface with the same gates
 are the next batches.
+
+## Batch 2 (27 Nov 2026): action surfaces, AI calling, OAuth refresh
+
+**Panel action surfaces.** Every implemented adapter's actions render on
+its connected row as explicit Run buttons (kind + scope travel in the
+button label). Read-only actions with no required parameters run with one
+click; anything with parameters or a send/write kind opens a small form
+with one labelled input per required parameter, and sends/writes need a
+second explicit Confirm click. That confirm click is the per-action
+approval gesture: main mints the single-use approval for exactly that
+connector + scope right before the engine consumes it. Refusals surface
+verbatim; ok results show a bounded preview (300 chars) of the scrubbed
+data. Discovery-state rows render no action buttons.
+
+**AI action calling.** The `connector_status` agent tool gained a `run`
+action: read-only connector actions run through the SAME engine and gate
+chain the panel uses (connected, scope granted, single-use approval for
+sends/writes). The tool validates ids and bounds params (max 20 keys,
+2000 chars JSON) before the engine is called. It never mints approvals:
+a send/write comes back `approval_required` with a pointer to the panel,
+where the user's confirm click is the approval. The list action now
+carries each implemented adapter's runnable actions so the AI names only
+what exists.
+
+**OAuth token refresh (Google/Microsoft).** New pure module
+`src/connector-tokens.js`: parse the stored blob, decide refresh need
+(expires_at inside a 60s skew, never guessed when expiry is unknown),
+refreshability (refresh token + the user's own client credentials), merge
+a provider token response (refresh-token rotation honoured: a new refresh
+token replaces the old; otherwise the old is kept; expires_at recomputed
+from expires_in or kept, never guessed), and classify failures
+(400/401 = reauth_required, anything else = transient refresh_failed).
+
+The engine refreshes an expired oauth blob BEFORE the action and writes
+the rotated blob straight back to the OS vault through an injected
+credentialWriter. If the rotation cannot be persisted, the action fails
+with `refresh_persist_failed` rather than gambling on a possibly-dead
+refresh token. A provider 401 on the action itself earns exactly ONE
+refresh-and-retry; a second 401 is reported as-is. A 400/401 from the
+token endpoint classifies as `reauth_required`: the injected
+`onReauthRequired` hook disconnects the connector and drops its stored
+credential (the same lifecycle as the panel's Disconnect), so nothing
+stale masquerades as a live connection; the user reconnects explicitly.
+Refresh audit entries carry status and duration only, never URLs, tokens
+or bodies. The connectors payload carries a token-state LABEL (ok /
+expiring / expired / unreadable) for oauth rows; the credential itself
+never leaves the main process.
+
+**New read actions (scope already declared on each entry).** GitHub
+`get_issue`, Slack `get_channel`, Google Drive `get_file_meta`, Gmail
+`search_messages`, Google Calendar `get_event`, Microsoft OneDrive
+`get_file_meta`, Microsoft Outlook `search_messages`, Microsoft Calendar
+`get_event`. `listActions` now also passes each action's required
+parameter names through so the panel and the AI tool can name what an
+action needs.
+
+Still the user's: real API keys, own OAuth clients, actual connections,
+per-connector activation, and device validation.

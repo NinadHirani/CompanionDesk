@@ -134,3 +134,75 @@ test('definition-only and unknown entries get no adapter at all', () => {
   assert.equal(adapters.buildRequest('no-such-connector', 'x', {}, 'tok').reason, 'no_adapter');
   assert.equal(adapters.buildRequest('rss', 'feed.read', {}, 'tok').reason, 'no_adapter', 'legacy tier stays honest: no adapter, no fake execution');
 });
+
+// ---- batch 2 (27 Nov 2026): provider-specific read actions --------------
+
+test('github get_issue builds the REST url for one issue', () => {
+  const r = adapters.buildRequest('github', 'get_issue', { owner: 'octo', repo: 'repo', number: '42' }, 'tok');
+  assert.equal(r.ok, true);
+  assert.equal(r.request.url, 'https://api.github.com/repos/octo/repo/issues/42');
+  assert.equal(r.request.method, 'GET');
+  const bad = adapters.buildRequest('github', 'get_issue', { owner: 'o', repo: 'r', number: 'x!y' }, 'tok');
+  assert.equal(bad.ok, false, 'a non-numeric issue number never reaches a URL');
+});
+
+test('slack get_channel targets conversations.info only', () => {
+  const r = adapters.buildRequest('slack', 'get_channel', { channel: 'C123' }, 'tok');
+  assert.equal(r.ok, true);
+  assert.equal(r.request.url, 'https://slack.com/api/conversations.info?channel=C123');
+});
+
+test('google-drive get_file_meta reads metadata by id', () => {
+  const blob = JSON.stringify({ client_id: 'c', access_token: 'at', refresh_token: 'rt', expires_at: 9e12 });
+  const r = adapters.buildRequest('google-drive', 'get_file_meta', { file_id: 'abc123' }, blob);
+  assert.equal(r.ok, true);
+  assert.equal(r.request.url, 'https://www.googleapis.com/drive/v3/files/abc123?fields=id,name,mimeType,size,modifiedTime');
+});
+
+test('gmail and outlook search actions build search queries', () => {
+  const blob = JSON.stringify({ client_id: 'c', access_token: 'at', refresh_token: 'rt', expires_at: 9e12 });
+  const g = adapters.buildRequest('gmail', 'search_messages', { query: 'from:boss' }, blob);
+  assert.equal(g.ok, true);
+  assert.equal(g.request.url, 'https://gmail.googleapis.com/gmail/v1/users/me/messages?q=from%3Aboss');
+  const o = adapters.buildRequest('microsoft-outlook', 'search_messages', { query: 'quarterly' }, blob);
+  assert.equal(o.ok, true);
+  assert.equal(o.request.url.indexOf('https://graph.microsoft.com/v1.0/me/messages?$search='), 0);
+});
+
+test('calendar get_event actions read one event by id', () => {
+  const blob = JSON.stringify({ client_id: 'c', access_token: 'at', refresh_token: 'rt', expires_at: 9e12 });
+  const g = adapters.buildRequest('google-calendar', 'get_event', { event_id: 'ev1' }, blob);
+  assert.equal(g.ok, true);
+  assert.equal(g.request.url, 'https://www.googleapis.com/calendar/v3/calendars/primary/events/ev1');
+  const m = adapters.buildRequest('microsoft-calendar', 'get_event', { event_id: 'ev2' }, blob);
+  assert.equal(m.ok, true);
+  assert.equal(m.request.url, 'https://graph.microsoft.com/v1.0/me/events/ev2');
+});
+
+test('onedrive get_file_meta reads one drive item', () => {
+  const blob = JSON.stringify({ client_id: 'c', access_token: 'at', refresh_token: 'rt', expires_at: 9e12 });
+  const r = adapters.buildRequest('microsoft-onedrive', 'get_file_meta', { item_id: 'itm1' }, blob);
+  assert.equal(r.ok, true);
+  assert.equal(r.request.url.indexOf('https://graph.microsoft.com/v1.0/me/drive/items/itm1?select='), 0);
+});
+
+test('listActions passes required parameter names through', () => {
+  const acts = adapters.listActions('github');
+  const getIssue = acts.find((a) => a.id === 'get_issue');
+  assert.deepEqual(getIssue.params, [{ name: 'owner', required: true }, { name: 'repo', required: true }, { name: 'number', required: true }]);
+  const list = acts.find((a) => a.id === 'repo_read');
+  assert.deepEqual(list.params, [{ name: 'owner', required: true }, { name: 'repo', required: true }]);
+});
+
+test('every action scope stays declared on its catalog entry', () => {
+  const catalog = require('../src/connectors.js').createConnectorCatalog({ clock: () => 0 });
+  for (const id of adapters.ADAPTER_IDS) {
+    const acts = adapters.listActions(id) || [];
+    for (const a of acts) {
+      const desc = catalog.describe(id);
+      assert.ok(desc, id + ' must exist in the catalog');
+      const names = (desc.scopes || []).map((s) => s.name);
+      assert.ok(names.indexOf(a.scope) !== -1, id + '.' + a.id + ' scope ' + a.scope + ' must be declared');
+    }
+  }
+});

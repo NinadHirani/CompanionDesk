@@ -233,3 +233,23 @@ normalize. Still open (not implemented, honestly refused): panel
 action-invocation UI, AI action-calling surface (same gates), OAuth
 refresh loop, Zapier/Make (need their own OAuth apps), custom webhook
 sends (consent surface needs its own design).
+
+Batch 2 (27 Nov 2026, Ninad's continuing go-ahead): connector action
+surfaces shipped. The panel renders per-action Run buttons for the
+implemented adapters (one click for read-only actions without
+parameters; a small form for parameterised actions; a second explicit
+Confirm click for send/write kinds, which main turns into the
+single-use per-action approval). The AI's connector tool gained a run
+action over the same engine and gates; it never mints approvals and
+bounces sends/writes to the panel. OAuth refresh is live for the Google
+and Microsoft adapters: expired tokens refresh before the action with
+the user's own client credentials, rotation persists to the OS vault, a
+dead grant disconnects the connector and drops its credential
+(reauth_required), transient failures keep the credential, and a
+provider 401 earns exactly one refresh-and-retry. Eight new read
+actions shipped (GitHub get_issue, Slack get_channel, Google Drive
+get_file_meta, Gmail search_messages, Google Calendar get_event,
+Microsoft OneDrive get_file_meta, Microsoft Outlook search_messages,
+Microsoft Calendar get_event). Suite 1457/1457, selftest pass. Still
+owner-gated: real credentials, own OAuth clients, per-service
+activation, device validation.

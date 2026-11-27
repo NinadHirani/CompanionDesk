@@ -97,6 +97,7 @@ const { createConnectorRequestCenter } = require('./connector-requests');
 const https = require('https');
 const connectorAdapters = require('./connector-adapters');
 const connectorActions = require('./connector-actions');
+const connectorTokens = require('./connector-tokens');
 
 // The credential vault keys its files by the 'companiondesk-<id>' shape
 // (see src/connector-credential-store.js). Catalog ids are plain
@@ -146,6 +147,36 @@ function getConnectorActionEngine() {
     adapters: connectorAdapters,
     transport: connectorHttpsTransport,
     credentialReader: (id) => (connectorCredentialStore ? connectorCredentialStore.readCredential(connectorStoreId(id)) : null),
+    // OAuth refresh (batch 2): the rotated token blob is written straight
+    // back to the OS vault; the old blob is overwritten in place so no
+    // stale token survives. Only ok/failure leaves this closure.
+    credentialWriter: (id, blob) => {
+      if (!connectorCredentialStore) return false;
+      try {
+        const r = connectorCredentialStore.setCredential(connectorStoreId(id), blob);
+        return !!(r && r.ok);
+      } catch (e) { return false; }
+    },
+    // Failure-safe re-auth (batch 2): a 400/401 from the token endpoint
+    // means the grant itself is dead. The connection is disconnected and
+    // its stored credential dropped, the same lifecycle the panel's own
+    // buttons run, so nothing stale masquerades as a live connection.
+    // The user reconnects explicitly when they want to re-authenticate.
+    onReauthRequired: (id) => {
+      try {
+        const r = workspaceConnectorCatalog.disconnect(id, { userInitiated: true });
+        if (r && r.ok) {
+          saveConnectorState();
+          try {
+            if (connectorCredentialStore) {
+              const cr = connectorCredentialStore.removeCredential(connectorStoreId(id));
+              if (cr && cr.ok === false) return;
+            }
+          } catch (e2) { /* best effort; the ref is dropped below regardless */ }
+          CONNECTOR_CREDENTIAL_REFS.delete(id);
+        }
+      } catch (e) { /* never let the hook break the refusal */ }
+    },
   });
   return connectorActionEngine;
 }
@@ -446,7 +477,7 @@ async function init() {
       // approval is needed because nothing here changes connection state,
       // and requestRun still has no caller so nothing executes in this
       // build.
-      agentConnectors = createConnectorsTool({ clock: () => Date.now(), catalog: workspaceConnectorCatalog, requests: workspaceConnectorRequests });
+      agentConnectors = createConnectorsTool({ clock: () => Date.now(), catalog: workspaceConnectorCatalog, requests: workspaceConnectorRequests, engine: getConnectorActionEngine(), adapters: connectorAdapters });
       agentRegistry.define(CONNECTORS_TOOL_DEFINITION);
       agentRegistry = stack.registry;
       agentApprovals = stack.approvals;
@@ -1222,9 +1253,32 @@ app.whenReady().then(async () => {
     CONNECTOR_CREDENTIAL_REFS.delete(id);
     return true;
   }
+  // Batch 2: the payload carries each implemented adapter's actions (id,
+  // label, scope, kind, params) so the panel and the AI tool can name what
+  // they may run, and a token-state LABEL for oauth connectors (never the
+  // credential itself, which never leaves this process).
+  function connectorTokenState(id) {
+    try {
+      const desc = workspaceConnectorCatalog.describe(id);
+      const adapter = connectorAdapters.get(id);
+      if (!desc || !adapter || adapter.authShape !== 'oauth_json') return null;
+      if (workspaceConnectorCatalog.state(id) !== 'connected') return null;
+      if (!connectorCredentialStore || !connectorCredentialStore.hasCredential(connectorStoreId(id))) return null;
+      const parsed = connectorTokens.parseBlob(connectorCredentialStore.readCredential(connectorStoreId(id)));
+      if (!parsed.ok) return 'unreadable';
+      const blob = parsed.blob;
+      if (typeof blob.expires_at !== 'number' || !isFinite(blob.expires_at)) return null;
+      const now = Date.now();
+      if (now >= blob.expires_at) return 'expired';
+      if (now >= blob.expires_at - 300000) return 'expiring';
+      return 'ok';
+    } catch (e) { return null; }
+  }
   ipcMain.handle('workspace:connectors', async () => workspaceConnectorCatalog.list().map((e) => Object.assign({}, e, {
     state: workspaceConnectorCatalog.state(e.id) || 'discovered',
     hasCredential: connectorCredentialStore ? connectorCredentialStore.hasCredential(connectorStoreId(e.id)) : false,
+    actions: e.integrationImplemented ? (connectorAdapters.listActions(e.id) || []) : [],
+    tokenState: connectorTokenState(e.id),
   })));
   ipcMain.handle('workspace:connectorConnect', async (_e, id, scopes) => {
     if (typeof id !== 'string' || id.length === 0) return { ok: false, reason: 'bad_request' };
@@ -1273,8 +1327,23 @@ app.whenReady().then(async () => {
   ipcMain.handle('workspace:connectorAction', async (_e, id, actionId, params, runOpts) => {
     if (typeof id !== 'string' || id.length === 0 || typeof actionId !== 'string' || actionId.length === 0) return { ok: false, reason: 'bad_request' };
     if (!runOpts || runOpts.userInitiated !== true) return { ok: false, reason: 'requires_user_action' };
+    const useOpts = { approvalId: runOpts.approvalId };
+    // Per-action approval for write/send actions: the renderer's second
+    // explicit click (runOpts.confirmWrite) is the user's gesture, and
+    // main mints the single-use approval for exactly this connector +
+    // scope right before the engine consumes it. Read-only scopes need
+    // no approval, so approve() refusing with approval_not_needed is not
+    // an error; any other refusal surfaces verbatim.
+    if (!useOpts.approvalId && runOpts.confirmWrite === true) {
+      const acts = connectorAdapters.listActions(id) || [];
+      const act = acts.find((x) => x.id === actionId);
+      if (!act) return { ok: false, reason: 'unknown_action' };
+      const ar = workspaceConnectorCatalog.approve(id, act.scope, { userInitiated: true });
+      if (ar && ar.ok) useOpts.approvalId = ar.approvalId;
+      else if (ar && ar.reason !== 'approval_not_needed') return { ok: false, reason: ar.reason };
+    }
     try {
-      const r = await getConnectorActionEngine().run(id, actionId, (params && typeof params === 'object' && !Array.isArray(params)) ? params : {}, { approvalId: runOpts.approvalId });
+      const r = await getConnectorActionEngine().run(id, actionId, (params && typeof params === 'object' && !Array.isArray(params)) ? params : {}, useOpts);
       console.log('[connectors] action', id, actionId, 'ok=' + r.ok + (r.status != null ? ' status=' + r.status : ' reason=' + r.reason));
       return r;
     } catch (e) { return { ok: false, reason: 'engine_error' }; }

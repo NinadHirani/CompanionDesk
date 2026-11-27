@@ -222,6 +222,12 @@
             rowEl.appendChild(line('integration not implemented: ' + e.readinessNote));
           }
         }
+        // OAuth token state (batch 2): a LABEL only. The credential never
+        // leaves the main process; expiry is refreshed automatically at
+        // the next action, and the row just says where things stand.
+        if (e.tokenState === 'expired') rowEl.appendChild(line('token expired: the next action refreshes it automatically'));
+        else if (e.tokenState === 'expiring') rowEl.appendChild(line('token expiring soon: the next action refreshes it automatically'));
+        else if (e.tokenState === 'unreadable') rowEl.appendChild(line('stored credential unreadable: disconnect and reconnect to fix this'));
         const state = e.state || 'discovered';
         const scopeNames = (Array.isArray(e.scopes) ? e.scopes : []).map((s) => s.name);
         if (state === 'discovered') {
@@ -269,6 +275,67 @@
             say(r && r.ok ? 'workspace: connector revoked' : 'workspace: revoke refused: ' + ((r && r.reason) || 'unknown'));
             await renderConnectors(a);
           }));
+          // Batch 2 action surfaces (27 Nov 2026): every action the
+          // implemented adapter exposes, run ONLY from an explicit click.
+          // Read-only actions with no required parameters run with one
+          // click; anything with parameters or a send/write kind opens a
+          // small form, and sends/writes need a second explicit Confirm
+          // click (main mints the single-use per-action approval from it).
+          // Every refusal surfaces verbatim; results show a bounded
+          // preview, never a raw dump, and the credential never appears.
+          if (Array.isArray(e.actions) && e.actions.length) {
+            const resultLine = line('');
+            resultLine.hidden = true;
+            const showResult = (text) => { resultLine.textContent = text; resultLine.hidden = false; };
+            const runAction = async (act, params) => {
+              if (typeof a.workspace_connectorAction !== 'function') { showResult('workspace: action runner unavailable in this build'); return; }
+              const r = await a.workspace_connectorAction(e.id, act.id, params, { userInitiated: true, confirmWrite: act.kind !== 'read_only' });
+              if (r && r.ok) {
+                let preview = '';
+                try { preview = JSON.stringify(r.data); } catch (err) { preview = ''; }
+                if (preview.length > 300) preview = preview.slice(0, 300) + '...';
+                showResult('action ok (status ' + r.status + '): ' + preview);
+              } else if (r && r.reason === 'reauth_required') {
+                showResult('action refused: reauth_required - the saved sign-in could not be refreshed, so the connector was disconnected; connect again to re-authenticate');
+              } else {
+                showResult('action refused: ' + ((r && r.reason) || 'unknown'));
+              }
+            };
+            for (const act of e.actions) {
+              if (!act || typeof act.id !== 'string') continue;
+              const required = Array.isArray(act.params) ? act.params.filter((p) => p && p.required) : [];
+              const needsForm = act.kind !== 'read_only' || required.length > 0;
+              if (!needsForm) {
+                rowEl.appendChild(button('Run: ' + act.label, act.kind + ' (' + act.scope + ') on ' + (e.name || e.id), async () => {
+                  await runAction(act, {});
+                }));
+                continue;
+              }
+              const formEl = el('div');
+              formEl.hidden = true;
+              const inputs = [];
+              for (const p of required) {
+                const inp = el('input');
+                inp.setAttribute('placeholder', p.name);
+                inp.setAttribute('aria-label', act.id + ' ' + p.name);
+                formEl.appendChild(inp);
+                inputs.push(inp);
+              }
+              const goLabel = act.kind === 'read_only' ? 'Run' : 'Confirm run';
+              formEl.appendChild(button(goLabel, goLabel + ' ' + act.label + ' (' + act.scope + ')', async () => {
+                const params = {};
+                for (let i = 0; i < required.length; i++) params[required[i].name] = inputs[i].value;
+                await runAction(act, params);
+              }));
+              formEl.appendChild(button('Cancel', 'Cancel ' + act.label, () => { formEl.hidden = true; }));
+              if (act.kind !== 'read_only') {
+                formEl.appendChild(line('this ' + act.kind + ' action runs with your explicit per-action approval (scope ' + act.scope + ')'));
+              }
+              rowEl.appendChild(button('Run: ' + act.label, act.kind + ' (' + act.scope + ') on ' + (e.name || e.id), () => { formEl.hidden = !formEl.hidden; }));
+              rowEl.appendChild(formEl);
+            }
+            rowEl.appendChild(resultLine);
+          }
         } else {
           rowEl.appendChild(button('Readmit ' + e.name, 'Readmit ' + e.name, async () => {
             const r = await a.workspace_connector_readmit(e.id);

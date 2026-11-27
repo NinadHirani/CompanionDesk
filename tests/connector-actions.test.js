@@ -124,3 +124,136 @@ test('the telegram adapter works through the same gates with the url-token shape
   assert.ok(seenUrl.includes('bot12345%3AABC-secret'), 'the real request carries the token to the provider (colon percent-encoded)');
   assert.ok(!JSON.stringify(r).includes('12345:ABC-secret'), 'but nothing returned or audited does');
 });
+
+// ---- batch 2 (27 Nov 2026): OAuth token lifecycle ------------------------
+// The engine refreshes an expired oauth blob BEFORE the action, rotates
+// the rotated blob back into the vault through the injected writer,
+// classifies a dead grant as reauth_required (disconnect via the hook),
+// treats everything else as transient, and gives a provider 401 exactly
+// one refresh-and-retry. The fake transport records every request; no
+// secret may appear in any audit entry or result.
+
+function oauthStack(transport, credential, hooks) {
+  const catalog = createConnectorCatalog({ clock: () => 0 });
+  const calls = [];
+  const recorded = [];
+  const writer = { blobs: [] };
+  const engine = createActionEngine({
+    catalog: catalog,
+    adapters: adapters,
+    transport: async function (req) {
+      recorded.push(req);
+      return transport(req);
+    },
+    credentialReader: () => credential,
+    credentialWriter: hooks && hooks.writer ? hooks.writer : (id, blob) => { writer.blobs.push(blob); return true; },
+    onReauthRequired: hooks && hooks.onReauth ? hooks.onReauth : function () {},
+  });
+  return { catalog, engine, calls, recorded, writer };
+}
+
+function expiredBlob() {
+  return JSON.stringify({ client_id: 'cid', client_secret: 'csecret', access_token: 'at-1', refresh_token: 'rt-1', expires_at: -1000 });
+}
+
+test('an expired oauth blob is refreshed before the action and the rotation is persisted', async () => {
+  const s = oauthStack(async function (req) {
+    if (req.url.indexOf('oauth2.googleapis.com/token') !== -1) {
+      return { status: 200, body: JSON.stringify({ access_token: 'at-2', expires_in: 3600, refresh_token: 'rt-2' }) };
+    }
+    return { status: 200, body: JSON.stringify({ files: [] }) };
+  }, expiredBlob());
+  s.catalog.connect('google-drive', { userInitiated: true, scopes: ['files.read'], credentialRef: 'vault:g' });
+  const r = await s.engine.run('google-drive', 'list_files', {});
+  assert.equal(r.ok, true, JSON.stringify(r));
+  assert.equal(s.recorded.length, 2, 'one refresh, one action');
+  assert.equal(s.recorded[0].url.indexOf('oauth2.googleapis.com/token') !== -1, true);
+  assert.equal(s.recorded[0].body.indexOf('refresh_token=rt-1') !== -1, true);
+  assert.equal(s.recorded[1].headers.Authorization, 'Bearer at-2', 'the action uses the fresh token');
+  assert.equal(s.writer.blobs.length, 1, 'rotation written back to the vault');
+  const saved = JSON.parse(s.writer.blobs[0]);
+  assert.equal(saved.access_token, 'at-2');
+  assert.equal(saved.refresh_token, 'rt-2', 'rotated refresh token replaces the old');
+  assert.equal(saved.expires_at, 3600000, 'clock 0 + 3600s');
+  const refreshAudit = s.engine.audit().filter((a) => a.action === 'connector_refresh');
+  assert.equal(refreshAudit.length, 1);
+  assert.equal(refreshAudit[0].status, 'ok');
+  assert.equal(JSON.stringify(refreshAudit).indexOf('rt-') === -1, true, 'no token material in the audit');
+  assert.equal(JSON.stringify(r).indexOf('at-') !== -1 && JSON.stringify(r).indexOf('Bearer') !== -1, false, 'no token in the result');
+});
+
+test('a dead grant disconnects the connector instead of limping on', async () => {
+  const reauthCalls = [];
+  const s = oauthStack(async function () {
+    return { status: 400, body: JSON.stringify({ error: 'invalid_grant' }) };
+  }, expiredBlob(), { onReauth: (id) => { reauthCalls.push(id); s.catalog.disconnect(id, { userInitiated: true }); } });
+  s.catalog.connect('google-drive', { userInitiated: true, scopes: ['files.read'], credentialRef: 'vault:g' });
+  const r = await s.engine.run('google-drive', 'list_files', {});
+  assert.equal(r.ok, false);
+  assert.equal(r.reason, 'reauth_required');
+  assert.deepEqual(reauthCalls, ['google-drive'], 'the failure-safe hook ran');
+  assert.equal(s.writer.blobs.length, 0, 'nothing persisted on a dead grant');
+  assert.equal(s.catalog.state('google-drive'), 'disconnected', 'the connector no longer masquerades as live');
+  const again = await s.engine.run('google-drive', 'list_files', {});
+  assert.equal(again.reason, 'not_connected', 'a re-auth is a fresh explicit connect');
+  const refreshAudit = s.engine.audit().filter((a) => a.action === 'connector_refresh');
+  assert.equal(refreshAudit[0].status, 'reauth_required');
+});
+
+test('a transient refresh failure keeps the credential and reports refresh_failed', async () => {
+  const reauthCalls = [];
+  const s = oauthStack(async function (req) {
+    if (req.url.indexOf('oauth2.googleapis.com/token') !== -1) return { status: 503, body: 'unavailable' };
+    return { status: 200, body: JSON.stringify({ files: [] }) };
+  }, expiredBlob(), { onReauth: (id) => reauthCalls.push(id) });
+  s.catalog.connect('google-drive', { userInitiated: true, scopes: ['files.read'], credentialRef: 'vault:g' });
+  const r = await s.engine.run('google-drive', 'list_files', {});
+  assert.equal(r.ok, false);
+  assert.equal(r.reason, 'refresh_failed');
+  assert.deepEqual(reauthCalls, [], 'no disconnect for a transient failure');
+  assert.equal(s.writer.blobs.length, 0);
+});
+
+test('a refresh whose rotation cannot be persisted fails the action instead of gambling', async () => {
+  const s = oauthStack(async function (req) {
+    if (req.url.indexOf('oauth2.googleapis.com/token') !== -1) {
+      return { status: 200, body: JSON.stringify({ access_token: 'at-2', expires_in: 3600 }) };
+    }
+    return { status: 200, body: JSON.stringify({ files: [] }) };
+  }, expiredBlob(), { writer: () => false });
+  s.catalog.connect('google-drive', { userInitiated: true, scopes: ['files.read'], credentialRef: 'vault:g' });
+  const r = await s.engine.run('google-drive', 'list_files', {});
+  assert.equal(r.ok, false);
+  assert.equal(r.reason, 'refresh_persist_failed');
+  assert.equal(s.recorded.length, 1, 'the action endpoint was never hit with an unpersisted rotation');
+});
+
+test('a provider 401 earns exactly one refresh-and-retry', async () => {
+  let actionCalls = 0;
+  const s = oauthStack(async function (req) {
+    if (req.url.indexOf('oauth2.googleapis.com/token') !== -1) {
+      return { status: 200, body: JSON.stringify({ access_token: 'at-2', expires_in: 3600 }) };
+    }
+    actionCalls += 1;
+    if (actionCalls === 1) return { status: 401, body: JSON.stringify({ error: 'unauthorized' }) };
+    return { status: 200, body: JSON.stringify({ files: [] }) };
+  }, JSON.stringify({ client_id: 'cid', client_secret: 'csecret', access_token: 'at-1', refresh_token: 'rt-1', expires_at: 9999999999 }));
+  s.catalog.connect('google-drive', { userInitiated: true, scopes: ['files.read'], credentialRef: 'vault:g' });
+  const r = await s.engine.run('google-drive', 'list_files', {});
+  assert.equal(r.ok, true, JSON.stringify(r));
+  assert.equal(r.status, 200);
+  assert.equal(actionCalls, 2, 'one 401, one retry after the refresh');
+  assert.equal(s.recorded[1].url.indexOf('oauth2.googleapis.com/token') !== -1, true);
+  assert.equal(s.writer.blobs.length, 1);
+});
+
+test('an expired blob with no refresh token runs anyway and refreshes nothing', async () => {
+  const s = oauthStack(async function () {
+    return { status: 200, body: JSON.stringify({ files: [] }) };
+  }, JSON.stringify({ client_id: 'cid', client_secret: 'csecret', access_token: 'at-1', refresh_token: null, expires_at: -1000 }));
+  s.catalog.connect('google-drive', { userInitiated: true, scopes: ['files.read'], credentialRef: 'vault:g' });
+  const r = await s.engine.run('google-drive', 'list_files', {});
+  assert.equal(r.ok, true, 'no refresh token means no proactive refresh, the action still runs');
+  assert.equal(s.recorded.length, 1, 'only the action request');
+  assert.equal(s.recorded[0].headers.Authorization, 'Bearer at-1');
+});
