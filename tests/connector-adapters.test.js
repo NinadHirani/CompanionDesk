@@ -12,7 +12,7 @@ const assert = require('node:assert');
 const adapters = require('../src/connector-adapters.js');
 const { createConnectorCatalog } = require('../src/connectors.js');
 
-const IMPLEMENTED = ['anthropic', 'brave-search', 'arxiv', 'airtable', 'coda', 'circleci', 'crossref', 'discord', 'docker-hub', 'github', 'gitlab', 'gmail', 'heroku', 'google-calendar', 'google-docs', 'google-sheets', 'google-drive', 'google-gemini', 'huggingface', 'internet-archive', 'jira', 'mailgun', 'postmark', 'sendgrid', 'linear', 'microsoft-calendar', 'microsoft-onedrive', 'microsoft-excel', 'microsoft-outlook', 'microsoft-teams', 'microsoft-word', 'musicbrainz', 'notion', 'npm', 'open-meteo', 'openai', 'openalex', 'openlibrary', 'openstreetmap', 'pypi', 'render', 'slack', 'supabase', 'sentry', 'pagerduty', 'tavily', 'telegram', 'trello', 'todoist', 'wikimedia'];
+const IMPLEMENTED = ['anthropic', 'brave-search', 'arxiv', 'airtable', 'coda', 'circleci', 'cloudflare', 'crossref', 'digitalocean', 'discord', 'docker-hub', 'github', 'gitlab', 'gmail', 'heroku', 'google-calendar', 'google-docs', 'google-sheets', 'google-drive', 'google-gemini', 'huggingface', 'internet-archive', 'jira', 'mailgun', 'postmark', 'sendgrid', 'linear', 'microsoft-calendar', 'microsoft-onedrive', 'microsoft-excel', 'microsoft-outlook', 'microsoft-teams', 'microsoft-word', 'musicbrainz', 'notion', 'npm', 'open-meteo', 'openai', 'openalex', 'openlibrary', 'openstreetmap', 'pypi', 'render', 'slack', 'supabase', 'sentry', 'pagerduty', 'tavily', 'telegram', 'trello', 'todoist', 'wikimedia'];
 const OAUTH = ['gmail', 'google-calendar', 'google-drive', 'microsoft-calendar', 'microsoft-onedrive', 'microsoft-outlook'];
 
 test('the adapter registry covers exactly the implemented catalog entries', () => {
@@ -1249,5 +1249,39 @@ test('pagerduty builds token-accept incident reads with strict validation and no
   for (const a of adapters.listActions('pagerduty')) {
     assert.equal(a.kind, 'read_only', 'pagerduty is read-only');
     assert.equal(a.scope, 'incidents.read');
+  }
+});
+
+// ---- batch 31 (27 Nov 2026): cloudflare + digitalocean read-only adapters ----
+
+test('cloudflare builds bearer zone reads with strict validation and no writes', () => {
+  const v = adapters.buildRequest('cloudflare', 'verify_token', {}, 'cf-tok');
+  assert.equal(v.ok, true);
+  assert.equal(v.request.url, 'https://api.cloudflare.com/client/v4/user/tokens/verify');
+  assert.equal(v.request.headers.Authorization, 'Bearer cf-tok');
+  const lz = adapters.buildRequest('cloudflare', 'list_zones', { per_page: '50' }, 'cf-tok');
+  assert.equal(lz.ok, true);
+  assert.equal(lz.request.url, 'https://api.cloudflare.com/client/v4/zones?per_page=50');
+  assert.equal(adapters.buildRequest('cloudflare', 'list_zones', { per_page: '51' }, 'cf-tok').reason, 'param_invalid', 'per_page above the cap');
+  for (const a of adapters.listActions('cloudflare')) {
+    assert.equal(a.kind, 'read_only', 'cloudflare is read-only');
+    assert.equal(a.scope, 'zones.read');
+  }
+});
+
+test('digitalocean builds bearer droplet reads with strict validation and no writes', () => {
+  const ld = adapters.buildRequest('digitalocean', 'list_droplets', { per_page: '100' }, 'do-tok');
+  assert.equal(ld.ok, true);
+  assert.equal(ld.request.url, 'https://api.digitalocean.com/v2/droplets?per_page=100&page=1');
+  assert.equal(ld.request.headers.Authorization, 'Bearer do-tok');
+  const gd = adapters.buildRequest('digitalocean', 'get_droplet', { droplet_id: '3164444' }, 'do-tok');
+  assert.equal(gd.ok, true);
+  assert.equal(gd.request.url, 'https://api.digitalocean.com/v2/droplets/3164444');
+  assert.equal(adapters.buildRequest('digitalocean', 'get_droplet', { droplet_id: 'x12' }, 'do-tok').reason, 'param_invalid', 'non-numeric droplet id');
+  assert.equal(adapters.buildRequest('digitalocean', 'get_droplet', {}, 'do-tok').reason, 'param_missing', 'droplet id required');
+  assert.equal(adapters.buildRequest('digitalocean', 'list_droplets', { per_page: '101' }, 'do-tok').reason, 'param_invalid', 'per_page above the cap');
+  for (const a of adapters.listActions('digitalocean')) {
+    assert.equal(a.kind, 'read_only', 'digitalocean is read-only');
+    assert.equal(a.scope, 'droplets.read');
   }
 });

@@ -157,6 +157,47 @@
     ],
   };
 
+  ADAPTERS.cloudflare = {
+    id: 'cloudflare', name: 'Cloudflare', authShape: 'token', setupRequired: false,
+    setupNote: 'create an API token at dash.cloudflare.com/profile/api-tokens and paste it; your token is stored only in the app vault, never requested or shown in chat',
+    buildHeaders: function (token) { return { Authorization: 'Bearer ' + token, 'User-Agent': 'CompanionDesk' }; },
+    actions: [
+      { id: 'verify_token', label: 'Check the Cloudflare token works', scope: 'zones.read', kind: 'read_only',
+        params: [],
+        build: function (p, token) {
+          return { method: 'GET', url: 'https://api.cloudflare.com/client/v4/user/tokens/verify', headers: this.buildHeaders(token), body: null };
+        } },
+      { id: 'list_zones', label: 'List your Cloudflare zones (capped)', scope: 'zones.read', kind: 'read_only',
+        params: [{ name: 'per_page', required: false, maxLength: 2 }],
+        build: function (p, token) {
+          const perPage = optionalInt(p, 'per_page', 20);
+          if (perPage === null || perPage < 1 || perPage > 50) return { error: 'param_invalid' };
+          return { method: 'GET', url: 'https://api.cloudflare.com/client/v4/zones?per_page=' + perPage, headers: this.buildHeaders(token), body: null };
+        } },
+    ],
+  };
+
+  ADAPTERS.digitalocean = {
+    id: 'digitalocean', name: 'DigitalOcean', authShape: 'token', setupRequired: false,
+    setupNote: 'create a personal access token at cloud.digitalocean.com/account/api and paste it; your token is stored only in the app vault, never requested or shown in chat',
+    buildHeaders: function (token) { return { Authorization: 'Bearer ' + token, 'User-Agent': 'CompanionDesk' }; },
+    actions: [
+      { id: 'list_droplets', label: 'List your DigitalOcean droplets (capped)', scope: 'droplets.read', kind: 'read_only',
+        params: [{ name: 'per_page', required: false, maxLength: 3 }],
+        build: function (p, token) {
+          const perPage = optionalInt(p, 'per_page', 25);
+          if (perPage === null || perPage < 1 || perPage > 100) return { error: 'param_invalid' };
+          return { method: 'GET', url: 'https://api.digitalocean.com/v2/droplets?per_page=' + perPage + '&page=1', headers: this.buildHeaders(token), body: null };
+        } },
+      { id: 'get_droplet', label: 'Read one DigitalOcean droplet by id', scope: 'droplets.read', kind: 'read_only',
+        params: [{ name: 'droplet_id', required: true, maxLength: 20 }],
+        build: function (p, token) {
+          if (!/^\d{1,20}$/.test(p.droplet_id)) return { error: 'param_invalid' };
+          return { method: 'GET', url: 'https://api.digitalocean.com/v2/droplets/' + encodeURIComponent(p.droplet_id), headers: this.buildHeaders(token), body: null };
+        } },
+    ],
+  };
+
   ADAPTERS.sentry = {
     id: 'sentry', name: 'Sentry', authShape: 'token', setupRequired: false,
     setupNote: 'create an auth token at sentry.io/settings/account/api/auth-tokens and paste it; your token is stored only in the app vault, never requested or shown in chat',

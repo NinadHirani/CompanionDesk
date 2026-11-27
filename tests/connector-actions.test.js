@@ -833,3 +833,19 @@ test('sentry and pagerduty refuse before connect and ride their credentials on r
     assert.ok(seen.headers.Authorization.indexOf('mon-tok') > 0, id + ' credential rides the header');
   }
 });
+
+// ---- batch 31 (27 Nov 2026): cloudflare + digitalocean credential gates ----
+
+test('cloudflare and digitalocean refuse before connect and ride their credentials on reads', async () => {
+  let seen = null;
+  const transport = async (req) => { seen = req; return { status: 200, body: JSON.stringify([]) }; };
+  const { catalog, engine } = makeEngine(transport, 'cloud-tok');
+  for (const [id, action, scope] of [['cloudflare', 'verify_token', 'zones.read'], ['digitalocean', 'list_droplets', 'droplets.read']]) {
+    assert.equal((await engine.run(id, action, {})).reason, 'not_connected', id + ' refuses before connect');
+    const c = catalog.connect(id, { userInitiated: true, scopes: [scope], credentialRef: 'vault:' + id + '-cred' });
+    assert.equal(c.ok, true, id + ' connects');
+    const r = await engine.run(id, action, {});
+    assert.equal(r.ok, true, id + ' reads with a credential');
+    assert.equal(seen.headers.Authorization, 'Bearer cloud-tok', id + ' credential rides the header');
+  }
+});

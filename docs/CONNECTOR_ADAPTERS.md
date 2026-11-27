@@ -618,3 +618,14 @@ Actions:
 The credentials are the user's own tokens pasted into the app vault. No writes, no resolving/muting, no acknowledges/resolutions anywhere.
 
 Tests: adapter build/validation per connector (slug and id charset rejects, required params, caps, header shapes, read-only sweeps), engine gates (each refuses before connect and rides its credential on a read). Catalog count pins: 121 still-definition-only expanded rows, 125 definition-only total.
+## Batch 31 (27 Nov 2026): Cloudflare, DigitalOcean
+
+Upgraded two cloud connectors to token-bound READ-ONLY adapters (each `auth: api_key`, `authShape: token`).
+
+Actions:
+- Cloudflare (pinned `api.cloudflare.com/client/v4`, Bearer): `verify_token` (GET /user/tokens/verify); `list_zones` per_page 1-50.
+- DigitalOcean (pinned `api.digitalocean.com/v2`, Bearer): `list_droplets` per_page 1-100, page 1; `get_droplet` by numeric id (charset-validated).
+
+The credentials are the user's own tokens pasted into the app vault. No writes, no DNS changes, no purges, no rebuilds, no deletes anywhere. DigitalOcean's page cap aligns with the shared integer helper's 100 bound (the DO API's own 200 per page is not reachable through this helper).
+
+Tests: adapter build/validation per connector (caps, numeric-id reject, required param, header shapes, read-only sweeps), engine gates (each refuses before connect and rides its credential on a read). Catalog count pins: 119 still-definition-only expanded rows, 123 definition-only total.
