@@ -88,6 +88,15 @@ function bridgeStub(overrides) {
   return bridge;
 }
 
+const CONNECTED_GITHUB = {
+  id: 'github', name: 'GitHub', state: 'connected', hasCredential: true, integrationImplemented: true,
+  costNote: 'Free tier', limits: 'Rate limits', tokenState: 'ok',
+  scopes: [{ name: 'issues.read', class: 'read_only' }, { name: 'issues.write', class: 'write' }],
+  actions: [
+    { id: 'list_issues', label: 'List open issues on a repository', scope: 'issues.read', kind: 'read_only', params: [{ name: 'owner', required: true }, { name: 'repo', required: true }] },
+    { id: 'create_issue', label: 'Open a new issue on a repository', scope: 'issues.write', kind: 'write', params: [{ name: 'owner', required: true }, { name: 'repo', required: true }, { name: 'title', required: true }] },
+  ],
+};
 const CONNECTED_SLACK = {
   id: 'slack', name: 'Slack', state: 'connected', hasCredential: true, integrationImplemented: true,
   costNote: 'Free tier', limits: 'Rate limits', tokenState: null,
@@ -226,5 +235,32 @@ test('a discovery-state row renders no action buttons', async () => {
     const box = global.document.getElementById('ws-connectors');
     await sleep(20);
     assert.equal(findBtn(box, /^Run: /), undefined, 'nothing is runnable before an explicit connect');
+  } finally { uninstallDom(); }
+});
+
+test('a write action follows the same two-step confirm as sends', async () => {
+  installDom();
+  try {
+    const bridge = bridgeStub({ connectors: [CONNECTED_GITHUB] });
+    const P = await loadPanel();
+    P.mount({ api: bridge, initialView: 'conversations' });
+    const box = global.document.getElementById('ws-connectors');
+    const runBtn = await until(() => findBtn(box, /^Run: Open a new issue on a repository$/)) && findBtn(box, /^Run: Open a new issue on a repository$/);
+    runBtn.handlers.click[0]();
+    await sleep(20);
+    assert.equal(bridge.__calls.action.length, 0, 'no call from the first click');
+    const confirmBtn = findBtn(box, /^Confirm run$/);
+    assert.ok(confirmBtn, 'the write confirm step exists');
+    const inputs = deepChildren(box, []).filter((c) => c.tagName === 'input' && /create_issue /.test(c.attrs['aria-label'] || ''));
+    assert.equal(inputs.length, 3, 'one labelled input per required parameter');
+    inputs[0].value = 'NinadHirani';
+    inputs[1].value = 'CompanionDesk';
+    inputs[2].value = 'Test issue';
+    confirmBtn.handlers.click[0]();
+    await until(() => bridge.__calls.action.length === 1);
+    const a = bridge.__calls.action[0];
+    assert.equal(a.actionId, 'create_issue');
+    assert.deepEqual(a.params, { owner: 'NinadHirani', repo: 'CompanionDesk', title: 'Test issue' });
+    assert.equal(a.runOpts.confirmWrite, true, 'the confirm click is the per-action approval gesture for writes too');
   } finally { uninstallDom(); }
 });

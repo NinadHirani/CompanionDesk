@@ -28,8 +28,8 @@ function fakeEngine(response) {
   const runs = [];
   return {
     runs,
-    run: async function (id, actionId, params) {
-      runs.push({ id, actionId, params });
+    run: async function (id, actionId, params, runOpts) {
+      runs.push({ id, actionId, params, runOpts });
       return typeof response === 'function' ? response(id, actionId, params) : response;
     },
   };
@@ -146,4 +146,14 @@ test('list includes runnable actions for implemented adapters only', async () =>
   assert.equal(slack.actions[0].id, 'auth_test');
   const spotify = r.connectors.find((c) => c.id === 'spotify');
   assert.equal(spotify.actions, undefined, 'definition-only entries stay silent about actions');
+});
+
+test('run never passes an approvalId for a write action', async () => {
+  const eng = fakeEngine({ ok: false, reason: 'approval_required' });
+  const { tool } = stackWithEngine(eng);
+  const r = await tool.execute({ action: 'run', connector_id: 'github', action_id: 'create_issue', params: { owner: 'o', repo: 'r', title: 'T' } });
+  assert.equal(r.ok, false);
+  assert.equal(r.reason, 'approval_required', 'surfaced verbatim for write actions too');
+  const ro = eng.runs[0].runOpts;
+  assert.ok(!ro || ro.approvalId === undefined, 'the tool never mints or passes an approval');
 });

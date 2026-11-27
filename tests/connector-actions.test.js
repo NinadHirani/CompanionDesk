@@ -257,3 +257,32 @@ test('an expired blob with no refresh token runs anyway and refreshes nothing', 
   assert.equal(s.recorded.length, 1, 'only the action request');
   assert.equal(s.recorded[0].headers.Authorization, 'Bearer at-1');
 });
+
+// ---- batch 3 (27 Nov 2026): write gates on the new create actions ----
+
+test('a write action needs a single-use approval and the approval opens exactly one call', async () => {
+  const { catalog, engine } = makeEngine(async () => ({ status: 201, body: '{"number":7}' }), 'ghp-tok');
+  catalog.connect('github', { userInitiated: true, scopes: ['issues.read', 'issues.write'], credentialRef: 'vault:gh-cred' });
+  assert.equal((await engine.run('github', 'create_issue', { owner: 'o', repo: 'r', title: 'T' })).reason, 'approval_required', 'write without an approval refuses');
+  const a = catalog.approve('github', 'issues.write', { userInitiated: true });
+  const r1 = await engine.run('github', 'create_issue', { owner: 'o', repo: 'r', title: 'T' }, { approvalId: a.approvalId });
+  assert.equal(r1.ok, true, 'the approved write runs once');
+  assert.equal((await engine.run('github', 'create_issue', { owner: 'o', repo: 'r', title: 'T' }, { approvalId: a.approvalId })).reason, 'approval_required', 'the spent approval is dead');
+});
+
+test('a write action still refuses when not connected or the scope was not granted', async () => {
+  const { catalog, engine } = makeEngine(async () => { throw new Error('must not be called'); }, 'ghp-tok');
+  assert.equal((await engine.run('github', 'create_issue', { owner: 'o', repo: 'r', title: 'T' })).reason, 'not_connected');
+  catalog.connect('github', { userInitiated: true, scopes: ['issues.read'], credentialRef: 'vault:gh-cred' });
+  assert.equal((await engine.run('github', 'create_issue', { owner: 'o', repo: 'r', title: 'T' })).reason, 'scope_not_granted', 'write scope was not granted at connect');
+});
+
+test('a bad parameter set refuses before any approval is consumed', async () => {
+  const { catalog, engine } = makeEngine(async () => ({ status: 201, body: '{}' }), 'ghp-tok');
+  catalog.connect('github', { userInitiated: true, scopes: ['issues.write'], credentialRef: 'vault:gh-cred' });
+  const a = catalog.approve('github', 'issues.write', { userInitiated: true });
+  const bad = await engine.run('github', 'create_issue', { owner: 'o', repo: 'r' }, { approvalId: a.approvalId });
+  assert.equal(bad.reason, 'param_missing', 'missing title refuses before the transport');
+  const good = await engine.run('github', 'create_issue', { owner: 'o', repo: 'r', title: 'T' }, { approvalId: a.approvalId });
+  assert.equal(good.ok, true, 'the SAME approval still works after the invalid run was refused');
+});

@@ -142,3 +142,41 @@ action needs.
 
 Still the user's: real API keys, own OAuth clients, actual connections,
 per-connector activation, and device validation.
+
+## Batch 3 (27 Nov 2026): low-risk write actions
+
+Four new write actions ship behind the same per-action approval and
+two-step panel confirm every send/write already goes through. All are
+create-only: nothing updates in place and nothing deletes.
+
+- **GitHub `create_issue`** (issues.write): opens an issue with a
+  required title and optional body on owner/repo.
+- **Notion `create_page`** (pages.write): creates a page under a parent
+  page id, required title, optional first paragraph as content.
+- **Google Drive `create_file`** (files.write): multipart upload of a
+  small text file (name required, content required, 20,000 chars cap).
+- **Microsoft OneDrive `create_file`** (files.write): Graph simple
+  upload to the OneDrive root (PUT; buildRequest now allows PUT).
+
+Two honest scope corrections so the sign-in matches what the actions
+need: the Google Drive OAuth sign-in now requests the full Drive scope
+(it was read-only) and the OneDrive sign-in requests Files.ReadWrite
+(it was Files.Read). Both setup notes state this.
+
+Engine ordering improvement: parameter validation now runs BEFORE the
+consent gate, so an invalid parameter set can never burn a single-use
+approval (the adapters module exposes validateOnly for this).
+
+Catalog notes for the implemented Gmail, Outlook, Calendar and Drive
+entries now say honestly what runs after connect ("read and send/write
+actions... need a per-action approval") instead of read-only wording.
+
+Tests: write build behaviour (URL encoding, optional-body omission,
+multipart boundary, PUT shape), write declarations, validateOnly without
+credential parsing, write approval lifecycle (refuse, run once, dead),
+write scope/connected gates, param refusal before approval consumption,
+the AI tool never passing an approvalId for a write, and the panel's
+write-kind two-step confirm with confirmWrite. Suite 1465/1465 green.
+
+Still the user's: real credentials, own OAuth clients, actual
+connections, per-connector activation, and device validation.

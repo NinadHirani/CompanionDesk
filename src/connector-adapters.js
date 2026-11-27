@@ -126,6 +126,13 @@
           if (!isFinite(n) || n < 1) return { error: 'param_invalid' };
           return { method: 'GET', url: 'https://api.github.com/repos/' + encodeURIComponent(p.owner) + '/' + encodeURIComponent(p.repo) + '/issues/' + n, headers: this.buildHeaders(token), body: null };
         } },
+      { id: 'create_issue', label: 'Open a new issue on a repository', scope: 'issues.write', kind: 'write',
+        params: [{ name: 'owner', required: true, maxLength: 100 }, { name: 'repo', required: true, maxLength: 100 }, { name: 'title', required: true, maxLength: 200 }, { name: 'body', required: false, maxLength: 4000 }],
+        build: function (p, token) {
+          const body = { title: p.title };
+          if (p.body) body.body = p.body;
+          return { method: 'POST', url: 'https://api.github.com/repos/' + encodeURIComponent(p.owner) + '/' + encodeURIComponent(p.repo) + '/issues', headers: this.buildHeaders(token), body: JSON.stringify(body) };
+        } },
     ],
   };
 
@@ -145,6 +152,13 @@
         params: [{ name: 'page_id', required: true, maxLength: 80 }],
         build: function (p, token) {
           return { method: 'GET', url: 'https://api.notion.com/v1/pages/' + encodeURIComponent(p.page_id), headers: this.buildHeaders(token), body: null };
+        } },
+      { id: 'create_page', label: 'Create a page under a parent page', scope: 'pages.write', kind: 'write',
+        params: [{ name: 'parent_id', required: true, maxLength: 80 }, { name: 'title', required: true, maxLength: 200 }, { name: 'content', required: false, maxLength: 20000 }],
+        build: function (p, token) {
+          const body = { parent: { page_id: p.parent_id }, properties: { title: { title: [{ text: { content: p.title } }] } } };
+          if (p.content) body.children = [{ object: 'block', type: 'paragraph', paragraph: { rich_text: [{ type: 'text', text: { content: p.content } }] } }];
+          return { method: 'POST', url: 'https://api.notion.com/v1/pages', headers: this.buildHeaders(token), body: JSON.stringify(body) };
         } },
     ],
   };
@@ -323,7 +337,7 @@
   ADAPTERS['google-drive'] = {
     id: 'google-drive', name: 'Google Drive', authShape: 'oauth_json', setupRequired: true,
     setupNote: 'create your own OAuth client in Google Cloud Console (Drive API enabled) and complete the in-app sign-in; no shared client exists',
-    oauth: googleOauth('https://www.googleapis.com/auth/drive.readonly'),
+    oauth: googleOauth('https://www.googleapis.com/auth/drive'),
     buildHeaders: function (blob) { return bearerHeader(blob.access_token); },
     actions: oauthActions([
       { id: 'list_files', label: 'List the most recently modified files', scope: 'files.read', kind: 'read_only',
@@ -337,6 +351,13 @@
         params: [{ name: 'file_id', required: true, maxLength: 120 }],
         build: function (p, blob) {
           return { method: 'GET', url: 'https://www.googleapis.com/drive/v3/files/' + encodeURIComponent(p.file_id) + '?fields=id,name,mimeType,size,modifiedTime', headers: this.buildHeaders(blob), body: null };
+        } },
+      { id: 'create_file', label: 'Create a small text file in Drive', scope: 'files.write', kind: 'write',
+        params: [{ name: 'name', required: true, maxLength: 200 }, { name: 'content', required: true, maxLength: 20000 }],
+        build: function (p, blob) {
+          const boundary = 'companiondesk' + Math.random().toString(36).slice(2, 12);
+          const body = '--' + boundary + '\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n' + JSON.stringify({ name: p.name, mimeType: 'text/plain' }) + '\r\n--' + boundary + '\r\nContent-Type: text/plain; charset=UTF-8\r\n\r\n' + p.content + '\r\n--' + boundary + '--\r\n';
+          return { method: 'POST', url: 'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,mimeType,size', headers: Object.assign(this.buildHeaders(blob), { 'Content-Type': 'multipart/related; boundary=' + boundary }), body: body };
         } },
     ]),
   };
@@ -402,8 +423,8 @@
 
   ADAPTERS['microsoft-onedrive'] = {
     id: 'microsoft-onedrive', name: 'Microsoft OneDrive', authShape: 'oauth_json', setupRequired: true,
-    setupNote: 'register your own app in the Azure portal (Microsoft Graph, delegated Files.Read) and complete the in-app sign-in; no shared client exists',
-    oauth: microsoftOauth('Files.Read offline_access'),
+    setupNote: 'register your own app in the Azure portal (Microsoft Graph, delegated Files.ReadWrite) and complete the in-app sign-in; no shared client exists',
+    oauth: microsoftOauth('Files.ReadWrite offline_access'),
     buildHeaders: function (blob) { return bearerHeader(blob.access_token); },
     actions: oauthActions([
       { id: 'list_files', label: 'List files at the OneDrive root', scope: 'files.read', kind: 'read_only',
@@ -415,6 +436,11 @@
         params: [{ name: 'item_id', required: true, maxLength: 180 }],
         build: function (p, blob) {
           return { method: 'GET', url: 'https://graph.microsoft.com/v1.0/me/drive/items/' + encodeURIComponent(p.item_id) + '?select=id,name,size,lastModifiedDateTime', headers: this.buildHeaders(blob), body: null };
+        } },
+      { id: 'create_file', label: 'Create a small text file at the OneDrive root', scope: 'files.write', kind: 'write',
+        params: [{ name: 'name', required: true, maxLength: 200 }, { name: 'content', required: true, maxLength: 20000 }],
+        build: function (p, blob) {
+          return { method: 'PUT', url: 'https://graph.microsoft.com/v1.0/me/drive/root:/' + encodeURIComponent(p.name) + ':/content', headers: Object.assign(this.buildHeaders(blob), { 'Content-Type': 'text/plain; charset=UTF-8' }), body: p.content };
         } },
     ]),
   };
@@ -491,6 +517,17 @@
     }) : null;
   }
 
+  // Params-only check (batch 3, 27 Nov 2026): lets the engine refuse a bad
+  // parameter set BEFORE any approval is consumed. Same rules as the check
+  // inside buildRequest, no credential parsing, no request building.
+  function validateOnly(id, actionId, params) {
+    const a = get(id);
+    if (!a) return 'no_adapter';
+    const action = a.actions.find(function (x) { return x.id === actionId; });
+    if (!action) return 'unknown_action';
+    return validateParams(action, params);
+  }
+
   function buildRequest(id, actionId, params, credential) {
     const a = get(id);
     if (!a) return fail('no_adapter');
@@ -511,7 +548,7 @@
     else req = action.build.call(a, params || {}, cred.token);
     if (!req || req.error) return fail((req && req.error) || 'request_build_failed');
     if (!/^https:\/\//.test(req.url)) return fail('url_invalid');
-    if (req.method !== 'GET' && req.method !== 'POST') return fail('request_build_failed');
+    if (req.method !== 'GET' && req.method !== 'POST' && req.method !== 'PUT') return fail('request_build_failed');
     return { ok: true, request: { method: req.method, url: req.url, headers: req.headers || {}, body: req.body || null, urlContainsSecret: a.authShape === 'url_token' } };
   }
 
@@ -559,6 +596,7 @@
     get: get,
     listActions: listActions,
     buildRequest: buildRequest,
+    validateOnly: validateOnly,
     authorizeUrl: authorizeUrl,
     tokenRequest: tokenRequest,
     refreshRequest: refreshRequest,

@@ -195,6 +195,11 @@
 
       // The single consent gate: the catalog decides whether this connector
       // + scope + approval combination is allowed to run at all.
+      // Batch 3 (27 Nov 2026): a bad parameter set refuses BEFORE the
+      // consent gate so an invalid run can never burn a single-use approval.
+      const badParams = adapters.validateOnly ? adapters.validateOnly(id, actionId, params) : null;
+      if (badParams) return { ok: false, reason: badParams };
+
       const authz = catalog.authorizeCall(id, action.scope, { approvalId: runOpts && runOpts.approvalId });
       if (!authz.allowed) return { ok: false, reason: authz.reason };
 

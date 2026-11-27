@@ -206,3 +206,62 @@ test('every action scope stays declared on its catalog entry', () => {
     }
   }
 });
+
+// ---- batch 3 (27 Nov 2026): write actions, low-risk create only ----
+
+test('write actions build safe create requests with validated params', () => {
+  const gh = adapters.buildRequest('github', 'create_issue', { owner: 'own er', repo: 'r', title: 'T', body: 'B' }, 'ghp-tok');
+  assert.equal(gh.ok, true);
+  assert.equal(gh.request.method, 'POST');
+  assert.equal(gh.request.url, 'https://api.github.com/repos/own%20er/r/issues');
+  assert.deepEqual(JSON.parse(gh.request.body), { title: 'T', body: 'B' });
+  const ghNoBody = adapters.buildRequest('github', 'create_issue', { owner: 'o', repo: 'r', title: 'T' }, 'ghp-tok');
+  assert.deepEqual(JSON.parse(ghNoBody.request.body), { title: 'T' });
+
+  const np = adapters.buildRequest('notion', 'create_page', { parent_id: 'p1', title: 'T', content: 'C' }, 'secret');
+  assert.equal(np.ok, true);
+  assert.equal(np.request.method, 'POST');
+  assert.equal(np.request.url, 'https://api.notion.com/v1/pages');
+  const npBody = JSON.parse(np.request.body);
+  assert.equal(npBody.parent.page_id, 'p1');
+  assert.equal(npBody.children[0].paragraph.rich_text[0].text.content, 'C');
+  const npNoContent = adapters.buildRequest('notion', 'create_page', { parent_id: 'p1', title: 'T' }, 'secret');
+  assert.equal(JSON.parse(npNoContent.request.body).children, undefined);
+
+  const df = adapters.buildRequest('google-drive', 'create_file', { name: 'notes.txt', content: 'hello' }, JSON.stringify({ client_id: 'c', access_token: 'at' }));
+  assert.equal(df.ok, true);
+  assert.equal(df.request.method, 'POST');
+  assert.ok(df.request.url.startsWith('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart'));
+  assert.ok(df.request.body.indexOf('notes.txt') !== -1 && df.request.body.indexOf('hello') !== -1);
+  assert.ok(/multipart\/related; boundary=/.test(df.request.headers['Content-Type']), 'multipart content type carries the boundary');
+
+  const of = adapters.buildRequest('microsoft-onedrive', 'create_file', { name: 'a b.txt', content: 'hi' }, JSON.stringify({ client_id: 'c', access_token: 'at' }));
+  assert.equal(of.ok, true);
+  assert.equal(of.request.method, 'PUT', 'Graph simple upload is a PUT');
+  assert.equal(of.request.url, 'https://graph.microsoft.com/v1.0/me/drive/root:/a%20b.txt:/content');
+  assert.equal(of.request.body, 'hi');
+  assert.equal(of.request.headers['Content-Type'], 'text/plain; charset=UTF-8');
+});
+
+test('the new write actions are declared with write scopes and required params', () => {
+  const checks = [
+    ['github', 'create_issue', 'issues.write', 'owner,repo,title'],
+    ['notion', 'create_page', 'pages.write', 'parent_id,title'],
+    ['google-drive', 'create_file', 'files.write', 'name,content'],
+    ['microsoft-onedrive', 'create_file', 'files.write', 'name,content'],
+  ];
+  for (const [id, actionId, scope, required] of checks) {
+    const a = adapters.listActions(id).find((x) => x.id === actionId);
+    assert.ok(a, id + ' exposes ' + actionId);
+    assert.equal(a.kind, 'write', actionId + ' is write kind');
+    assert.equal(a.scope, scope, actionId + ' uses its declared write scope');
+    assert.equal(a.params.filter((p) => p.required).map((p) => p.name).join(','), required, actionId + ' required params');
+  }
+});
+
+test('validateOnly checks params without parsing any credential', () => {
+  assert.equal(adapters.validateOnly('github', 'create_issue', { owner: 'o', repo: 'r' }), 'param_missing', 'missing title refuses');
+  assert.equal(adapters.validateOnly('github', 'create_issue', { owner: 'o', repo: 'r', title: 'T', junk: 'x' }), 'param_invalid', 'unknown param refuses');
+  assert.equal(adapters.validateOnly('github', 'create_issue', { owner: 'o', repo: 'r', title: 'x'.repeat(201) }), 'param_invalid', 'over-length title refuses');
+  assert.equal(adapters.validateOnly('github', 'create_issue', { owner: 'o', repo: 'r', title: 'T' }), null, 'valid params pass with NO credential at all');
+});
