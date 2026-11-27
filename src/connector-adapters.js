@@ -412,6 +412,36 @@
     ],
   };
 
+  ADAPTERS.musicbrainz = {
+    id: 'musicbrainz', name: 'MusicBrainz', authShape: 'public', setupRequired: false,
+    setupNote: 'no account or key needed: the MusicBrainz web service is public and free; this build keeps to its one-request-per-second rate limit',
+    buildHeaders: function () { return { 'User-Agent': 'CompanionDesk', Accept: 'application/json' }; },
+    actions: [
+      { id: 'search_artists', label: 'Search MusicBrainz for artists', scope: 'recordings.read', kind: 'read_only',
+        params: [{ name: 'query', required: true, maxLength: 200 }, { name: 'limit', required: false, maxLength: 2 }],
+        build: function (p) {
+          if (!/^[ -~]+$/.test(p.query)) return { error: 'param_invalid' };
+          const limit = optionalInt(p, 'limit', 20);
+          if (limit === null || limit < 1 || limit > 25) return { error: 'param_invalid' };
+          return { method: 'GET', url: 'https://musicbrainz.org/ws/2/artist?query=' + encodeURIComponent(p.query) + '&fmt=json&limit=' + limit, headers: this.buildHeaders(), body: null };
+        } },
+      { id: 'search_recordings', label: 'Search MusicBrainz for recordings', scope: 'recordings.read', kind: 'read_only',
+        params: [{ name: 'query', required: true, maxLength: 200 }, { name: 'limit', required: false, maxLength: 2 }],
+        build: function (p) {
+          if (!/^[ -~]+$/.test(p.query)) return { error: 'param_invalid' };
+          const limit = optionalInt(p, 'limit', 20);
+          if (limit === null || limit < 1 || limit > 25) return { error: 'param_invalid' };
+          return { method: 'GET', url: 'https://musicbrainz.org/ws/2/recording?query=' + encodeURIComponent(p.query) + '&fmt=json&limit=' + limit, headers: this.buildHeaders(), body: null };
+        } },
+      { id: 'get_artist', label: 'Read one MusicBrainz artist by MBID', scope: 'recordings.read', kind: 'read_only',
+        params: [{ name: 'mbid', required: true, maxLength: 36 }],
+        build: function (p) {
+          if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(p.mbid)) return { error: 'param_invalid' };
+          return { method: 'GET', url: 'https://musicbrainz.org/ws/2/artist/' + encodeURIComponent(p.mbid) + '?fmt=json', headers: this.buildHeaders(), body: null };
+        } },
+    ],
+  };
+
   ADAPTERS.openalex = {
     id: 'openalex', name: 'OpenAlex', authShape: 'public', setupRequired: false,
     setupNote: 'no account or key needed: the OpenAlex API is public and free; the optional polite-pool mailto parameter is not sent by this build',

@@ -12,7 +12,7 @@ const assert = require('node:assert');
 const adapters = require('../src/connector-adapters.js');
 const { createConnectorCatalog } = require('../src/connectors.js');
 
-const IMPLEMENTED = ['anthropic', 'brave-search', 'arxiv', 'crossref', 'discord', 'github', 'gitlab', 'gmail', 'google-calendar', 'google-docs', 'google-sheets', 'google-drive', 'google-gemini', 'huggingface', 'jira', 'microsoft-calendar', 'microsoft-onedrive', 'microsoft-excel', 'microsoft-outlook', 'microsoft-teams', 'microsoft-word', 'notion', 'open-meteo', 'openai', 'openalex', 'openlibrary', 'openstreetmap', 'slack', 'tavily', 'telegram', 'wikimedia'];
+const IMPLEMENTED = ['anthropic', 'brave-search', 'arxiv', 'crossref', 'discord', 'github', 'gitlab', 'gmail', 'google-calendar', 'google-docs', 'google-sheets', 'google-drive', 'google-gemini', 'huggingface', 'jira', 'microsoft-calendar', 'microsoft-onedrive', 'microsoft-excel', 'microsoft-outlook', 'microsoft-teams', 'microsoft-word', 'musicbrainz', 'notion', 'open-meteo', 'openai', 'openalex', 'openlibrary', 'openstreetmap', 'slack', 'tavily', 'telegram', 'wikimedia'];
 const OAUTH = ['gmail', 'google-calendar', 'google-drive', 'microsoft-calendar', 'microsoft-onedrive', 'microsoft-outlook'];
 
 test('the adapter registry covers exactly the implemented catalog entries', () => {
@@ -789,5 +789,35 @@ test('jira validates tenant hosts strictly and builds basic-auth reads on the te
   for (const a of adapters.listActions('jira')) {
     assert.equal(a.kind, 'read_only');
     assert.equal(a.scope, 'issues.read');
+  }
+});
+
+// ---- batch 16 (27 Nov 2026): MusicBrainz keyless public read-only adapter ----
+
+test('musicbrainz builds pinned-host keyless reads and validates params', () => {
+  assert.equal(adapters.get('musicbrainz').authShape, 'public');
+  assert.ok(adapters.get('musicbrainz').setupNote.indexOf('no account or key needed') !== -1, 'the setup note is honest about keyless access');
+  const sa = adapters.buildRequest('musicbrainz', 'search_artists', { query: 'radiohead' });
+  assert.equal(sa.ok, true);
+  assert.equal(sa.request.method, 'GET');
+  assert.equal(sa.request.url, 'https://musicbrainz.org/ws/2/artist?query=radiohead&fmt=json&limit=20');
+  assert.equal(sa.request.headers['User-Agent'], 'CompanionDesk');
+  assert.equal(sa.request.urlContainsSecret, false);
+  const sr = adapters.buildRequest('musicbrainz', 'search_recordings', { query: 'creep', limit: '25' });
+  assert.equal(sr.ok, true);
+  assert.equal(sr.request.url, 'https://musicbrainz.org/ws/2/recording?query=creep&fmt=json&limit=25');
+  assert.equal(adapters.buildRequest('musicbrainz', 'search_artists', { query: 'a', limit: '26' }).reason, 'param_invalid', 'limit above the cap');
+  assert.equal(adapters.buildRequest('musicbrainz', 'search_artists', { query: 'a', limit: '0' }).reason, 'param_invalid', 'limit below 1');
+  assert.equal(adapters.buildRequest('musicbrainz', 'search_artists', { query: 'a\nb' }).reason, 'param_invalid', 'control char in query');
+  const ga = adapters.buildRequest('musicbrainz', 'get_artist', { mbid: 'a74b1b7f-71a5-4011-9441-d0b5e67127c0' });
+  assert.equal(ga.ok, true);
+  assert.equal(ga.request.url, 'https://musicbrainz.org/ws/2/artist/a74b1b7f-71a5-4011-9441-d0b5e67127c0?fmt=json');
+  assert.equal(adapters.buildRequest('musicbrainz', 'get_artist', { mbid: 'not-a-uuid' }).reason, 'param_invalid');
+  assert.equal(adapters.buildRequest('musicbrainz', 'get_artist', {}).reason, 'param_missing');
+  assert.equal(adapters.validateOnly('musicbrainz', 'search_artists', { query: 'x' }), null, 'validateOnly needs no credential');
+  assert.equal(adapters.validateOnly('musicbrainz', 'get_artist', { mbid: 'a74b1b7f-71a5-4011-9441-d0b5e67127c0' }), null, 'validateOnly needs no credential');
+  for (const a of adapters.listActions('musicbrainz')) {
+    assert.equal(a.kind, 'read_only');
+    assert.equal(a.scope, 'recordings.read');
   }
 });
