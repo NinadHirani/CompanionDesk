@@ -96,7 +96,7 @@ propose-then-confirm principle is unchanged.
     deferred. The connector lane (Ninad's 26-27 Nov decisions): the 20-entry
     free-first connector catalog with exact per-connector scopes, approval
     gates and a full lifecycle; the AI connect-request center (the agent can
-    only ASK, an explicit user click resolves it); connector connector
+    only ASK, an explicit user click resolves it); connector
     persistence so connections last until the user disconnects; and the
     service-agnostic credential store (OS credential vault, fail-closed,
     deterministic opaque references). NOTHING is connected: naming services,
