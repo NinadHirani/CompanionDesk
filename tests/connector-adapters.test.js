@@ -12,7 +12,7 @@ const assert = require('node:assert');
 const adapters = require('../src/connector-adapters.js');
 const { createConnectorCatalog } = require('../src/connectors.js');
 
-const IMPLEMENTED = ['anthropic', 'brave-search', 'arxiv', 'crossref', 'discord', 'docker-hub', 'github', 'gitlab', 'gmail', 'google-calendar', 'google-docs', 'google-sheets', 'google-drive', 'google-gemini', 'huggingface', 'internet-archive', 'jira', 'microsoft-calendar', 'microsoft-onedrive', 'microsoft-excel', 'microsoft-outlook', 'microsoft-teams', 'microsoft-word', 'musicbrainz', 'notion', 'npm', 'open-meteo', 'openai', 'openalex', 'openlibrary', 'openstreetmap', 'pypi', 'slack', 'tavily', 'telegram', 'todoist', 'wikimedia'];
+const IMPLEMENTED = ['anthropic', 'brave-search', 'arxiv', 'airtable', 'crossref', 'discord', 'docker-hub', 'github', 'gitlab', 'gmail', 'google-calendar', 'google-docs', 'google-sheets', 'google-drive', 'google-gemini', 'huggingface', 'internet-archive', 'jira', 'microsoft-calendar', 'microsoft-onedrive', 'microsoft-excel', 'microsoft-outlook', 'microsoft-teams', 'microsoft-word', 'musicbrainz', 'notion', 'npm', 'open-meteo', 'openai', 'openalex', 'openlibrary', 'openstreetmap', 'pypi', 'slack', 'tavily', 'telegram', 'todoist', 'wikimedia'];
 const OAUTH = ['gmail', 'google-calendar', 'google-drive', 'microsoft-calendar', 'microsoft-onedrive', 'microsoft-outlook'];
 
 test('the adapter registry covers exactly the implemented catalog entries', () => {
@@ -965,5 +965,34 @@ test('todoist builds bearer reads and one gated create with strict validation', 
     if (a.id === 'create_task') { assert.equal(a.scope, 'tasks.write'); continue; }
     assert.equal(a.kind, 'read_only');
     assert.equal(a.scope, 'tasks.read');
+  }
+});
+
+// ---- batch 22 (27 Nov 2026): airtable key-bound read + validated create ----
+
+test('airtable builds bearer reads and a rebuilt-fields create with strict validation', () => {
+  const lb = adapters.buildRequest('airtable', 'list_bases', {}, 'secret');
+  assert.equal(lb.ok, true);
+  assert.equal(lb.request.url, 'https://api.airtable.com/v0/meta/bases');
+  assert.equal(lb.request.headers.Authorization, 'Bearer secret');
+  const lr = adapters.buildRequest('airtable', 'list_records', { base_id: 'appabcdefghijkl12', table: 'Tasks', max_records: '100' }, 'secret');
+  assert.equal(lr.ok, true);
+  assert.equal(lr.request.url, 'https://api.airtable.com/v0/appabcdefghijkl12/Tasks?maxRecords=100');
+  const cr = adapters.buildRequest('airtable', 'create_record', { base_id: 'appabcdefghijkl12', table: 'Tasks', fields_json: '{"Name":"x","Done":false,"N":3}' }, 'secret');
+  assert.equal(cr.ok, true);
+  assert.equal(cr.request.method, 'POST');
+  assert.equal(cr.request.url, 'https://api.airtable.com/v0/appabcdefghijkl12/Tasks');
+  assert.deepEqual(JSON.parse(cr.request.body), { fields: { Name: 'x', Done: false, N: 3 } });
+  assert.equal(adapters.buildRequest('airtable', 'list_records', { base_id: 'appabcdefghijk1', table: 'T' }, 'secret').reason, 'param_invalid', 'base id must be 17 chars');
+  assert.equal(adapters.buildRequest('airtable', 'list_records', { base_id: 'appabcdefghijkl12', table: 'T', max_records: '101' }, 'secret').reason, 'param_invalid', 'maxRecords above the cap');
+  assert.equal(adapters.buildRequest('airtable', 'create_record', { base_id: 'appabcdefghijkl12', table: 'T', fields_json: 'not json' }, 'secret').reason, 'param_invalid', 'fields must parse');
+  assert.equal(adapters.buildRequest('airtable', 'create_record', { base_id: 'appabcdefghijkl12', table: 'T', fields_json: '[]' }, 'secret').reason, 'param_invalid', 'fields must be an object');
+  assert.equal(adapters.buildRequest('airtable', 'create_record', { base_id: 'appabcdefghijkl12', table: 'T', fields_json: '{"A":{"nested":true}}' }, 'secret').reason, 'param_invalid', 'values are primitives only');
+  assert.equal(adapters.buildRequest('airtable', 'create_record', { base_id: 'appabcdefghijkl12', table: 'T', fields_json: '{}' }, 'secret').reason, 'param_invalid', 'at least one field');
+  assert.equal(adapters.listActions('airtable').find((a) => a.id === 'create_record').kind, 'write');
+  for (const a of adapters.listActions('airtable')) {
+    if (a.id === 'create_record') { assert.equal(a.scope, 'records.write'); continue; }
+    assert.equal(a.kind, 'read_only');
+    assert.equal(a.scope, 'records.read');
   }
 });

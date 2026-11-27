@@ -157,6 +157,43 @@
     ],
   };
 
+  ADAPTERS.airtable = {
+    id: 'airtable', name: 'Airtable', authShape: 'token', setupRequired: false,
+    setupNote: 'create a personal access token at airtable.com/create/tokens with the data records scopes for your bases and paste it; your token is stored only in the app vault, never requested or shown in chat',
+    buildHeaders: function (token) { return { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json', 'User-Agent': 'CompanionDesk' }; },
+    actions: [
+      { id: 'list_bases', label: 'List the bases your token can reach', scope: 'records.read', kind: 'read_only',
+        params: [],
+        build: function (p, token) {
+          return { method: 'GET', url: 'https://api.airtable.com/v0/meta/bases', headers: this.buildHeaders(token), body: null };
+        } },
+      { id: 'list_records', label: 'List records in one table (capped)', scope: 'records.read', kind: 'read_only',
+        params: [{ name: 'base_id', required: true, maxLength: 17 }, { name: 'table', required: true, maxLength: 100 }, { name: 'max_records', required: false, maxLength: 4 }],
+        build: function (p, token) {
+          if (!/^[a-zA-Z0-9]{17}$/.test(p.base_id)) return { error: 'param_invalid' };
+          const max = optionalInt(p, 'max_records', 50);
+          if (max === null || max < 1 || max > 100) return { error: 'param_invalid' };
+          return { method: 'GET', url: 'https://api.airtable.com/v0/' + p.base_id + '/' + encodeURIComponent(p.table) + '?maxRecords=' + max, headers: this.buildHeaders(token), body: null };
+        } },
+      { id: 'create_record', label: 'Create one record in a table', scope: 'records.write', kind: 'write',
+        params: [{ name: 'base_id', required: true, maxLength: 17 }, { name: 'table', required: true, maxLength: 100 }, { name: 'fields_json', required: true, maxLength: 2000 }],
+        build: function (p, token) {
+          if (!/^[a-zA-Z0-9]{17}$/.test(p.base_id)) return { error: 'param_invalid' };
+          let fields;
+          try { fields = JSON.parse(p.fields_json); } catch (e) { return { error: 'param_invalid' }; }
+          if (!fields || typeof fields !== 'object' || Array.isArray(fields)) return { error: 'param_invalid' };
+          const keys = Object.keys(fields);
+          if (keys.length < 1 || keys.length > 20) return { error: 'param_invalid' };
+          for (const k of keys) {
+            if (typeof k !== 'string' || k.length > 100) return { error: 'param_invalid' };
+            const v = fields[k];
+            if (!(v === null || typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean')) return { error: 'param_invalid' };
+          }
+          return { method: 'POST', url: 'https://api.airtable.com/v0/' + p.base_id + '/' + encodeURIComponent(p.table), headers: this.buildHeaders(token), body: JSON.stringify({ fields: fields }) };
+        } },
+    ],
+  };
+
   ADAPTERS.todoist = {
     id: 'todoist', name: 'Todoist', authShape: 'token', setupRequired: false,
     setupNote: 'paste your own Todoist API token from app.todoist.com/app/settings/integrations/developer; your token is stored only in the app vault, never requested or shown in chat',

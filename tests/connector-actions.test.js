@@ -676,3 +676,23 @@ test('todoist refuses before connect, reads with a credential, and gates its cre
   const w2 = await engine.run('todoist', 'create_task', { content: 'y' }, { approvalId: a.approvalId });
   assert.equal(w2.reason, 'approval_required', 'the spent approval is dead');
 });
+
+// ---- batch 22 (27 Nov 2026): airtable credential + approval gates ----
+
+test('airtable refuses before connect, reads with a credential, and gates its create behind one approval', async () => {
+  let seen = null;
+  const transport = async (req) => { seen = req; return { status: 200, body: JSON.stringify({ bases: [] }) }; };
+  const { catalog, engine } = makeEngine(transport, 'at-tok');
+  assert.equal((await engine.run('airtable', 'list_records', { base_id: 'appabcdefghijkl12', table: 'T' })).reason, 'not_connected');
+  const c = catalog.connect('airtable', { userInitiated: true, scopes: ['records.read', 'records.write'], credentialRef: 'vault:at-cred' });
+  assert.equal(c.ok, true);
+  const r = await engine.run('airtable', 'list_bases', {});
+  assert.equal(r.ok, true);
+  assert.equal(seen.url, 'https://api.airtable.com/v0/meta/bases');
+  assert.equal(seen.headers.Authorization, 'Bearer at-tok', 'the stored credential rides the request');
+  assert.equal((await engine.run('airtable', 'create_record', { base_id: 'appabcdefghijkl12', table: 'T', fields_json: '{"Name":"x"}' })).reason, 'approval_required', 'write without an approval refuses');
+  const a = catalog.approve('airtable', 'records.write', { userInitiated: true });
+  const w = await engine.run('airtable', 'create_record', { base_id: 'appabcdefghijkl12', table: 'T', fields_json: '{"Name":"x"}' }, { approvalId: a.approvalId });
+  assert.equal(w.ok, true);
+  assert.equal((await engine.run('airtable', 'create_record', { base_id: 'appabcdefghijkl12', table: 'T', fields_json: '{"Name":"y"}' }, { approvalId: a.approvalId })).reason, 'approval_required', 'the spent approval is dead');
+});

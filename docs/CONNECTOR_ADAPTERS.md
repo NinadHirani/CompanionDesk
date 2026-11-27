@@ -509,3 +509,15 @@ Actions:
 The token is the user's own Todoist API token pasted into the app vault; requests carry only `Authorization: Bearer`, pinned to `api.todoist.com` with a CompanionDesk user agent. The write action is single-use approval gated by the policy engine (refused without an approval, dead after one use). No updates, no deletes, no completion writes: the write surface here is create-only by design.
 
 Tests: adapter build/validation (15 assertions incl. priority bounds, project-id charset, limit cap), engine gates (not_connected refusal, credential rides the read, write refused without an approval, approved write runs once, spent approval is dead). Catalog count pins: 134 still-definition-only expanded rows, 138 definition-only total.
+## Batch 22 (27 Nov 2026): Airtable
+
+Upgraded `airtable` from definition-only to a key-bound adapter (`auth: api_key`, `authShape: token`).
+
+Actions:
+- `list_bases` (read_only, `records.read`): list the bases the token can reach (metadata endpoint).
+- `list_records` (read_only, `records.read`): capped table records; base_id strictly validated as 17 alphanumeric chars, table name percent-encoded, maxRecords 1-100.
+- `create_record` (write, `records.write`): create one record from a strictly validated fields JSON. Validation rejects anything but an object of at most 20 string keys (max 100 chars) with primitive values (string/number/boolean/null); the body is rebuilt from the parsed values so nothing passes through raw.
+
+The token is the user's own Airtable personal access token pasted into the app vault; requests carry only `Authorization: Bearer`, pinned to `api.airtable.com` with a CompanionDesk user agent. The write action is single-use approval gated by the policy engine (refused without an approval, dead after one use). No updates, no deletes, no schema writes.
+
+Tests: adapter build/validation (16 assertions incl. base-id length, cap bounds, JSON shape and primitive-value rejection), engine gates (not_connected refusal, credential rides the read, write refused without an approval, approved write runs once, spent approval is dead). Catalog count pins: 133 still-definition-only expanded rows, 137 definition-only total.
