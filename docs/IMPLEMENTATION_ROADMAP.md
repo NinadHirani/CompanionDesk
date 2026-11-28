@@ -1001,6 +1001,10 @@ dedicated test files cover it. M9 software/checklist prep landed
 (67e984d): packaged-app smoke checklist + readiness pins; signing,
 notarization, public distribution, a tagged release candidate and the
 physical smoke run stay owner-gated.
+### M8 batch 53 (28 Nov 2026): read-only model.infer coverage on the local adapters
+
+Batch 53 widened read-only action coverage where a bounded survey found declared-but-unimplemented scopes on adapters that already exist in code: the only read-only-class gaps were `model.infer` on ollama and lm-studio (the other 14 uncovered scopes are write/send classes, correctly still definition-level). Ollama `generate` and LM Studio `chat` now build real local-only POSTs with mocked red-first tests; execution stays behind the connect-with-scope and consent chain, and no connection, credential or external action was involved.
+
 
 M8 batch 52 (28 Nov 2026, standing authorization): local model-server
 adapters. `ollama` and `lm-studio` - the two remaining keyless,

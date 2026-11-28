@@ -20,16 +20,20 @@ const path = require('node:path');
 const adapters = require('../src/connector-adapters.js');
 const { createConnectorCatalog } = require('../src/connectors.js');
 
-test('the local adapters exist with one read-only keyless action each', () => {
+test('the local adapters exist with their read-only keyless actions (read + infer)', () => {
+  const infer = { ollama: 'generate', 'lm-studio': 'chat' };
   for (const id of ['ollama', 'lm-studio']) {
     const a = adapters.get(id);
     assert.ok(a, id + ' adapter exists');
     assert.equal(a.authShape, 'local');
     const actions = adapters.listActions(id);
-    assert.ok(Array.isArray(actions) && actions.length === 1, id + ': exactly one action');
+    assert.ok(Array.isArray(actions) && actions.length === 2, id + ': read + infer actions');
     assert.equal(actions[0].id, 'list_models');
     assert.equal(actions[0].kind, 'read_only');
     assert.equal(actions[0].scope, 'model.read');
+    assert.equal(actions[1].id, infer[id]);
+    assert.equal(actions[1].kind, 'read_only');
+    assert.equal(actions[1].scope, 'model.infer');
   }
 });
 

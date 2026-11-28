@@ -1728,7 +1728,7 @@
   ADAPTERS.ollama = {
     id: 'ollama', name: 'Ollama (local models)', authShape: 'local', setupRequired: false,
     setupNote: 'local-only and keyless: Ollama runs on your own machine, so no key or account is needed. The action points at your local server (default http://127.0.0.1:11434, overridable to any loopback URL); nothing connects or activates automatically, and the URL guard allows loopback http only, never a remote host.',
-    buildHeaders: function () { return { 'User-Agent': 'CompanionDesk/1.0 (https://github.com/NinadHirani/CompanionDesk)', Accept: 'application/json' }; },
+    buildHeaders: function () { return { 'User-Agent': 'CompanionDesk/1.0 (https://github.com/NinadHirani/CompanionDesk)', Accept: 'application/json', 'Content-Type': 'application/json' }; },
     actions: [
       { id: 'list_models', label: 'List the models installed on your local Ollama server', scope: 'model.read', kind: 'read_only',
         params: [{ name: 'instanceUrl', required: false, maxLength: 200 }],
@@ -1737,13 +1737,20 @@
           if (base === null) return { error: 'param_invalid' };
           return { method: 'GET', url: base + '/api/tags', headers: this.buildHeaders(), body: null };
         } },
+      { id: 'generate', label: 'Run a one-shot prompt against a model on your local Ollama server', scope: 'model.infer', kind: 'read_only',
+        params: [{ name: 'model', required: true, maxLength: 80 }, { name: 'prompt', required: true, maxLength: 4000 }, { name: 'instanceUrl', required: false, maxLength: 200 }],
+        build: function (p) {
+          const base = validLocalBase(p.instanceUrl || 'http://127.0.0.1:11434');
+          if (base === null) return { error: 'param_invalid' };
+          return { method: 'POST', url: base + '/api/generate', headers: this.buildHeaders(), body: JSON.stringify({ model: p.model, prompt: p.prompt, stream: false }) };
+        } },
     ],
   };
 
   ADAPTERS['lm-studio'] = {
     id: 'lm-studio', name: 'LM Studio', authShape: 'local', setupRequired: false,
     setupNote: 'local-only and keyless: LM Studio runs on your own machine, so no key or account is needed. The action points at your local server (default http://127.0.0.1:1234, overridable to any loopback URL); nothing connects or activates automatically, and the URL guard allows loopback http only, never a remote host.',
-    buildHeaders: function () { return { 'User-Agent': 'CompanionDesk/1.0 (https://github.com/NinadHirani/CompanionDesk)', Accept: 'application/json' }; },
+    buildHeaders: function () { return { 'User-Agent': 'CompanionDesk/1.0 (https://github.com/NinadHirani/CompanionDesk)', Accept: 'application/json', 'Content-Type': 'application/json' }; },
     actions: [
       { id: 'list_models', label: 'List the models loaded in your local LM Studio server', scope: 'model.read', kind: 'read_only',
         params: [{ name: 'instanceUrl', required: false, maxLength: 200 }],
@@ -1751,6 +1758,13 @@
           const base = validLocalBase(p.instanceUrl || 'http://127.0.0.1:1234');
           if (base === null) return { error: 'param_invalid' };
           return { method: 'GET', url: base + '/v1/models', headers: this.buildHeaders(), body: null };
+        } },
+      { id: 'chat', label: 'Run a one-shot chat prompt against a model loaded in your local LM Studio server', scope: 'model.infer', kind: 'read_only',
+        params: [{ name: 'model', required: true, maxLength: 80 }, { name: 'prompt', required: true, maxLength: 4000 }, { name: 'instanceUrl', required: false, maxLength: 200 }],
+        build: function (p) {
+          const base = validLocalBase(p.instanceUrl || 'http://127.0.0.1:1234');
+          if (base === null) return { error: 'param_invalid' };
+          return { method: 'POST', url: base + '/v1/chat/completions', headers: this.buildHeaders(), body: JSON.stringify({ model: p.model, messages: [{ role: 'user', content: p.prompt }], stream: false }) };
         } },
     ],
   };

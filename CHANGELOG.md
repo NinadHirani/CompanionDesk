@@ -1,5 +1,11 @@
 # Changelog
 
+## M8 batch 53 (28 Nov 2026) - local adapter inference coverage
+
+- The two local model-server adapters (ollama, lm-studio) now implement the read-only `model.infer` scope their catalog rows already declared: `ollama.generate` (POST /api/generate) and `lm-studio.chat` (POST /v1/chat/completions, OpenAI-compatible shape).
+- Both stay local-only: loopback URL guard unchanged, no credential rides the request, prompt capped at 4000 chars, stream pinned to false. Consent chain is unchanged (connect with model.infer granted, then the normal gate chain).
+- Red-first tests in tests/connector-local-inference.test.js (request shape, custom loopback override, remote-host refusal, strict param validation); the batch-52 action-count pin updated to two actions per adapter.
+
 ## 28 Nov 2026 (evening)
 
 - M8: the RSS feeds connector (the catalog's last keyless definition-only entry) now has a real read-only adapter: one `read_feed` action, GET on a user-supplied feed URL behind a strict guard (https only, public hostname, no localhost/IP literals/ports/embedded credentials). Execution still requires an explicit connect with the feed.read scope granted; nothing was connected.
