@@ -23,6 +23,12 @@ function macSigningFromBuildConfig(identity) {
   return identity === null || identity === undefined ? 'unsigned' : 'developer-id';
 }
 
+// The updater is wired for the three desktop Electron platforms only.
+// Anything else (an Android/Capacitor shell, an unknown platform) must
+// fail closed: it must never reach the Windows/Linux branch and be
+// offered an in-app auto-update that cannot work there.
+const SUPPORTED_UPDATE_PLATFORMS = ['darwin', 'win32', 'linux'];
+
 function modeFor({ platform, isPackaged, macSigning }) {
   if (!isPackaged) {
     return {
@@ -56,6 +62,16 @@ function modeFor({ platform, isPackaged, macSigning }) {
         'New versions arrive as a download you install by hand.',
     };
   }
+  if (!SUPPORTED_UPDATE_PLATFORMS.includes(platform)) {
+    return {
+      mode: 'disabled',
+      canCheck: false,
+      canDownload: false,
+      canInstallInApp: false,
+      openDownloadPage: false,
+      reason: 'Updates are not wired for this platform yet. New versions arrive from the project releases page.',
+    };
+  }
   // Windows (NSIS) and Linux (AppImage) verify update integrity with the
   // sha512 checksum in the update feed; an in-app install is fine unsigned.
   return {
@@ -86,15 +102,24 @@ function hasPrerelease(version) {
 // --- semver comparison (the subset electron-updater needs, spelled out so the
 // --- sanity check in the UI is testable without electron-updater) ---
 
+// electron-updater validates feed versions with the semver package, so
+// this parser must accept exactly what semver accepts. semver rejects
+// leading zeros in the core numbers and in numeric prerelease
+// identifiers, and empty identifiers; accepting any of those here could
+// declare an update "available" that the updater can never install.
+const PRERELEASE_ID = /^(0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*)$/;
+
 function parseVersion(input) {
   if (typeof input !== 'string') return null;
-  const m = /^(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?$/.exec(input.trim());
+  const m = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([0-9A-Za-z.-]+))?$/.exec(input.trim());
   if (!m) return null;
+  const pre = m[4] === undefined ? [] : m[4].split('.');
+  if (pre.some((id) => !PRERELEASE_ID.test(id))) return null;
   return {
     major: Number(m[1]),
     minor: Number(m[2]),
     patch: Number(m[3]),
-    pre: m[4] === undefined ? [] : m[4].split('.'),
+    pre,
   };
 }
 

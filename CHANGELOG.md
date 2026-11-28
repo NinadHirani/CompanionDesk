@@ -1,5 +1,12 @@
 # Changelog
 
+## M8 batch 58 (28 Nov 2026) - update-policy hardening: semver-faithful parsing and a platform fail-closed gate
+
+- Two real contract gaps in src/update-policy.js, both caught red-first by tests/update-policy-version-hardening.test.js:
+  1. parseVersion accepted semver-invalid versions that electron-updater's own semver parser rejects (leading zeros in core numbers '1.02.3', empty prerelease identifiers '1.0.0-alpha.', leading-zero numeric prerelease identifiers '1.0.0-alpha.01'), so the policy could declare an update "available" that the updater can never install. The parser now accepts exactly what semver accepts; comparisons with an unparseable side return null instead of a verdict. All previously pinned valid-version behaviour passes unchanged.
+  2. modeFor had no platform whitelist: any non-darwin/win32/linux platform (an Android/Capacitor shell, an unknown platform) fell through to the Windows/Linux branch and was offered mode auto with in-app install, which cannot work there. Packaged builds on unsupported platforms now fail closed (mode disabled, no check, no install, reason named); the three wired platforms are pinned unaffected.
+- Pure module, test-only hardening: no Electron, no network, no credentials, nothing released.
+
 ## M8 batch 57 (28 Nov 2026) - release coherence: stable tag/version agreement and tag-anchored release notes
 
 - Two real defects in scripts/build-dist.js, both caught red-first by tests/build-dist-release-coherence.test.js:
