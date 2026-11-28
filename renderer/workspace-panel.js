@@ -60,6 +60,7 @@
     const i = el('input');
     i.type = 'password';
     i.setAttribute('placeholder', placeholder);
+    i.setAttribute('aria-label', placeholder);
     i.setAttribute('autocomplete', 'off');
     return i;
   }
