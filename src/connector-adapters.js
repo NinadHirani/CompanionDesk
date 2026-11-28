@@ -157,6 +157,61 @@
     ],
   };
 
+  ADAPTERS.tripadvisor = {
+    id: 'tripadvisor', name: 'Tripadvisor', authShape: 'token', setupRequired: false,
+    setupNote: 'paste a Tripadvisor Terra API key from tripadvisor.com/developers; it is stored only in the app vault, never requested or shown in chat',
+    buildHeaders: function (token) {
+      return { 'X-API-Key': token };
+    },
+    actions: [
+      { id: 'search_locations', label: 'Search Tripadvisor locations (capped)', scope: 'locations.read', kind: 'read_only',
+        params: [{ name: 'query', required: true, maxLength: 500 }, { name: 'category', required: false, maxLength: 12 }, { name: 'size', required: false, maxLength: 2 }],
+        build: function (p, token) {
+          if (!p.query) return { error: 'param_missing' };
+          if (p.query.length > 500) return { error: 'param_invalid' };
+          if (p.category !== undefined && p.category !== '' && ['RESTAURANT', 'ATTRACTION', 'HOTEL'].indexOf(String(p.category).toUpperCase()) < 0) return { error: 'param_invalid' };
+          let n = '20';
+          if (p.size !== undefined && p.size !== '') {
+            if (!/^\d+$/.test(String(p.size)) || parseInt(p.size, 10) < 1 || parseInt(p.size, 10) > 20) return { error: 'param_invalid' };
+            n = String(p.size);
+          }
+          let q = 'https://terra.tripadvisor.com/api/locations/search?query=' + encodeURIComponent(p.query) + '&size=' + n;
+          if (p.category) q += '&category=' + encodeURIComponent(String(p.category).toUpperCase());
+          return { method: 'GET', url: q, headers: this.buildHeaders(token), body: null, urlContainsSecret: false };
+        } },
+      { id: 'get_location_details', label: 'Read a Tripadvisor location (capped)', scope: 'locations.read', kind: 'read_only',
+        params: [{ name: 'id', required: true, maxLength: 10 }],
+        build: function (p, token) {
+          if (!p.id) return { error: 'param_missing' };
+          if (!/^\d+$/.test(String(p.id)) || parseInt(p.id, 10) < 1 || parseInt(p.id, 10) > 2147483647) return { error: 'param_invalid' };
+          return { method: 'GET', url: 'https://terra.tripadvisor.com/api/locations/' + p.id, headers: this.buildHeaders(token), body: null, urlContainsSecret: false };
+        } },
+    ],
+  };
+
+  ADAPTERS.datadog = {
+    id: 'datadog', name: 'Datadog', authShape: 'token', setupRequired: false,
+    setupNote: 'paste your Datadog credentials as api_key:application_key from app.datadoghq.com; they are stored only in the app vault, never requested or shown in chat',
+    buildHeaders: function (token) {
+      const sep = token.indexOf(':');
+      const apiKey = sep > 0 ? token.slice(0, sep) : '';
+      const appKey = sep > 0 ? token.slice(sep + 1) : token;
+      return { 'DD-API-KEY': apiKey, 'DD-APPLICATION-KEY': appKey };
+    },
+    actions: [
+      { id: 'list_monitors', label: 'List Datadog monitors (capped)', scope: 'metrics.read', kind: 'read_only',
+        params: [{ name: 'page_size', required: false, maxLength: 3 }],
+        build: function (p, token) {
+          let n = '25';
+          if (p.page_size !== undefined && p.page_size !== '') {
+            if (!/^\d+$/.test(String(p.page_size)) || parseInt(p.page_size, 10) < 1 || parseInt(p.page_size, 10) > 100) return { error: 'param_invalid' };
+            n = String(p.page_size);
+          }
+          return { method: 'GET', url: 'https://api.datadoghq.com/api/v1/monitor?page_size=' + n, headers: this.buildHeaders(token), body: null, urlContainsSecret: false };
+        } },
+    ],
+  };
+
   ADAPTERS['better-stack'] = {
     id: 'better-stack', name: 'Better Stack', authShape: 'token', setupRequired: false,
     setupNote: 'paste a Better Stack API token from app.betterstack.com; it is stored only in the app vault, never requested or shown in chat',

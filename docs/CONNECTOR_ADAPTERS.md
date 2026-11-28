@@ -818,3 +818,14 @@ Actions:
 The credentials are the user's own keys pasted into the app vault.
 
 Tests: adapter build/validation (exact URLs, caps, raw-token header, read-only sweeps), engine gates (each refuses before connect; better-stack's credential rides the Bearer header, backblaze-b2's rides the raw token). Catalog count pins: 85 still-definition-only expanded rows, 89 definition-only total.
+## Batch 49 (28 Nov 2026): Tripadvisor, Datadog
+
+Upgraded two connectors to key-bound READ-ONLY adapters (each `auth: api_key`, `authShape: token`).
+
+Actions:
+- Tripadvisor (pinned `terra.tripadvisor.com/api`, the Terra successor to the legacy Content API sunset 2026-08-31): `search_locations` (query required up to 500 chars, size 1-20 default 20, category RESTAURANT/ATTRACTION/HOTEL uppercased) and `get_location_details` (integer id), keyed by the `X-API-Key` header. No reviews, photos beyond search, or writes.
+- Datadog (pinned `api.datadoghq.com`, the US site): `list_monitors` (page_size 1-100 default 25, credentials split from a pasted `api_key:application_key` pair into `DD-API-KEY` + `DD-APPLICATION-KEY` headers). No monitors are changed or written.
+
+The credentials are the user's own keys pasted into the app vault.
+
+Tests: adapter build/validation (exact URLs, caps, category whitelist, integer id bounds, dual-key headers, read-only sweeps), engine gates (each refuses before connect; tripadvisor's credential rides X-API-Key, datadog's rides the DD-API-KEY/DD-APPLICATION-KEY pair). Catalog count pins: 83 still-definition-only expanded rows, 87 definition-only total.

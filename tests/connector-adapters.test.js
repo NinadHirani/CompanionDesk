@@ -12,7 +12,7 @@ const assert = require('node:assert');
 const adapters = require('../src/connector-adapters.js');
 const { createConnectorCatalog } = require('../src/connectors.js');
 
-const IMPLEMENTED = ['anthropic', 'brave-search', 'arxiv', 'airtable', 'coda', 'circleci', 'cloudflare', 'crossref', 'digitalocean', 'discord', 'docker-hub', 'github', 'gitlab', 'gmail', 'heroku', 'google-calendar', 'google-docs', 'google-sheets', 'google-drive', 'google-gemini', 'huggingface', 'internet-archive', 'jira', 'mailgun', 'postmark', 'sendgrid', 'linear', 'microsoft-calendar', 'microsoft-onedrive', 'microsoft-excel', 'microsoft-outlook', 'microsoft-teams', 'microsoft-word', 'musicbrainz', 'notion', 'npm', 'open-meteo', 'openai', 'openalex', 'openlibrary', 'openstreetmap', 'pypi', 'render', 'slack', 'supabase', 'sentry', 'pagerduty', 'tmdb', 'unsplash', 'new-relic', 'pinecone', 'pexels', 'kaggle', 'stripe', 'groq', 'cohere', 'xai', 'mistral', 'openrouter', 'replicate', 'together-ai', 'stability-ai', 'elevenlabs', 'google-maps', 'mapbox', 'deepgram', 'assemblyai', 'plausible', 'amplitude', 'mixpanel', 'posthog', 'flickr', 'pipedrive', 'razorpay', 'zerodha-kite', 'upstox', 'udemy', 'trakt', 'hetzner', 'better-stack', 'backblaze-b2', 'tavily', 'telegram', 'trello', 'todoist', 'wikimedia'];
+const IMPLEMENTED = ['anthropic', 'brave-search', 'arxiv', 'airtable', 'coda', 'circleci', 'cloudflare', 'crossref', 'digitalocean', 'discord', 'docker-hub', 'github', 'gitlab', 'gmail', 'heroku', 'google-calendar', 'google-docs', 'google-sheets', 'google-drive', 'google-gemini', 'huggingface', 'internet-archive', 'jira', 'mailgun', 'postmark', 'sendgrid', 'linear', 'microsoft-calendar', 'microsoft-onedrive', 'microsoft-excel', 'microsoft-outlook', 'microsoft-teams', 'microsoft-word', 'musicbrainz', 'notion', 'npm', 'open-meteo', 'openai', 'openalex', 'openlibrary', 'openstreetmap', 'pypi', 'render', 'slack', 'supabase', 'sentry', 'pagerduty', 'tmdb', 'unsplash', 'new-relic', 'pinecone', 'pexels', 'kaggle', 'stripe', 'groq', 'cohere', 'xai', 'mistral', 'openrouter', 'replicate', 'together-ai', 'stability-ai', 'elevenlabs', 'google-maps', 'mapbox', 'deepgram', 'assemblyai', 'plausible', 'amplitude', 'mixpanel', 'posthog', 'flickr', 'pipedrive', 'razorpay', 'zerodha-kite', 'upstox', 'udemy', 'trakt', 'hetzner', 'better-stack', 'backblaze-b2', 'tripadvisor', 'datadog', 'tavily', 'telegram', 'trello', 'todoist', 'wikimedia'];
 const OAUTH = ['gmail', 'google-calendar', 'google-drive', 'microsoft-calendar', 'microsoft-onedrive', 'microsoft-outlook'];
 
 test('the adapter registry covers exactly the implemented catalog entries', () => {
@@ -1776,5 +1776,46 @@ test('backblaze-b2 builds the raw-token bucket list read and never uploads or de
   for (const a of adapters.listActions('backblaze-b2')) {
     assert.equal(a.kind, 'read_only', 'backblaze-b2 is read-only');
     assert.equal(a.scope, 'objects.read');
+  }
+});
+
+// ---- batch 49 (28 Nov 2026): tripadvisor + datadog reads ----
+
+test('tripadvisor builds Terra X-API-Key reads with strict validation and no writes', () => {
+  const r = adapters.buildRequest('tripadvisor', 'search_locations', { query: 'qiskit labs' }, 'ta-key');
+  assert.equal(r.ok, true);
+  assert.equal(r.request.url, 'https://terra.tripadvisor.com/api/locations/search?query=qiskit%20labs&size=20');
+  assert.equal(r.request.headers['X-API-Key'], 'ta-key');
+  const cat = adapters.buildRequest('tripadvisor', 'search_locations', { query: 'q', category: 'hotel' }, 'ta-key');
+  assert.equal(cat.ok, true);
+  assert.ok(cat.request.url.indexOf('category=HOTEL') >= 0, 'category is uppercased');
+  assert.equal(adapters.buildRequest('tripadvisor', 'search_locations', {}, 'ta-key').reason, 'param_missing', 'query required');
+  assert.equal(adapters.buildRequest('tripadvisor', 'search_locations', { query: 'x'.repeat(501) }, 'ta-key').reason, 'param_invalid', 'query above the cap');
+  assert.equal(adapters.buildRequest('tripadvisor', 'search_locations', { query: 'q', size: '21' }, 'ta-key').reason, 'param_invalid', 'size above the cap');
+  assert.equal(adapters.buildRequest('tripadvisor', 'search_locations', { query: 'q', category: 'casino' }, 'ta-key').reason, 'param_invalid', 'unknown category');
+  const det = adapters.buildRequest('tripadvisor', 'get_location_details', { id: '104675' }, 'ta-key');
+  assert.equal(det.ok, true);
+  assert.equal(det.request.url, 'https://terra.tripadvisor.com/api/locations/104675');
+  assert.equal(adapters.buildRequest('tripadvisor', 'get_location_details', {}, 'ta-key').reason, 'param_missing', 'id required');
+  assert.equal(adapters.buildRequest('tripadvisor', 'get_location_details', { id: 'abc' }, 'ta-key').reason, 'param_invalid', 'id must be an integer');
+  for (const a of adapters.listActions('tripadvisor')) {
+    assert.equal(a.kind, 'read_only', 'tripadvisor is read-only');
+    assert.equal(a.scope, 'locations.read');
+  }
+});
+
+test('datadog builds dual-key monitor reads and never writes monitors', () => {
+  const r = adapters.buildRequest('datadog', 'list_monitors', {}, 'api:app');
+  assert.equal(r.ok, true);
+  assert.equal(r.request.url, 'https://api.datadoghq.com/api/v1/monitor?page_size=25');
+  assert.equal(r.request.headers['DD-API-KEY'], 'api');
+  assert.equal(r.request.headers['DD-APPLICATION-KEY'], 'app');
+  const capped = adapters.buildRequest('datadog', 'list_monitors', { page_size: '100' }, 'api:app');
+  assert.equal(capped.ok, true);
+  assert.ok(capped.request.url.indexOf('page_size=100') >= 0, 'page_size rides the URL');
+  assert.equal(adapters.buildRequest('datadog', 'list_monitors', { page_size: '101' }, 'api:app').reason, 'param_invalid', 'page_size above the cap');
+  for (const a of adapters.listActions('datadog')) {
+    assert.equal(a.kind, 'read_only', 'datadog is read-only');
+    assert.equal(a.scope, 'metrics.read');
   }
 });

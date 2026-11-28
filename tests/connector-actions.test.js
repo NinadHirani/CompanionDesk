@@ -1153,3 +1153,23 @@ test('better-stack and backblaze-b2 refuse before connect and ride their credent
   assert.equal(r.ok, true, 'backblaze-b2 reads with a credential');
   assert.equal(seen.headers.Authorization, 'ops-tok', 'backblaze-b2 credential rides the raw-token header');
 });
+
+// ---- batch 49 (28 Nov 2026): tripadvisor + datadog credential gates ----
+
+test('tripadvisor and datadog refuse before connect and ride their credentials on reads', async () => {
+  let seen = null;
+  const transport = async (req) => { seen = req; return { status: 200, body: JSON.stringify({}) }; };
+  const { catalog, engine } = makeEngine(transport, 'ops-pair');
+  assert.equal((await engine.run('tripadvisor', 'search_locations', { query: 'qiskit labs' })).reason, 'not_connected', 'tripadvisor refuses before connect');
+  assert.equal(catalog.connect('tripadvisor', { userInitiated: true, scopes: ['locations.read'], credentialRef: 'vault:tripadvisor-cred' }).ok, true, 'tripadvisor connects');
+  let r = await engine.run('tripadvisor', 'search_locations', { query: 'qiskit labs' });
+  assert.equal(r.ok, true, 'tripadvisor reads with a credential');
+  assert.equal(seen.headers['X-API-Key'], 'ops-pair', 'tripadvisor credential rides the X-API-Key header');
+
+  assert.equal((await engine.run('datadog', 'list_monitors', {})).reason, 'not_connected', 'datadog refuses before connect');
+  assert.equal(catalog.connect('datadog', { userInitiated: true, scopes: ['metrics.read'], credentialRef: 'vault:datadog-cred' }).ok, true, 'datadog connects');
+  r = await engine.run('datadog', 'list_monitors', {});
+  assert.equal(r.ok, true, 'datadog reads with a credential');
+  assert.equal(seen.headers['DD-API-KEY'], '', 'datadog api-key part rides the DD-API-KEY header');
+  assert.equal(seen.headers['DD-APPLICATION-KEY'], 'ops-pair', 'datadog application-key part rides the DD-APPLICATION-KEY header');
+});
