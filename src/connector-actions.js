@@ -183,7 +183,7 @@
       };
     }
 
-    async function run(id, actionId, params, runOpts) {
+    async function runInner(id, actionId, params, runOpts) {
       const entry = catalog.describe(id);
       if (!entry) return { ok: false, reason: 'unknown_connector' };
       const adapter = adapters.get(id);
@@ -246,6 +246,23 @@
         }
       }
       return out;
+    }
+
+    // The engine's contract everywhere else is a structured, fail-closed
+    // result. This outer boundary keeps that contract when an injected
+    // dependency throws (a vault hiccup in the credential reader, a
+    // malformed adapter's validateOnly or refreshRequest): the caller
+    // gets a refusal instead of an unhandled rejection crashing the
+    // wired IPC handler.
+    async function run(id, actionId, params, runOpts) {
+      try {
+        return await runInner(id, actionId, params, runOpts);
+      } catch (e) {
+        try {
+          pushAudit({ ts: clock(), action: 'connector_action', id: id, actionId: actionId, status: 'engine_error' });
+        } catch (e2) { /* the audit log must never be the second failure */ }
+        return { ok: false, reason: 'engine_error' };
+      }
     }
 
     function audit() { return auditLog.slice(); }

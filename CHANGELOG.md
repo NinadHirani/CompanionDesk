@@ -1,5 +1,11 @@
 # Changelog
 
+## M8 batch 59 (28 Nov 2026) - connector-engine resilience: run() never rejects
+
+- One real resilience gap in src/connector-actions.js, caught red-first by tests/connector-engine-resilience.test.js: run()'s contract everywhere else is a structured fail-closed refusal, but it had no outer exception boundary. A throwing injected dependency (a vault hiccup in the credential reader, a malformed adapter's validateOnly or refreshRequest) escaped run() as an unhandled rejection, which in the wired main process turns one connector's bad day into a crashed IPC handler.
+- Fixed with an outer boundary: the gate chain moved to runInner and run() wraps it, returning { ok: false, reason: 'engine_error' } with an audit entry on any escape. All three escape paths are pinned (credential reader, adapter validation, refreshRequest builder); the existing 78 connector/tokens tests pass unchanged.
+- Test-only hardening of pure modules: no network, no credentials, no external actions.
+
 ## M8 batch 58 (28 Nov 2026) - update-policy hardening: semver-faithful parsing and a platform fail-closed gate
 
 - Two real contract gaps in src/update-policy.js, both caught red-first by tests/update-policy-version-hardening.test.js:
