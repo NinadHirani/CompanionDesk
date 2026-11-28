@@ -1077,3 +1077,22 @@ test('flickr and pipedrive refuse before connect and ride their credentials on r
     assert.ok(seen.url.indexOf('url-key-tok') >= 0, id + ' credential rides the URL');
   }
 });
+
+// ---- batch 45 (28 Nov 2026): razorpay + zerodha-kite credential gates ----
+
+test('razorpay and zerodha-kite refuse before connect and ride their credentials on reads', async () => {
+  let seen = null;
+  const transport = async (req) => { seen = req; return { status: 200, body: JSON.stringify({}) }; };
+  const { catalog, engine } = makeEngine(transport, 'fin-tok');
+  assert.equal((await engine.run('razorpay', 'list_payments', { count: '50' })).reason, 'not_connected', 'razorpay refuses before connect');
+  assert.equal(catalog.connect('razorpay', { userInitiated: true, scopes: ['payments.read'], credentialRef: 'vault:razorpay-cred' }).ok, true, 'razorpay connects');
+  let r = await engine.run('razorpay', 'list_payments', { count: '50' });
+  assert.equal(r.ok, true, 'razorpay reads with a credential');
+  assert.equal(seen.headers.Authorization, 'Basic ' + Buffer.from(':fin-tok').toString('base64'), 'razorpay credential rides as the computed Basic value');
+
+  assert.equal((await engine.run('zerodha-kite', 'get_user_profile', {})).reason, 'not_connected', 'zerodha-kite refuses before connect');
+  assert.equal(catalog.connect('zerodha-kite', { userInitiated: true, scopes: ['portfolio.read'], credentialRef: 'vault:zerodha-kite-cred' }).ok, true, 'zerodha-kite connects');
+  r = await engine.run('zerodha-kite', 'get_user_profile', {});
+  assert.equal(r.ok, true, 'zerodha-kite reads with a credential');
+  assert.equal(seen.headers.Authorization, 'Token fin-tok', 'zerodha-kite credential rides the Token header');
+});

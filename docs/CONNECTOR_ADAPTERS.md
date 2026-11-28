@@ -774,3 +774,14 @@ Actions:
 The credentials are the user's own keys pasted into the app vault.
 
 Tests: adapter build/validation (required params, caps, exact built URLs, read-only sweeps), engine gates (each refuses before connect and its credential rides the request URL). Catalog count pins: 93 still-definition-only expanded rows, 97 definition-only total.
+## Batch 45 (28 Nov 2026): Razorpay, Zerodha Kite
+
+Upgraded two finance connectors to key-bound READ-ONLY adapters (each `auth: api_key`, `authShape: token`).
+
+Actions:
+- Razorpay (pinned `api.razorpay.com/v1`): `list_payments` (count capped 1-100 default 25, Basic auth computed from a pasted `key_id:key_secret` pair). No captures, refunds, orders or writes.
+- Zerodha Kite (pinned `api.kite.trade`): `get_user_profile` (Authorization `Token <api_key:access_token>`, `X-Kite-Version: 3`). `orders.write` is never implemented in this build.
+
+The credentials are the user's own keys pasted into the app vault.
+
+Tests: adapter build/validation (exact URLs, count bounds, computed-Basic header asserted against the expected value, read-only sweeps), engine gates (each refuses before connect; razorpay's credential rides as the computed Basic value, zerodha-kite's rides the Token header). Catalog count pins: 91 still-definition-only expanded rows, 95 definition-only total.

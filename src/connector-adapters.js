@@ -157,6 +157,45 @@
     ],
   };
 
+  ADAPTERS.razorpay = {
+    id: 'razorpay', name: 'Razorpay', authShape: 'token', setupRequired: false,
+    setupNote: 'paste your Razorpay credentials as key_id:key_secret from the dashboard; they are stored only in the app vault, never requested or shown in chat',
+    buildHeaders: function (token) {
+      const sep = token.indexOf(':');
+      const id = sep > 0 ? token.slice(0, sep) : '';
+      const secret = sep > 0 ? token.slice(sep + 1) : token;
+      const basic = Buffer.from(id + ':' + secret).toString('base64');
+      return { Authorization: 'Basic ' + basic };
+    },
+    actions: [
+      { id: 'list_payments', label: 'List Razorpay payments (capped)', scope: 'payments.read', kind: 'read_only',
+        params: [{ name: 'count', required: false, maxLength: 3 }],
+        build: function (p, token) {
+          let n = '25';
+          if (p.count !== undefined && p.count !== '') {
+            if (!/^\d+$/.test(String(p.count)) || parseInt(p.count, 10) < 1 || parseInt(p.count, 10) > 100) return { error: 'param_invalid' };
+            n = String(p.count);
+          }
+          return { method: 'GET', url: 'https://api.razorpay.com/v1/payments?count=' + n, headers: this.buildHeaders(token), body: null, urlContainsSecret: false };
+        } },
+    ],
+  };
+
+  ADAPTERS['zerodha-kite'] = {
+    id: 'zerodha-kite', name: 'Zerodha Kite', authShape: 'token', setupRequired: false,
+    setupNote: 'paste your Kite Connect credentials as api_key:access_token; they are stored only in the app vault, never requested or shown in chat',
+    buildHeaders: function (token) {
+      return { Authorization: 'Token ' + token, 'X-Kite-Version': '3' };
+    },
+    actions: [
+      { id: 'get_user_profile', label: 'Read the Kite user profile (capped)', scope: 'portfolio.read', kind: 'read_only',
+        params: [],
+        build: function (p, token) {
+          return { method: 'GET', url: 'https://api.kite.trade/user/profile', headers: this.buildHeaders(token), body: null, urlContainsSecret: false };
+        } },
+    ],
+  };
+
   ADAPTERS.flickr = {
     id: 'flickr', name: 'Flickr', authShape: 'token', setupRequired: false,
     setupNote: 'paste a Flickr API key from the App Garden; it is stored only in the app vault, never requested or shown in chat',

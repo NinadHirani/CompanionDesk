@@ -12,7 +12,7 @@ const assert = require('node:assert');
 const adapters = require('../src/connector-adapters.js');
 const { createConnectorCatalog } = require('../src/connectors.js');
 
-const IMPLEMENTED = ['anthropic', 'brave-search', 'arxiv', 'airtable', 'coda', 'circleci', 'cloudflare', 'crossref', 'digitalocean', 'discord', 'docker-hub', 'github', 'gitlab', 'gmail', 'heroku', 'google-calendar', 'google-docs', 'google-sheets', 'google-drive', 'google-gemini', 'huggingface', 'internet-archive', 'jira', 'mailgun', 'postmark', 'sendgrid', 'linear', 'microsoft-calendar', 'microsoft-onedrive', 'microsoft-excel', 'microsoft-outlook', 'microsoft-teams', 'microsoft-word', 'musicbrainz', 'notion', 'npm', 'open-meteo', 'openai', 'openalex', 'openlibrary', 'openstreetmap', 'pypi', 'render', 'slack', 'supabase', 'sentry', 'pagerduty', 'tmdb', 'unsplash', 'new-relic', 'pinecone', 'pexels', 'kaggle', 'stripe', 'groq', 'cohere', 'xai', 'mistral', 'openrouter', 'replicate', 'together-ai', 'stability-ai', 'elevenlabs', 'google-maps', 'mapbox', 'deepgram', 'assemblyai', 'plausible', 'amplitude', 'mixpanel', 'posthog', 'flickr', 'pipedrive', 'tavily', 'telegram', 'trello', 'todoist', 'wikimedia'];
+const IMPLEMENTED = ['anthropic', 'brave-search', 'arxiv', 'airtable', 'coda', 'circleci', 'cloudflare', 'crossref', 'digitalocean', 'discord', 'docker-hub', 'github', 'gitlab', 'gmail', 'heroku', 'google-calendar', 'google-docs', 'google-sheets', 'google-drive', 'google-gemini', 'huggingface', 'internet-archive', 'jira', 'mailgun', 'postmark', 'sendgrid', 'linear', 'microsoft-calendar', 'microsoft-onedrive', 'microsoft-excel', 'microsoft-outlook', 'microsoft-teams', 'microsoft-word', 'musicbrainz', 'notion', 'npm', 'open-meteo', 'openai', 'openalex', 'openlibrary', 'openstreetmap', 'pypi', 'render', 'slack', 'supabase', 'sentry', 'pagerduty', 'tmdb', 'unsplash', 'new-relic', 'pinecone', 'pexels', 'kaggle', 'stripe', 'groq', 'cohere', 'xai', 'mistral', 'openrouter', 'replicate', 'together-ai', 'stability-ai', 'elevenlabs', 'google-maps', 'mapbox', 'deepgram', 'assemblyai', 'plausible', 'amplitude', 'mixpanel', 'posthog', 'flickr', 'pipedrive', 'razorpay', 'zerodha-kite', 'tavily', 'telegram', 'trello', 'todoist', 'wikimedia'];
 const OAUTH = ['gmail', 'google-calendar', 'google-drive', 'microsoft-calendar', 'microsoft-onedrive', 'microsoft-outlook'];
 
 test('the adapter registry covers exactly the implemented catalog entries', () => {
@@ -1649,5 +1649,36 @@ test('pipedrive builds keyed deal-list reads with strict limit validation and no
   for (const a of adapters.listActions('pipedrive')) {
     assert.equal(a.kind, 'read_only', 'pipedrive is read-only');
     assert.equal(a.scope, 'deals.read');
+  }
+});
+
+// ---- batch 45 (28 Nov 2026): razorpay + zerodha-kite credential reads ----
+
+test('razorpay builds Basic payment reads from a key_id:key_secret pair and never writes', () => {
+  const r = adapters.buildRequest('razorpay', 'list_payments', {}, 'rzp_test_x:rzp_secret_abc');
+  assert.equal(r.ok, true);
+  assert.equal(r.request.url, 'https://api.razorpay.com/v1/payments?count=25');
+  assert.equal(r.request.headers.Authorization, 'Basic ' + Buffer.from('rzp_test_x:rzp_secret_abc').toString('base64'));
+  const capped = adapters.buildRequest('razorpay', 'list_payments', { count: '50' }, 'rzp_test_x:rzp_secret_abc');
+  assert.equal(capped.ok, true);
+  assert.ok(capped.request.url.indexOf('count=50') >= 0, 'count rides the URL');
+  assert.equal(adapters.buildRequest('razorpay', 'list_payments', { count: '101' }, 'k:s').reason, 'param_invalid', 'count above the cap');
+  assert.equal(adapters.buildRequest('razorpay', 'list_payments', { count: '0' }, 'k:s').reason, 'param_invalid', 'count below 1');
+  for (const a of adapters.listActions('razorpay')) {
+    assert.equal(a.kind, 'read_only', 'razorpay is read-only');
+    assert.equal(a.scope, 'payments.read');
+  }
+});
+
+test('zerodha-kite builds Token profile reads and never writes orders', () => {
+  const r = adapters.buildRequest('zerodha-kite', 'get_user_profile', {}, 'kite-api-key:kite-access-tok');
+  assert.equal(r.ok, true);
+  assert.equal(r.request.url, 'https://api.kite.trade/user/profile');
+  assert.equal(r.request.headers.Authorization, 'Token kite-api-key:kite-access-tok');
+  assert.equal(r.request.headers['X-Kite-Version'], '3');
+  assert.equal(adapters.listActions('zerodha-kite').length, 1, 'only the profile read is implemented');
+  for (const a of adapters.listActions('zerodha-kite')) {
+    assert.equal(a.kind, 'read_only', 'zerodha-kite is read-only');
+    assert.equal(a.scope, 'portfolio.read');
   }
 });
