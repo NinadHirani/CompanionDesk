@@ -22,17 +22,21 @@ const PLATFORMS = {
   '--linux': Platform.LINUX,
 };
 
-function releaseNotesFromGit() {
+function releaseNotesFromGit(opts) {
+  // Notes are cut at a ref (a stable tag when one is set) so the same
+  // tag always produces the same notes; with no ref they default to
+  // HEAD (continuous builds).
+  const ref = opts && typeof opts.ref === 'string' ? opts.ref : 'HEAD';
   let log;
   try {
-    log = execFileSync('git', ['log', '-15', '--pretty=format:- %h %s'],
+    log = execFileSync('git', ['log', ref, '-15', '--pretty=format:- %h %s'],
                        { encoding: 'utf8' });
   } catch (err) {
     log = null;
   }
   const sha = (function shortSha() {
     try {
-      return execFileSync('git', ['rev-parse', '--short', 'HEAD'],
+      return execFileSync('git', ['rev-parse', '--short', ref],
                           { encoding: 'utf8' }).trim();
     } catch (err) {
       return 'unknown';
@@ -47,6 +51,16 @@ function releaseNotesFromGit() {
   return notes;
 }
 
+function tagExists(tag) {
+  try {
+    execFileSync('git', ['rev-parse', '--verify', '--quiet', tag + '^{commit}'],
+                 { encoding: 'utf8' });
+    return true;
+  } catch (err) {
+    return false;
+  }
+}
+
 function publishConfig({ channel, publish, version }) {
   const base = { provider: 'github', owner: 'NinadHirani', repo: 'CompanionDesk' };
   if (publish !== 'always') return base;
@@ -56,6 +70,10 @@ function publishConfig({ channel, publish, version }) {
   const tag = process.env.STABLE_TAG;
   if (!tag || !/^v\d+\.\d+\.\d+$/.test(tag)) {
     throw new Error('STABLE_TAG must be set to vX.Y.Z for a stable publish');
+  }
+  if (tag !== 'v' + version) {
+    throw new Error('STABLE_TAG ' + tag + ' does not match package.json version ' +
+                    version + ': the release tag and the app version must agree');
   }
   // Draft: nothing becomes publicly visible until a person publishes it.
   return { ...base, tag, releaseType: 'release', draft: true, releaseName: `CompanionDesk ${tag}` };
@@ -71,10 +89,19 @@ async function main() {
   const publish = process.env.DISTRIBUTION_PUBLISH === 'always' ? 'always' : 'never';
   const channel = process.env.DISTRIBUTION_CHANNEL === 'continuous' ? 'continuous' : 'stable';
   const pkg = require('../package.json');
+  // Anchor stable notes at STABLE_TAG when that tag exists in this
+  // checkout, so a rebuilt tag ships the same notes instead of whatever
+  // HEAD happens to hold at build time.
+  let notesRef = null;
+  const stableTag = process.env.STABLE_TAG;
+  if (channel === 'stable' && stableTag &&
+      /^v\d+\.\d+\.\d+$/.test(stableTag) && tagExists(stableTag)) {
+    notesRef = stableTag;
+  }
   const config = {
     ...pkg.build,
     publish: publishConfig({ channel, publish, version: pkg.version }),
-    releaseInfo: { releaseNotes: releaseNotesFromGit() },
+    releaseInfo: { releaseNotes: releaseNotesFromGit(notesRef ? { ref: notesRef } : undefined) },
   };
   // electron-builder's programmatic API wants a Map of platform -> targets;
   // null means "use the targets configured in package.json for this platform".
