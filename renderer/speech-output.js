@@ -140,10 +140,22 @@ function createSpeechOutput({ engine, enabled, now, maxText, onSettled } = {}) {
       // A newer start moves the token, so this utterance's late callbacks
       // (end or error) are ignored instead of settling the wrong session.
       const alive = () => phase === 'speaking' && session === sessionSeq;
-      engine.speak(text, {
-        onEnd: () => { if (alive()) { phase = 'done'; endedAt = t(); if (settled) settled(state()); } },
-        onError: (raw) => { if (alive()) { phase = 'failed'; failure = mapError(raw); endedAt = t(); if (settled) settled(state()); } },
-      });
+      try {
+        engine.speak(text, {
+          onEnd: () => { if (alive()) { phase = 'done'; endedAt = t(); if (settled) settled(state()); } },
+          onError: (raw) => { if (alive()) { phase = 'failed'; failure = mapError(raw); endedAt = t(); if (settled) settled(state()); } },
+        });
+      } catch (e) {
+        // A synchronous engine failure (the synthesizer refusing the
+        // utterance outright) must not wedge the machine in the speaking
+        // phase: it fails closed exactly like a late engine error, the
+        // allowlisted way, and settles once.
+        phase = 'failed';
+        failure = 'synthesis_failed';
+        endedAt = t();
+        if (settled) settled(state());
+        return { ok: false, reason: 'synthesis_failed' };
+      }
       return { ok: true, state: state() };
     }
 
