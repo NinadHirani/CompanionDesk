@@ -59,6 +59,7 @@ const { createNotificationDesk } = require('./agent-notifications');
 const { createNotificationsDisplayStore } = require('./agent-notifications-display');
 const { createDisplayDelivery } = require('./agent-display-delivery');
 const { createRunDriver } = require('./agent-run-driver');
+const { createApprovalSurface } = require('./approval-dialog');
 const { createRunEntry } = require('./agent-run-entry');
 const { SCHEDULING_TOOL_DEFINITION } = require('./agent-tool-scheduling');
 const { FILE_ACCESS_TOOL_DEFINITION, createFileAccessTool } = require('./agent-tool-file-access');
@@ -241,6 +242,7 @@ let agentAudit = null;
   let agentPersistence = null;
   let agentRunDriver = null;
   let agentRunEntry = null;
+  let agentApprovalSurface = null;
 let agentOrchestrator = null;
 let agentNotifications = null;
 let agentScheduler = null;
@@ -257,6 +259,24 @@ let schedulerSurface = null;
 // acknowledgement. A future main-side creation site must call
 // runDisplayDelivery() in the same step. There is no renderer trigger, no
 // timer and no other path into this store.
+// Gate 2 3j.9 Stage C (28 Nov 2026): the out-of-renderer approval
+// presenter, decision D2. A native main-side dialog; the renderer keeps
+// zero approval channels and the preload contract stays untouched.
+// Dismissal, Esc and Enter all land on Deny (the safe default), and Deny
+// parks the run (D3): only an explicit Approve resumes it.
+async function approvalPresenter(prompt) {
+  const r = await dialog.showMessageBox({
+    type: 'question',
+    title: prompt.title,
+    message: prompt.message,
+    detail: prompt.detail,
+    buttons: prompt.buttons,
+    defaultId: 1,
+    cancelId: 1,
+    noLink: true,
+  });
+  return r && r.response === 0 ? 'approve' : 'deny';
+}
 const notificationsDisplay = createNotificationsDisplayStore();
 const displayDelivery = createDisplayDelivery({
   readDesk: () => (agentNotifications ? agentNotifications.list() : null),
@@ -586,6 +606,12 @@ async function init() {
         persistence: stack.persistence,
         notifications: stack.notifications,
         registry: stack.registry,
+        // Stage C (28 Nov 2026): when a run parks at awaiting_approval,
+        // the out-of-renderer approval surface shows the native dialog.
+        // agentApprovalSurface is created just below; the closure reads it
+        // at fire time, so the order is safe. The hook is fire-and-forget
+        // inside the driver and never changes a run outcome.
+        onAwaitingApproval: (info) => (agentApprovalSurface ? agentApprovalSurface.offer(info.runId) : null),
       });
       // Gate 2 3j.12, decision D1 (option a, 25 Nov 2026): the ONLY run
       // entry point. A run reaches driver.run() exclusively through
@@ -599,6 +625,20 @@ async function init() {
         driver: agentRunDriver,
         book: stack.schedules,
         audit: stack.persistence.durableAudit(),
+      });
+      // Gate 2 3j.9 Stage C (28 Nov 2026), decision D2 resolved as the
+      // OUT-OF-RENDERER surface: a run parked at awaiting_approval gets a
+      // native main-side dialog; Approve issues the exact one-run approval
+      // and resumes through the driver (still the only orchestrator
+      // caller), Deny/dismissal parks it (D3). No renderer channel, no
+      // preload-contract change, step arguments never leave main (D6).
+      // Nothing here starts a run; no run can start in this build (D1).
+      agentApprovalSurface = createApprovalSurface({
+        driver: agentRunDriver,
+        orchestrator: stack.orchestrator,
+        desk: stack.approvals,
+        presenter: approvalPresenter,
+        registry: stack.registry,
       });
       agentOrchestrator = stack.orchestrator;
       agentNotifications = stack.notifications;

@@ -7,6 +7,21 @@ gated, disabled, or unmeasured; every line matches the roadmap evidence.
 
 ## [Unreleased]
 
+### Added - Gate 2 3j.9 Stage C: per-call approval delivery (28 Nov 2026)
+
+- Decision D2 resolved as the out-of-renderer surface: a run parked at
+  awaiting_approval raises a native main-side dialog. Approve issues the
+  exact one-run approval and resumes through the driver; deny,
+  dismissal, or any dialog failure parks the run (D3). No renderer
+  channel was added and the preload contract is untouched; step
+  arguments never leave main (D6). A sensitive step still needs its
+  per-tool standing grant first; approve without one fails closed.
+- New src/approval-dialog.js (pure prompt builder + approval surface,
+  bounded copy, fail-closed at every branch) and an optional
+  fire-and-forget onAwaitingApproval hook on the run driver whose
+  failure never changes a run outcome. Wired in main; nothing starts a
+  run in this build (D1/D-S2 stand).
+
 ### 28 November 2026
 - M9 defined by Ninad in chat: the coordinated-release brief
   (docs/M9_RELEASE_BRIEF.md) is adopted as the phase definition - one

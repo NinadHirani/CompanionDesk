@@ -63,6 +63,7 @@ function makeDriver(w, overrides = {}) {
     registry: overrides.registry || w.registry,
     clock: () => w.state.now,
     randomHex: () => 'abc123',
+    onAwaitingApproval: overrides.onAwaitingApproval,
   });
 }
 
@@ -177,7 +178,7 @@ test('an emergency stop pauses the run; after a user reset the driver resumes it
     goal: 'g',
     kind: 'user',
     plan: [
-      { id: 's1', tool: 'notes.search', args: { query: 'x' }, run: () => { assert.equal(w.stop.activate('user asked to stop', { by: 'user' }).ok, true); return { ok: true }; } },
+      { id: 's0', tool: 'notes.search', args: { query: 'x' }, run: () => { assert.equal(w.stop.activate('user asked to stop', { by: 'user' }).ok, true); return { ok: true }; } },
       { id: 's2', tool: 'notes.search', args: { query: 'y' }, run: () => ({ ok: true }) },
     ],
   });
@@ -428,4 +429,87 @@ test('static guards: the driver stays pure, main wires it without registering to
   // The preload notification channels stay exactly the two 3j.5 ones.
   assert.equal(preloadSrc.includes("'notifications:read'"), true);
   assert.equal(preloadSrc.includes("'notifications:ack'"), true);
+});
+
+// --- Stage C (28 Nov 2026): the onAwaitingApproval hook. Main's
+// out-of-renderer approval surface learns about a pause through this hook
+// (decision D2); the hook is fire-and-forget and never changes a run
+// outcome, and without it the driver behaves exactly as before.
+
+const SENSITIVE_STEP = { id: 'c', tool: 'payments.charge', args: { amount: 5, currency: 'INR' }, needsApproval: true, run: () => ({ ok: true }) };
+
+test('an awaiting_approval pause offers the approval surface exactly once', async () => {
+  const w = await world();
+  const calls = [];
+  const driver = makeDriver(w, { onAwaitingApproval: (info) => { calls.push(info); } });
+  const r = driver.run({ goal: 'g', kind: 'user', plan: [SENSITIVE_STEP] });
+  assert.equal(r.ok, true);
+  assert.equal(r.state, 'awaiting_approval');
+  assert.equal(r.approvalOffered, true);
+  assert.equal(calls.length, 1);
+  assert.deepEqual(calls[0], { runId: r.runId });
+});
+
+test('a hook that throws synchronously never changes the run outcome', async () => {
+  const w = await world();
+  const driver = makeDriver(w, { onAwaitingApproval: () => { throw new Error('dialog gone'); } });
+  const r = driver.run({ goal: 'g', kind: 'user', plan: [SENSITIVE_STEP] });
+  assert.equal(r.ok, true);
+  assert.equal(r.state, 'awaiting_approval');
+  assert.equal(r.approvalOffered, true);
+  assert.equal(w.p.listRuns()[0].status, 'running');
+});
+
+test('a hook that rejects asynchronously is contained', async () => {
+  const w = await world();
+  const driver = makeDriver(w, { onAwaitingApproval: () => Promise.reject(new Error('x')) });
+  const r = driver.run({ goal: 'g', kind: 'user', plan: [SENSITIVE_STEP] });
+  assert.equal(r.ok, true);
+  assert.equal(r.state, 'awaiting_approval');
+  await new Promise((res) => setTimeout(res, 10));
+});
+
+test('without a hook the report and the pause behave exactly as before', async () => {
+  const w = await world();
+  const driver = makeDriver(w);
+  const r = driver.run({ goal: 'g', kind: 'user', plan: [SENSITIVE_STEP] });
+  assert.equal(r.ok, true);
+  assert.equal(r.state, 'awaiting_approval');
+  assert.equal(r.approvalOffered, undefined);
+});
+
+test('a paused_stop pause never offers an approval', async () => {
+  const w = await world();
+  assert.equal(w.engine.grantTool({ tool: 'notes.search', ttlMs: 60_000 }).ok, true);
+  const calls = [];
+  const driver = makeDriver(w, { onAwaitingApproval: (info) => { calls.push(info); } });
+  // The stop engages mid-run (like the existing stop test): the first
+  // step activates it, the second step hits the pause.
+  const r = driver.run({ goal: 'g', kind: 'user', plan: [
+    { id: 's0', tool: 'notes.search', args: { query: 'x' }, run: () => { assert.equal(w.stop.activate('user asked to stop', { by: 'user' }).ok, true); return { ok: true }; } },
+    GOOD_STEP,
+  ]});
+  assert.equal(r.ok, true);
+  assert.equal(r.state, 'paused_stop');
+  assert.equal(r.approvalOffered, undefined);
+  assert.equal(calls.length, 0);
+});
+
+test('the hook fires again when a resumed run re-pauses at the next approval', async () => {
+  const w = await world();
+  assert.equal(w.engine.grantTool({ tool: 'payments.charge', ttlMs: 60_000 }).ok, true);
+  const calls = [];
+  const driver = makeDriver(w, { onAwaitingApproval: (info) => { calls.push(info); } });
+  const r = driver.run({ goal: 'g', kind: 'user', plan: [
+    { id: 'c1', tool: 'payments.charge', args: { amount: 5, currency: 'INR' }, needsApproval: true, run: () => ({ ok: true }) },
+    { id: 'c2', tool: 'payments.charge', args: { amount: 6, currency: 'INR' }, needsApproval: true, run: () => ({ ok: true }) },
+  ]});
+  assert.equal(r.state, 'awaiting_approval');
+  assert.equal(calls.length, 1);
+  const a1 = w.approvals.request({ tool: 'payments.charge', args: { amount: 5, currency: 'INR' } }).approval;
+  const rr = driver.resume(r.runId, { approvalId: a1.id });
+  assert.equal(rr.ok, true);
+  assert.equal(rr.state, 'awaiting_approval');
+  assert.equal(calls.length, 2);
+  assert.equal(calls[1].runId, r.runId);
 });

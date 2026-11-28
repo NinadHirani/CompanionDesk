@@ -350,9 +350,12 @@ stays reserved and unused by this design.
     scope, threat model, executor, audit, tests, rollback, open decisions
     D-B1/D-B2) is docs/STAGE_B_PROPOSAL.md (24 Nov 2026): DESIGN ONLY,
     nothing implemented, registry still empty.
-  Stage C: the first reversible_write tool with per-call approvals.
-    BLOCKED on decision D2 (how the user's approval yes reaches main);
-    Stage C does not start until D2 is decided.
+  Stage C: per-call approval delivery, IMPLEMENTED 28 Nov 2026. The
+    out-of-renderer surface (D2 resolution above): native main-side
+    dialog, exact one-run approval, driver-only resume, deny parks.
+    Renderer untouched. Not the roadmap's earlier "renderer run
+    controls" wording: the D1 contract forbids renderer run-control
+    channels, so Stage C is and remains main-side.
   Must remain disabled at EVERY stage: shell/filesystem/browser/OS
   unrestricted tools, capability 'sensitive' tools, model-driven
   execution, auto-resume, driver timers or scheduling, network egress
@@ -365,13 +368,18 @@ stays reserved and unused by this design.
       smallest safe path), (b) plan-level approval records, (c) temporary
       developer-only entry point. Who forms plans in (b)/(c) is part of
       the same decision.
-  D2  Approval delivery: the preload contract forbids adding approvals
-      (and all run-control) channels to the renderer allowlist, and 3j.5
-      forbids broadening notifications:ack. Stage C therefore has no
-      lawful approval path until a deliberate contract change is decided.
-      Options: a one-time explicit contract amendment adding ONE narrow
-      approvals channel, or an out-of-renderer surface. This decision
-      blocks Stage C only.
+  D2  Approval delivery: RESOLVED 28 Nov 2026 (standing authorization,
+      technical-lead call) as the OUT-OF-RENDERER surface. The preload
+      contract stays untouched: the renderer keeps zero run-control or
+      approval channels. Main shows a native dialog when a run parks at
+      awaiting_approval (src/approval-dialog.js + the driver's
+      onAwaitingApproval hook); Approve issues the exact one-run approval
+      and resumes through the driver (still the only orchestrator
+      caller), Deny/dismissal/Esc/Enter parks the run (D3). A sensitive
+      step still needs the per-tool standing grant FIRST: the dialog
+      delivers the per-call yes only, and approve without a grant fails
+      closed with the engine's own reason (no_grant). Step arguments
+      never leave main (D6): the dialog is main-side.
   D3  Paused-run lifecycle: park indefinitely (proposed default) or add
       an audited abandon path.
   D4  Ledger restart reconciliation: mark running rows aborted with a

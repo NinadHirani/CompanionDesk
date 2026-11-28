@@ -291,3 +291,22 @@ params field removed from the schema and validated inside the tool
 (plain object, at most 20 keys, as before). Nothing about connection
 state, scopes or credentials changed; the runtime registry carries the
 tool as the third of five.
+## 10. Decision D2 resolved: out-of-renderer per-call approval delivery (28 Nov 2026)
+
+Resolved under the standing broad authorization (28 Nov 2026) as a
+technical-lead call; the security-preserving option of the two the run
+driver design offered. A run parked at awaiting_approval now gets a
+NATIVE main-side dialog (src/approval-dialog.js, wired through the
+driver's optional onAwaitingApproval hook in src/agent-run-driver.js).
+Approve issues the exact one-run approval (same tool + args digest) and
+resumes through the driver; Deny, dismissal, Esc, Enter, or any
+presenter failure leaves the run parked (D3), and restart reconciliation
+(D4) aborts parked rows. The preload contract is untouched: no renderer
+channel of any kind was added, and step arguments never leave main (D6;
+the projection already drops them, the dialog is main-side). Boundary
+kept: a sensitive step still needs its per-tool standing grant first
+(the dialog delivers the per-call yes only; approve without a grant
+fails closed with no_grant). Nothing in this build starts a run (D1/D-S2
+stand), so the path is wired and tested but never fires today. 14 new
+tests (8 approval-dialog, 6 driver-hook); suite 1656/1656, selftest
+PASS.

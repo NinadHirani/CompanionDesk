@@ -63,7 +63,11 @@ const TERMINAL_STATUS = { completed: 'succeeded', aborted: 'aborted' };
     return v !== null && typeof v === 'object' && !Array.isArray(v);
   }
 
-  function createRunDriver({ orchestrator, persistence, notifications, registry, clock, randomHex } = {}) {
+  function createRunDriver({ orchestrator, persistence, notifications, registry, clock, randomHex, onAwaitingApproval } = {}) {
+    // Stage C (28 Nov 2026): the optional out-of-renderer approval hook
+    // (decision D2). Fire-and-forget, after every transition side effect:
+    // its failure never changes a run outcome. Omitted (the default) the
+    // driver behaves exactly as Stage A specified.
     for (const name of ['startRun', 'step', 'resume', 'getRun']) {
       if (!orchestrator || typeof orchestrator[name] !== 'function') {
         throw new TypeError('run driver needs an orchestrator with ' + name);
@@ -71,6 +75,9 @@ const TERMINAL_STATUS = { completed: 'succeeded', aborted: 'aborted' };
     }
     if (!persistence || typeof persistence.startRun !== 'function' || typeof persistence.finishRun !== 'function') {
       throw new TypeError('run driver needs persistence with startRun and finishRun');
+    }
+    if (onAwaitingApproval !== undefined && typeof onAwaitingApproval !== 'function') {
+      throw new TypeError('run driver needs onAwaitingApproval to be a function');
     }
     if (!notifications || typeof notifications.create !== 'function' || typeof notifications.list !== 'function') {
       throw new TypeError('run driver needs notifications with create and list');
@@ -224,6 +231,18 @@ const TERMINAL_STATUS = { completed: 'succeeded', aborted: 'aborted' };
       } else if (driven.paused) {
         // D3: parked indefinitely; the ledger row keeps 'running'.
         report.state = driven.paused;
+        if (driven.paused === 'awaiting_approval' && typeof onAwaitingApproval === 'function') {
+          // Stage C: hand the pause to the out-of-renderer approval
+          // surface (decision D2). LAST, fire-and-forget: the hook's own
+          // failure never changes a run outcome.
+          report.approvalOffered = true;
+          try {
+            const p = onAwaitingApproval({ runId });
+            if (p && typeof p.catch === 'function') p.catch(() => {});
+          } catch (err) {
+            report.approvalHookError = 'hook_error';
+          }
+        }
       } else {
         // Refusal or guard: the orchestrator froze or refused; the ledger
         // row (if any) stays as it is and is reconciled at restart (D4).
