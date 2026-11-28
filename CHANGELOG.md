@@ -3,6 +3,7 @@
 ## 28 Nov 2026 (evening)
 
 - M8: the RSS feeds connector (the catalog's last keyless definition-only entry) now has a real read-only adapter: one `read_feed` action, GET on a user-supplied feed URL behind a strict guard (https only, public hostname, no localhost/IP literals/ports/embedded credentials). Execution still requires an explicit connect with the feed.read scope granted; nothing was connected.
+- M8 (standing authorization): the two remaining keyless, credential-free catalog rows - local model servers `ollama` and `lm-studio` - get read-only `list_models` adapters (loopback http only via a strict local URL guard; nothing connects or activates automatically). 8 red-first tests. No account, credential or external action involved.
 - M6/M7 (owner-directed offline-safe scope): two new pure modules - `src/wake-validation.js`, a wake-decision evaluation harness with a deterministic synthetic stream, and `src/capture-simulation.js`, a consent-gate policy simulator (capture disabled by default, per-call consent auto-reset, sensitive sources refused without consent, audit for every decision). 12 red-first tests. No wake or capture enablement; physical/device lanes stay excluded.
 
 

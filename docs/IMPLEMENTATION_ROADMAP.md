@@ -1001,3 +1001,15 @@ dedicated test files cover it. M9 software/checklist prep landed
 (67e984d): packaged-app smoke checklist + readiness pins; signing,
 notarization, public distribution, a tagged release candidate and the
 physical smoke run stay owner-gated.
+
+M8 batch 52 (28 Nov 2026, standing authorization): local model-server
+adapters. `ollama` and `lm-studio` - the two remaining keyless,
+credential-free, account-free catalog rows - gained read-only `list_models`
+adapters (Ollama /api/tags, LM Studio /v1/models) with a strict
+loopback-only URL guard (http on localhost/127.0.0.1/[::1] only, never a
+remote host), a new 'local' authShape in the shared builder that keeps the
+https-only rule for every other adapter, and catalog rows flagged
+implemented. Nothing connects or activates automatically; activation stays
+the owner's call. With this batch the keyless lane is fully exhausted: every
+remaining definition-only row needs a credential, an account grant, a
+user-chosen instance URL or has no remote API.

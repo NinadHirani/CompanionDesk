@@ -1707,6 +1707,54 @@
     ],
   };
 
+  function validLocalBase(raw) {
+    // Loopback-only URL guard for the local model-server adapters. Accepts
+    // http on localhost / 127.0.0.1 / [::1] with an optional port, nothing
+    // else: no remote host, no userinfo, no query, no path tricks. Returns
+    // the normalized base (no trailing slash) or null.
+    if (typeof raw !== 'string' || raw.length === 0 || raw.length > 200) return null;
+    if (CONTROL_RE.test(raw)) return null;
+    if (raw.indexOf('@') !== -1) return null;
+    if (raw.indexOf('?') !== -1 || raw.indexOf('#') !== -1) return null;
+    let u = null;
+    try { u = new URL(raw); } catch (e) { return null; }
+    if (u.protocol !== 'http:') return null;
+    if (u.hostname !== 'localhost' && u.hostname !== '127.0.0.1' && u.hostname !== '[::1]') return null;
+    if (u.pathname && u.pathname !== '/' && u.pathname !== '') return null;
+    const port = u.port === '' ? '' : ':' + u.port;
+    return 'http://' + u.hostname + port;
+  }
+
+  ADAPTERS.ollama = {
+    id: 'ollama', name: 'Ollama (local models)', authShape: 'local', setupRequired: false,
+    setupNote: 'local-only and keyless: Ollama runs on your own machine, so no key or account is needed. The action points at your local server (default http://127.0.0.1:11434, overridable to any loopback URL); nothing connects or activates automatically, and the URL guard allows loopback http only, never a remote host.',
+    buildHeaders: function () { return { 'User-Agent': 'CompanionDesk/1.0 (https://github.com/NinadHirani/CompanionDesk)', Accept: 'application/json' }; },
+    actions: [
+      { id: 'list_models', label: 'List the models installed on your local Ollama server', scope: 'model.read', kind: 'read_only',
+        params: [{ name: 'instanceUrl', required: false, maxLength: 200 }],
+        build: function (p) {
+          const base = validLocalBase(p.instanceUrl || 'http://127.0.0.1:11434');
+          if (base === null) return { error: 'param_invalid' };
+          return { method: 'GET', url: base + '/api/tags', headers: this.buildHeaders(), body: null };
+        } },
+    ],
+  };
+
+  ADAPTERS['lm-studio'] = {
+    id: 'lm-studio', name: 'LM Studio', authShape: 'local', setupRequired: false,
+    setupNote: 'local-only and keyless: LM Studio runs on your own machine, so no key or account is needed. The action points at your local server (default http://127.0.0.1:1234, overridable to any loopback URL); nothing connects or activates automatically, and the URL guard allows loopback http only, never a remote host.',
+    buildHeaders: function () { return { 'User-Agent': 'CompanionDesk/1.0 (https://github.com/NinadHirani/CompanionDesk)', Accept: 'application/json' }; },
+    actions: [
+      { id: 'list_models', label: 'List the models loaded in your local LM Studio server', scope: 'model.read', kind: 'read_only',
+        params: [{ name: 'instanceUrl', required: false, maxLength: 200 }],
+        build: function (p) {
+          const base = validLocalBase(p.instanceUrl || 'http://127.0.0.1:1234');
+          if (base === null) return { error: 'param_invalid' };
+          return { method: 'GET', url: base + '/v1/models', headers: this.buildHeaders(), body: null };
+        } },
+    ],
+  };
+
   ADAPTERS['open-meteo'] = {
     id: 'open-meteo', name: 'Open-Meteo', authShape: 'public', setupRequired: false,
     setupNote: 'no account or key needed: the Open-Meteo API is public and free for non-commercial use; keep within its fair-use daily quota',
@@ -2246,7 +2294,7 @@
     const bad = validateParams(action, params);
     if (bad) return fail(bad);
     let cred;
-    if (a.authShape === 'public') {
+    if (a.authShape === 'public' || a.authShape === 'local') {
       cred = { ok: true };
     } else if (a.authShape === 'oauth_json') {
       cred = parseOauthCredential(credential);
@@ -2257,10 +2305,14 @@
     }
     let req;
     if (a.authShape === 'oauth_json') req = action.build.call(a, params || {}, cred.blob);
-    else if (a.authShape === 'public') req = action.build.call(a, params || {});
+    else if (a.authShape === 'public' || a.authShape === 'local') req = action.build.call(a, params || {});
     else req = action.build.call(a, params || {}, cred.token);
     if (!req || req.error) return fail((req && req.error) || 'request_build_failed');
-    if (!/^https:\/\//.test(req.url)) return fail('url_invalid');
+    if (a.authShape === 'local') {
+      // Local-only adapters talk to a server on the user's own machine:
+      // loopback http is the whole point, and anything else is refused.
+      if (!/^http:\/\/(localhost|127\.0\.0\.1|\[::1\])(\/|:|$)/.test(req.url)) return fail('url_invalid');
+    } else if (!/^https:\/\//.test(req.url)) return fail('url_invalid');
     if (req.method !== 'GET' && req.method !== 'POST' && req.method !== 'PUT') return fail('request_build_failed');
     return { ok: true, request: { method: req.method, url: req.url, headers: req.headers || {}, body: req.body || null, urlContainsSecret: a.authShape === 'url_token' } };
   }
