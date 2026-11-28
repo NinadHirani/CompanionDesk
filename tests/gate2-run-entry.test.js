@@ -198,14 +198,16 @@ test('wiring: main constructs the entry from the stack book and durable audit, a
   assert.ok(src.includes('book: stack.schedules'), 'the entry rides the stack schedule book');
   assert.ok(src.includes('audit: stack.persistence.durableAudit()'), 'the entry writes through the durable audit');
   // Gate 2 enable step (26 Nov 2026, approved by Ninad), widened by the
-  // Gate 4 approval (26 Nov), the AI-access connector flow (27 Nov) and
-  // the file-output enable (28 Nov 2026, approved by Ninad): main carries
-  // EXACTLY FOUR registration literals, nothing else. The run-entry still
+  // Gate 4 approval (26 Nov), the AI-access connector flow (27 Nov), the
+  // file-output enable and the Stage B calendar projection enable (both
+  // 28 Nov 2026, Ninad's standing authorization): main carries EXACTLY
+  // FIVE registration literals, nothing else. The run-entry still
   // registers nothing itself.
   const mainDefines = src.split('.define(').length - 1;
-  assert.equal(mainDefines, 4, 'exactly four registration literals, got ' + mainDefines);
+  assert.equal(mainDefines, 5, 'exactly five registration literals, got ' + mainDefines);
   assert.ok(src.includes('agentRegistry.define(SCHEDULING_TOOL_DEFINITION)'), 'the enable registers the scheduling gate definition');
   assert.ok(src.includes('agentRegistry.define(FILE_ACCESS_TOOL_DEFINITION)'), 'the enable registers the file-access gate definition');
   assert.ok(src.includes('agentRegistry.define(CONNECTORS_TOOL_DEFINITION)'), 'the connector status/request tool is the third registration');
   assert.ok(src.includes('agentRegistry.define(FILE_OUTPUT_TOOL_DEFINITION)'), 'the file-output tool is the fourth registration');
+  assert.ok(src.includes('agentRegistry.define(CALENDAR_UPCOMING_DEF)'), 'the Stage B calendar projection is the fifth registration');
 });

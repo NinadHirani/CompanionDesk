@@ -1,9 +1,11 @@
 'use strict';
 
 // Gate 2 run-driver Stage B (blueprint 3j.10), approved by Ninad on 26 Nov
-// 2026: D-B1 implemented here; D-B2 option (a) means the production
-// registry stays EMPTY and main.js registers nothing (the enable step is a
-// separate later review). The calendar_upcoming tool is a read-only
+// 2026: D-B1 implemented here; the registration/enable step the module
+// reserved for a later review landed on 28 Nov 2026 under Ninad's standing
+// authorization (main.js defines CALENDAR_UPCOMING_DEF as the fifth tool;
+// the run-closure construction stays at the plan-forming site, D-S2
+// deferred). The calendar_upcoming tool is a read-only
 // projection of the local calendars the user imported. The tool NEVER
 // requires the calendar or ics modules: the service arrives by dependency
 // injection, exactly like the scheduling gate's book, so the closed

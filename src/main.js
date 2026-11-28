@@ -64,6 +64,7 @@ const { SCHEDULING_TOOL_DEFINITION } = require('./agent-tool-scheduling');
 const { FILE_ACCESS_TOOL_DEFINITION, createFileAccessTool } = require('./agent-tool-file-access');
 const { CONNECTORS_TOOL_DEFINITION, createConnectorsTool } = require('./agent-tool-connectors');
 const { FILE_OUTPUT_TOOL_DEFINITION, createFileOutputTool } = require('./agent-tool-file-output');
+const { CALENDAR_UPCOMING_DEF } = require('./agent-tool-calendar');
 const fsPromises = require('fs').promises;
 // Gate 4 execution slice: the real io adapter the file-access executor runs
 // through. OS errors surface verbatim from these calls (code + message);
@@ -533,6 +534,20 @@ async function init() {
       } catch (e) { fileOutputRoot = undefined; }
       agentFileOutput = createFileOutputTool({ clock: () => Date.now(), io: fileOutputIo, audit: stack.durableAudit, root: fileOutputRoot });
       agentRegistry.define(FILE_OUTPUT_TOOL_DEFINITION);
+      // Gate 2 run-driver Stage B enable (28 Nov 2026, under Ninad's
+      // standing authorization): the calendar_upcoming tool is the fifth
+      // registered tool. It is a READ-ONLY projection of the local
+      // calendars the user imported themselves: uid and location are
+      // dropped always, titles capped at 200 characters, rows capped at
+      // 100 in the service's own sort order, and the envelope is capped
+      // at 32 KiB; a standing grant suffices and no per-call approval is
+      // ever required. The calendar service arrives by DEPENDENCY
+      // INJECTION at the plan-forming site (calendarUpcomingRun({
+      // service, db, todayIso }) from src/agent-tool-calendar.js) - the
+      // closed ICS generator files stay untouched. Registration alone
+      // lets no run start: requestRun still has no caller in this build,
+      // and no plan is ever formed here.
+      agentRegistry.define(CALENDAR_UPCOMING_DEF);
       agentApprovals = stack.approvals;
       agentStop = stack.emergencyStop;
       agentAudit = stack.audit;

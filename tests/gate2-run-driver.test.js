@@ -404,17 +404,20 @@ test('static guards: the driver stays pure, main wires it without registering to
   assert.equal(mainSrc.includes('createRunDriver('), true, 'main constructs the driver');
   assert.equal(mainSrc.includes('reconcileInterruptedRuns()'), true, 'main reconciles interrupted runs at startup');
   // Gate 2 enable step (26 Nov 2026, approved by Ninad), widened by the
-  // Gate 4 approval (26 Nov), the AI-access connector flow (27 Nov) and
-  // the file-output enable (28 Nov 2026, approved by Ninad): main carries
-  // EXACTLY FOUR registration literals - the scheduling gate's, the
-  // file-access gate's, the connector status/request tool's and the
-  // file-output tool's definitions, nothing else.
+  // Gate 4 approval (26 Nov), the AI-access connector flow (27 Nov), the
+  // file-output enable (28 Nov 2026) and the Stage B calendar projection
+  // enable (28 Nov 2026, Ninad's standing authorization): main carries
+  // EXACTLY FIVE registration literals - the scheduling gate's, the
+  // file-access gate's, the connector status/request tool's, the
+  // file-output tool's and the Stage B calendar projection's definitions,
+  // nothing else.
   const mainDefines = mainSrc.split('.define(').length - 1;
-  assert.equal(mainDefines, 4, 'exactly four registration literals, got ' + mainDefines);
+  assert.equal(mainDefines, 5, 'exactly five registration literals, got ' + mainDefines);
   assert.ok(mainSrc.includes('agentRegistry.define(SCHEDULING_TOOL_DEFINITION)'), 'the enable registers the scheduling gate definition');
   assert.ok(mainSrc.includes('agentRegistry.define(FILE_ACCESS_TOOL_DEFINITION)'), 'the enable registers the file-access gate definition');
   assert.ok(mainSrc.includes('agentRegistry.define(CONNECTORS_TOOL_DEFINITION)'), 'the connector status/request tool is the third registration');
   assert.ok(mainSrc.includes('agentRegistry.define(FILE_OUTPUT_TOOL_DEFINITION)'), 'the file-output tool is the fourth registration');
+  assert.ok(mainSrc.includes('agentRegistry.define(CALENDAR_UPCOMING_DEF)'), 'the Stage B calendar projection is the fifth registration');
   assert.equal(strip(mainSrc).includes('requestRun('), false, 'no executable call site of requestRun in main');
   const preloadSrc = fs.readFileSync('src/preload.js', 'utf8');
   assert.equal(preloadSrc.includes('run-driver'), false);

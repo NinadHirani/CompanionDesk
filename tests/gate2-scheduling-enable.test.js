@@ -3,8 +3,9 @@
 // Gate 2 enable step (26 Nov 2026, approved by Ninad in the decision-sheet
 // review), widened by the Gate 4 approval (26 Nov), the connector flow
 // (27 Nov) and the file-output enable (28 Nov 2026, approved by Ninad):
-// main.js carries EXACTLY FOUR registration literals - schedule_create,
-// file_access, the connector status/request tool, and file_write.
+// main.js carries EXACTLY FIVE registration literals - schedule_create,
+// file_access, the connector status/request tool, file_write, and the
+// Stage B calendar_upcoming read-only projection (enabled 28 Nov 2026).
 // Registration alone lets no run start:
 // requestRun still has no caller in this build (D1/D-S2 unchanged), tools
 // execute only inside driver-driven runs, and every registered tool is sensitive, so
@@ -23,6 +24,7 @@ const { SCHEDULING_TOOL_DEFINITION, createSchedulingTool, MAX_HORIZON_MS } = req
 const { FILE_ACCESS_TOOL_DEFINITION, createFileAccessTool } = require('../src/agent-tool-file-access.js');
 const { CONNECTORS_TOOL_DEFINITION } = require('../src/agent-tool-connectors.js');
 const { FILE_OUTPUT_TOOL_DEFINITION, createFileOutputTool } = require('../src/agent-tool-file-output.js');
+const { CALENDAR_UPCOMING_DEF } = require('../src/agent-tool-calendar.js');
 const { createRunDriver, KINDS } = require('../src/agent-run-driver.js');
 
 const NOW = 1_700_000_000_000;
@@ -43,14 +45,15 @@ async function enabledStack() {
   stack.registry.define(FILE_ACCESS_TOOL_DEFINITION);
   stack.registry.define(CONNECTORS_TOOL_DEFINITION);
   stack.registry.define(FILE_OUTPUT_TOOL_DEFINITION);
+  stack.registry.define(CALENDAR_UPCOMING_DEF);
   const tool = createSchedulingTool({ book: stack.schedules, clock: () => NOW, audit: stack.durableAudit });
   return { db, stack, tool };
 }
 
-test('the enable registers exactly four tools in main and nothing else fires', () => {
+test('the enable registers exactly five tools in main and nothing else fires', () => {
   const main = fs.readFileSync('src/main.js', 'utf8');
   const defines = main.split('.define(').length - 1;
-  assert.equal(defines, 4, 'exactly four registration literals, got ' + defines);
+  assert.equal(defines, 5, 'exactly five registration literals, got ' + defines);
   // The registry must be assigned BEFORE the first define: the enable
   // block previously read agentRegistry before assigning it, so the first
   // boot threw inside buildAgent and the agent runtime stayed blocked.
@@ -60,6 +63,8 @@ test('the enable registers exactly four tools in main and nothing else fires', (
   assert.ok(main.includes('agentRegistry.define(CONNECTORS_TOOL_DEFINITION)'), 'it registers the connector status/request tool');
   assert.ok(main.includes('agentRegistry.define(FILE_OUTPUT_TOOL_DEFINITION)'), 'it registers the file-output definition');
   assert.ok(main.includes("require('./agent-tool-file-output')"), 'main requires the file-output module');
+  assert.ok(main.includes('agentRegistry.define(CALENDAR_UPCOMING_DEF)'), 'it registers the Stage B calendar projection definition');
+  assert.ok(main.includes("require('./agent-tool-calendar')"), 'main requires the calendar tool module');
   assert.ok(main.includes("require('./agent-tool-connectors')"), 'main requires the connector tool module');
   assert.ok(main.includes("require('./agent-tool-scheduling')"), 'main requires the tool module');
   assert.ok(main.includes("require('./agent-tool-file-access')"), 'main requires the file-access module');
@@ -71,10 +76,10 @@ test('the enable registers exactly four tools in main and nothing else fires', (
   assert.deepEqual(KINDS, ['user'], "the driver's kind allowlist stays ['user']");
 });
 
-test('the enabled registry carries exactly four tools with their approved classes', async () => {
+test('the enabled registry carries exactly five tools with their approved classes', async () => {
   const { stack } = await enabledStack();
   const list = stack.registry.list();
-  assert.equal(list.length, 4);
+  assert.equal(list.length, 5);
   assert.equal(list[0].name, 'schedule_create');
   assert.equal(list[0].capability, 'sensitive');
   assert.equal(list[0].critical, false);
@@ -87,6 +92,9 @@ test('the enabled registry carries exactly four tools with their approved classe
   assert.equal(list[3].name, 'file_write');
   assert.equal(list[3].capability, 'sensitive');
   assert.equal(list[3].critical, false);
+  assert.equal(list[4].name, 'calendar_upcoming');
+  assert.equal(list[4].capability, 'read_only');
+  assert.equal(list[4].critical, false);
 });
 
 test('a standing grant can never authorize it; only a fresh one-time approval can', async () => {
@@ -162,10 +170,11 @@ test('scope and horizon refusals stay in force', async () => {
   assert.equal(tool.execute({ title: 'x', scope: 'reminder', due_at: NOW + MAX_HORIZON_MS + 1 }).reason, 'due_at_too_far');
 });
 
-test('Stage B tools stay unregistered: calendar_upcoming never joins the registry', async () => {
+test('Stage B calendar_upcoming is registered read_only (Stage B enable, 28 Nov 2026)', async () => {
   const { stack } = await enabledStack();
-  assert.equal(stack.registry.has('calendar_upcoming'), false);
-  assert.equal(stack.registry.list().length, 4);
+  assert.equal(stack.registry.has('calendar_upcoming'), true);
+  assert.equal(stack.registry.get('calendar_upcoming').capability, 'read_only');
+  assert.equal(stack.registry.list().length, 5);
 });
 
 // --- file-output enable (28 Nov 2026) ---------------------------------------
