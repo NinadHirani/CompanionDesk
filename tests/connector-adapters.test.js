@@ -12,7 +12,7 @@ const assert = require('node:assert');
 const adapters = require('../src/connector-adapters.js');
 const { createConnectorCatalog } = require('../src/connectors.js');
 
-const IMPLEMENTED = ['anthropic', 'brave-search', 'arxiv', 'airtable', 'coda', 'circleci', 'cloudflare', 'crossref', 'digitalocean', 'discord', 'docker-hub', 'github', 'gitlab', 'gmail', 'heroku', 'google-calendar', 'google-docs', 'google-sheets', 'google-drive', 'google-gemini', 'huggingface', 'internet-archive', 'jira', 'mailgun', 'postmark', 'sendgrid', 'linear', 'microsoft-calendar', 'microsoft-onedrive', 'microsoft-excel', 'microsoft-outlook', 'microsoft-teams', 'microsoft-word', 'musicbrainz', 'notion', 'npm', 'open-meteo', 'openai', 'openalex', 'openlibrary', 'openstreetmap', 'pypi', 'render', 'slack', 'supabase', 'sentry', 'pagerduty', 'tmdb', 'unsplash', 'new-relic', 'pinecone', 'pexels', 'kaggle', 'stripe', 'groq', 'cohere', 'xai', 'mistral', 'openrouter', 'replicate', 'together-ai', 'stability-ai', 'elevenlabs', 'google-maps', 'mapbox', 'deepgram', 'assemblyai', 'plausible', 'amplitude', 'mixpanel', 'posthog', 'flickr', 'pipedrive', 'razorpay', 'zerodha-kite', 'upstox', 'udemy', 'tavily', 'telegram', 'trello', 'todoist', 'wikimedia'];
+const IMPLEMENTED = ['anthropic', 'brave-search', 'arxiv', 'airtable', 'coda', 'circleci', 'cloudflare', 'crossref', 'digitalocean', 'discord', 'docker-hub', 'github', 'gitlab', 'gmail', 'heroku', 'google-calendar', 'google-docs', 'google-sheets', 'google-drive', 'google-gemini', 'huggingface', 'internet-archive', 'jira', 'mailgun', 'postmark', 'sendgrid', 'linear', 'microsoft-calendar', 'microsoft-onedrive', 'microsoft-excel', 'microsoft-outlook', 'microsoft-teams', 'microsoft-word', 'musicbrainz', 'notion', 'npm', 'open-meteo', 'openai', 'openalex', 'openlibrary', 'openstreetmap', 'pypi', 'render', 'slack', 'supabase', 'sentry', 'pagerduty', 'tmdb', 'unsplash', 'new-relic', 'pinecone', 'pexels', 'kaggle', 'stripe', 'groq', 'cohere', 'xai', 'mistral', 'openrouter', 'replicate', 'together-ai', 'stability-ai', 'elevenlabs', 'google-maps', 'mapbox', 'deepgram', 'assemblyai', 'plausible', 'amplitude', 'mixpanel', 'posthog', 'flickr', 'pipedrive', 'razorpay', 'zerodha-kite', 'upstox', 'udemy', 'trakt', 'hetzner', 'tavily', 'telegram', 'trello', 'todoist', 'wikimedia'];
 const OAUTH = ['gmail', 'google-calendar', 'google-drive', 'microsoft-calendar', 'microsoft-onedrive', 'microsoft-outlook'];
 
 test('the adapter registry covers exactly the implemented catalog entries', () => {
@@ -1711,5 +1711,39 @@ test('udemy builds Basic course-search reads with strict validation and no enrol
   for (const a of adapters.listActions('udemy')) {
     assert.equal(a.kind, 'read_only', 'udemy is read-only');
     assert.equal(a.scope, 'courses.read');
+  }
+});
+
+// ---- batch 47 (28 Nov 2026): trakt + hetzner reads ----
+
+test('trakt builds client-key trending reads and never writes', () => {
+  const r = adapters.buildRequest('trakt', 'list_trending_movies', {}, 'trakt-client-id');
+  assert.equal(r.ok, true);
+  assert.equal(r.request.url, 'https://api.trakt.tv/movies/trending?limit=5');
+  assert.equal(r.request.headers['trakt-api-key'], 'trakt-client-id');
+  assert.equal(r.request.headers['trakt-api-version'], '2');
+  const capped = adapters.buildRequest('trakt', 'list_trending_movies', { limit: '10' }, 'id');
+  assert.equal(capped.ok, true);
+  assert.ok(capped.request.url.indexOf('limit=10') >= 0, 'limit rides the URL');
+  assert.equal(adapters.buildRequest('trakt', 'list_trending_movies', { limit: '11' }, 'id').reason, 'param_invalid', 'limit above the cap');
+  for (const a of adapters.listActions('trakt')) {
+    assert.equal(a.kind, 'read_only', 'trakt is read-only');
+    assert.equal(a.scope, 'history.read');
+  }
+});
+
+test('hetzner builds bearer server reads and never powers or creates servers', () => {
+  const r = adapters.buildRequest('hetzner', 'list_servers', {}, 'h-cloud-tok');
+  assert.equal(r.ok, true);
+  assert.equal(r.request.url, 'https://api.hetzner.cloud/v1/servers?page=1');
+  assert.equal(r.request.headers.Authorization, 'Bearer h-cloud-tok');
+  const paged = adapters.buildRequest('hetzner', 'list_servers', { page: '3' }, 'tok');
+  assert.equal(paged.ok, true);
+  assert.ok(paged.request.url.indexOf('page=3') >= 0, 'page rides the URL');
+  assert.equal(adapters.buildRequest('hetzner', 'list_servers', { page: '0' }, 'tok').reason, 'param_invalid', 'page below 1');
+  assert.equal(adapters.buildRequest('hetzner', 'list_servers', { page: '101' }, 'tok').reason, 'param_invalid', 'page above the cap');
+  for (const a of adapters.listActions('hetzner')) {
+    assert.equal(a.kind, 'read_only', 'hetzner is read-only');
+    assert.equal(a.scope, 'servers.read');
   }
 });

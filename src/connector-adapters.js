@@ -157,6 +157,43 @@
     ],
   };
 
+  ADAPTERS.trakt = {
+    id: 'trakt', name: 'Trakt', authShape: 'token', setupRequired: false,
+    setupNote: 'paste a Trakt API client id from trakt.tv/api-docs; it is stored only in the app vault, never requested or shown in chat',
+    buildHeaders: function (token) {
+      return { 'Content-Type': 'application/json', 'trakt-api-version': '2', 'trakt-api-key': token };
+    },
+    actions: [
+      { id: 'list_trending_movies', label: 'List trending movies on Trakt (capped)', scope: 'history.read', kind: 'read_only',
+        params: [{ name: 'limit', required: false, maxLength: 2 }],
+        build: function (p, token) {
+          let n = '5';
+          if (p.limit !== undefined && p.limit !== '') {
+            if (!/^\d+$/.test(String(p.limit)) || parseInt(p.limit, 10) < 1 || parseInt(p.limit, 10) > 10) return { error: 'param_invalid' };
+            n = String(p.limit);
+          }
+          return { method: 'GET', url: 'https://api.trakt.tv/movies/trending?limit=' + n, headers: this.buildHeaders(token), body: null, urlContainsSecret: false };
+        } },
+    ],
+  };
+
+  ADAPTERS.hetzner = {
+    id: 'hetzner', name: 'Hetzner Cloud', authShape: 'token', setupRequired: false,
+    setupNote: 'paste a Hetzner Cloud API token from console.hetzner.cloud; it is stored only in the app vault, never requested or shown in chat',
+    actions: [
+      { id: 'list_servers', label: 'List Hetzner Cloud servers (capped)', scope: 'servers.read', kind: 'read_only',
+        params: [{ name: 'page', required: false, maxLength: 3 }],
+        build: function (p, token) {
+          let page = '1';
+          if (p.page !== undefined && p.page !== '') {
+            if (!/^\d+$/.test(String(p.page)) || parseInt(p.page, 10) < 1 || parseInt(p.page, 10) > 100) return { error: 'param_invalid' };
+            page = String(p.page);
+          }
+          return { method: 'GET', url: 'https://api.hetzner.cloud/v1/servers?page=' + page, headers: { Authorization: 'Bearer ' + token }, body: null, urlContainsSecret: false };
+        } },
+    ],
+  };
+
   ADAPTERS.upstox = {
     id: 'upstox', name: 'Upstox', authShape: 'token', setupRequired: false,
     setupNote: 'paste an Upstox API access token; it is stored only in the app vault, never requested or shown in chat',

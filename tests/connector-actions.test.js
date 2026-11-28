@@ -1115,3 +1115,22 @@ test('upstox and udemy refuse before connect and ride their credentials on reads
   assert.equal(r.ok, true, 'udemy reads with a credential');
   assert.equal(seen.headers.Authorization, 'Basic ' + Buffer.from(':learn-tok').toString('base64'), 'udemy credential rides as the computed Basic value');
 });
+
+// ---- batch 47 (28 Nov 2026): trakt + hetzner credential gates ----
+
+test('trakt and hetzner refuse before connect and ride their credentials on reads', async () => {
+  let seen = null;
+  const transport = async (req) => { seen = req; return { status: 200, body: JSON.stringify({}) }; };
+  const { catalog, engine } = makeEngine(transport, 'media-tok');
+  assert.equal((await engine.run('trakt', 'list_trending_movies', {})).reason, 'not_connected', 'trakt refuses before connect');
+  assert.equal(catalog.connect('trakt', { userInitiated: true, scopes: ['history.read'], credentialRef: 'vault:trakt-cred' }).ok, true, 'trakt connects');
+  let r = await engine.run('trakt', 'list_trending_movies', {});
+  assert.equal(r.ok, true, 'trakt reads with a credential');
+  assert.equal(seen.headers['trakt-api-key'], 'media-tok', 'trakt credential rides the client-key header');
+
+  assert.equal((await engine.run('hetzner', 'list_servers', {})).reason, 'not_connected', 'hetzner refuses before connect');
+  assert.equal(catalog.connect('hetzner', { userInitiated: true, scopes: ['servers.read'], credentialRef: 'vault:hetzner-cred' }).ok, true, 'hetzner connects');
+  r = await engine.run('hetzner', 'list_servers', {});
+  assert.equal(r.ok, true, 'hetzner reads with a credential');
+  assert.equal(seen.headers.Authorization, 'Bearer media-tok', 'hetzner credential rides the Bearer header');
+});

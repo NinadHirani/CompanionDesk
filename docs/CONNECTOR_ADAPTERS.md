@@ -796,3 +796,14 @@ Actions:
 The credentials are the user's own keys pasted into the app vault.
 
 Tests: adapter build/validation (exact URLs, caps, computed-Basic header asserted against the expected value, read-only sweeps), engine gates (each refuses before connect; upstox's credential rides the Bearer header, udemy's rides the computed Basic value). Catalog count pins: 89 still-definition-only expanded rows, 93 definition-only total.
+## Batch 47 (28 Nov 2026): Trakt, Hetzner Cloud
+
+Upgraded two connectors to key-bound READ-ONLY adapters (each `auth: api_key`, `authShape: token`).
+
+Actions:
+- Trakt (pinned `api.trakt.tv`): `list_trending_movies` (limit 1-10 default 5, `trakt-api-key` client id header, `trakt-api-version: 2`). No check-ins, scrobbles or writes.
+- Hetzner Cloud (pinned `api.hetzner.cloud/v1`): `list_servers` (page 1-100 default 1, Bearer token). No create, power or writes.
+
+The credentials are the user's own keys pasted into the app vault.
+
+Tests: adapter build/validation (exact URLs, caps, header shape, read-only sweeps), engine gates (each refuses before connect; trakt's credential rides the trakt-api-key header, hetzner's rides the Bearer header). Catalog count pins: 87 still-definition-only expanded rows, 91 definition-only total.
