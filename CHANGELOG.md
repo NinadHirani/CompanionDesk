@@ -1,5 +1,12 @@
 # Changelog
 
+## M8 batch 60 (28 Nov 2026, parallel lanes) - runtime reliability + token lifecycle hardening
+
+- Ran as three concurrent isolated lanes (separate workspaces, separate branches, sequential merge into main): runtime reliability, token lifecycle, release-doc coherence. Branches batch60-runtime-reliability (89fa69f) and batch60-token-lifecycle (ad2fe91) merged no-ff; the docs lane came back CLEAN (connector-catalog-doc and docs tests pass; no drift).
+- Runtime lane (red-first, tests/connector-credential-store-atomic-write.test.js): a crash or disk error mid-write could leave a torn partial .bin credential file behind - hasCredential true while readCredential returns null, a half-authenticated connector. The credential file publish is now atomic (temp file + rename); a failed write leaves no partial file on disk. Existing credential-store pins pass unchanged.
+- Token lane (red-first, tests/connector-tokens-expiry-hardening.test.js): a provider token response with expires_in <= 0 or non-finite reached applyRefresh and minted a credential born expired (needsRefresh fires immediately, risking a refresh loop). parseTokenResponse now treats a lifetime that is not a finite positive number as unknown: the stored expiry is kept, never computed from a non-positive lifetime. Existing lifecycle pins pass unchanged.
+- Test-only hardening of pure modules: no network, no credentials, no external actions, no release.
+
 ## M8 batch 59 (28 Nov 2026) - connector-engine resilience: run() never rejects
 
 - One real resilience gap in src/connector-actions.js, caught red-first by tests/connector-engine-resilience.test.js: run()'s contract everywhere else is a structured fail-closed refusal, but it had no outer exception boundary. A throwing injected dependency (a vault hiccup in the credential reader, a malformed adapter's validateOnly or refreshRequest) escaped run() as an unhandled rejection, which in the wired main process turns one connector's bad day into a crashed IPC handler.
