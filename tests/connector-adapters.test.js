@@ -12,7 +12,7 @@ const assert = require('node:assert');
 const adapters = require('../src/connector-adapters.js');
 const { createConnectorCatalog } = require('../src/connectors.js');
 
-const IMPLEMENTED = ['anthropic', 'brave-search', 'arxiv', 'airtable', 'coda', 'circleci', 'cloudflare', 'crossref', 'digitalocean', 'discord', 'docker-hub', 'github', 'gitlab', 'gmail', 'heroku', 'google-calendar', 'google-docs', 'google-sheets', 'google-drive', 'google-gemini', 'huggingface', 'internet-archive', 'jira', 'mailgun', 'postmark', 'sendgrid', 'linear', 'microsoft-calendar', 'microsoft-onedrive', 'microsoft-excel', 'microsoft-outlook', 'microsoft-teams', 'microsoft-word', 'musicbrainz', 'notion', 'npm', 'open-meteo', 'openai', 'openalex', 'openlibrary', 'openstreetmap', 'pypi', 'render', 'slack', 'supabase', 'sentry', 'pagerduty', 'tmdb', 'unsplash', 'new-relic', 'pinecone', 'pexels', 'kaggle', 'stripe', 'groq', 'cohere', 'xai', 'mistral', 'openrouter', 'replicate', 'together-ai', 'stability-ai', 'elevenlabs', 'google-maps', 'mapbox', 'deepgram', 'assemblyai', 'plausible', 'amplitude', 'mixpanel', 'posthog', 'flickr', 'pipedrive', 'razorpay', 'zerodha-kite', 'upstox', 'udemy', 'trakt', 'hetzner', 'tavily', 'telegram', 'trello', 'todoist', 'wikimedia'];
+const IMPLEMENTED = ['anthropic', 'brave-search', 'arxiv', 'airtable', 'coda', 'circleci', 'cloudflare', 'crossref', 'digitalocean', 'discord', 'docker-hub', 'github', 'gitlab', 'gmail', 'heroku', 'google-calendar', 'google-docs', 'google-sheets', 'google-drive', 'google-gemini', 'huggingface', 'internet-archive', 'jira', 'mailgun', 'postmark', 'sendgrid', 'linear', 'microsoft-calendar', 'microsoft-onedrive', 'microsoft-excel', 'microsoft-outlook', 'microsoft-teams', 'microsoft-word', 'musicbrainz', 'notion', 'npm', 'open-meteo', 'openai', 'openalex', 'openlibrary', 'openstreetmap', 'pypi', 'render', 'slack', 'supabase', 'sentry', 'pagerduty', 'tmdb', 'unsplash', 'new-relic', 'pinecone', 'pexels', 'kaggle', 'stripe', 'groq', 'cohere', 'xai', 'mistral', 'openrouter', 'replicate', 'together-ai', 'stability-ai', 'elevenlabs', 'google-maps', 'mapbox', 'deepgram', 'assemblyai', 'plausible', 'amplitude', 'mixpanel', 'posthog', 'flickr', 'pipedrive', 'razorpay', 'zerodha-kite', 'upstox', 'udemy', 'trakt', 'hetzner', 'better-stack', 'backblaze-b2', 'tavily', 'telegram', 'trello', 'todoist', 'wikimedia'];
 const OAUTH = ['gmail', 'google-calendar', 'google-drive', 'microsoft-calendar', 'microsoft-onedrive', 'microsoft-outlook'];
 
 test('the adapter registry covers exactly the implemented catalog entries', () => {
@@ -1745,5 +1745,36 @@ test('hetzner builds bearer server reads and never powers or creates servers', (
   for (const a of adapters.listActions('hetzner')) {
     assert.equal(a.kind, 'read_only', 'hetzner is read-only');
     assert.equal(a.scope, 'servers.read');
+  }
+});
+
+// ---- batch 48 (28 Nov 2026): better-stack + backblaze-b2 reads ----
+
+test('better-stack builds bearer monitor reads and never pauses or deletes monitors', () => {
+  const r = adapters.buildRequest('better-stack', 'list_monitors', {}, 'bs-tok');
+  assert.equal(r.ok, true);
+  assert.equal(r.request.url, 'https://api.betterstack.com/api/v1/monitors?page=1');
+  assert.equal(r.request.headers.Authorization, 'Bearer bs-tok');
+  const paged = adapters.buildRequest('better-stack', 'list_monitors', { page: '2' }, 'tok');
+  assert.equal(paged.ok, true);
+  assert.ok(paged.request.url.indexOf('page=2') >= 0, 'page rides the URL');
+  assert.equal(adapters.buildRequest('better-stack', 'list_monitors', { page: '0' }, 'tok').reason, 'param_invalid', 'page below 1');
+  assert.equal(adapters.buildRequest('better-stack', 'list_monitors', { page: '101' }, 'tok').reason, 'param_invalid', 'page above the cap');
+  for (const a of adapters.listActions('better-stack')) {
+    assert.equal(a.kind, 'read_only', 'better-stack is read-only');
+    assert.equal(a.scope, 'monitors.read');
+  }
+});
+
+test('backblaze-b2 builds the raw-token bucket list read and never uploads or deletes', () => {
+  const r = adapters.buildRequest('backblaze-b2', 'list_buckets', {}, 'b2-app-key-tok');
+  assert.equal(r.ok, true);
+  assert.equal(r.request.url, 'https://api.backblazeb2.com/b2api/v2/b2_list_buckets');
+  assert.equal(r.request.headers.Authorization, 'b2-app-key-tok', 'B2 rides the raw token, no Bearer prefix');
+  assert.equal(r.request.body, JSON.stringify({ maxBucketCount: 100 }), 'list is bounded');
+  assert.equal(adapters.listActions('backblaze-b2').length, 1, 'only the bucket list is implemented');
+  for (const a of adapters.listActions('backblaze-b2')) {
+    assert.equal(a.kind, 'read_only', 'backblaze-b2 is read-only');
+    assert.equal(a.scope, 'objects.read');
   }
 });

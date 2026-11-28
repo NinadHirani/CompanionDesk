@@ -807,3 +807,14 @@ Actions:
 The credentials are the user's own keys pasted into the app vault.
 
 Tests: adapter build/validation (exact URLs, caps, header shape, read-only sweeps), engine gates (each refuses before connect; trakt's credential rides the trakt-api-key header, hetzner's rides the Bearer header). Catalog count pins: 87 still-definition-only expanded rows, 91 definition-only total.
+## Batch 48 (28 Nov 2026): Better Stack, Backblaze B2
+
+Upgraded two connectors to key-bound READ-ONLY adapters (each `auth: api_key`, `authShape: token`).
+
+Actions:
+- Better Stack (pinned `api.betterstack.com/api/v1`): `list_monitors` (page 1-100 default 1, Bearer token). No pause, delete or writes.
+- Backblaze B2 (pinned `api.backblazeb2.com/b2api/v2`): `list_buckets` (maxBucketCount 100, the raw application-key token rides the Authorization header with no Bearer prefix, B2's own list call is a POST). No upload, delete or writes.
+
+The credentials are the user's own keys pasted into the app vault.
+
+Tests: adapter build/validation (exact URLs, caps, raw-token header, read-only sweeps), engine gates (each refuses before connect; better-stack's credential rides the Bearer header, backblaze-b2's rides the raw token). Catalog count pins: 85 still-definition-only expanded rows, 89 definition-only total.

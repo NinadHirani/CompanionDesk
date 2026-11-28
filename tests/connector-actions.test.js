@@ -1134,3 +1134,22 @@ test('trakt and hetzner refuse before connect and ride their credentials on read
   assert.equal(r.ok, true, 'hetzner reads with a credential');
   assert.equal(seen.headers.Authorization, 'Bearer media-tok', 'hetzner credential rides the Bearer header');
 });
+
+// ---- batch 48 (28 Nov 2026): better-stack + backblaze-b2 credential gates ----
+
+test('better-stack and backblaze-b2 refuse before connect and ride their credentials on reads', async () => {
+  let seen = null;
+  const transport = async (req) => { seen = req; return { status: 200, body: JSON.stringify({}) }; };
+  const { catalog, engine } = makeEngine(transport, 'ops-tok');
+  assert.equal((await engine.run('better-stack', 'list_monitors', {})).reason, 'not_connected', 'better-stack refuses before connect');
+  assert.equal(catalog.connect('better-stack', { userInitiated: true, scopes: ['monitors.read'], credentialRef: 'vault:better-stack-cred' }).ok, true, 'better-stack connects');
+  let r = await engine.run('better-stack', 'list_monitors', {});
+  assert.equal(r.ok, true, 'better-stack reads with a credential');
+  assert.equal(seen.headers.Authorization, 'Bearer ops-tok', 'better-stack credential rides the Bearer header');
+
+  assert.equal((await engine.run('backblaze-b2', 'list_buckets', {})).reason, 'not_connected', 'backblaze-b2 refuses before connect');
+  assert.equal(catalog.connect('backblaze-b2', { userInitiated: true, scopes: ['objects.read'], credentialRef: 'vault:backblaze-b2-cred' }).ok, true, 'backblaze-b2 connects');
+  r = await engine.run('backblaze-b2', 'list_buckets', {});
+  assert.equal(r.ok, true, 'backblaze-b2 reads with a credential');
+  assert.equal(seen.headers.Authorization, 'ops-tok', 'backblaze-b2 credential rides the raw-token header');
+});

@@ -157,6 +157,35 @@
     ],
   };
 
+  ADAPTERS['better-stack'] = {
+    id: 'better-stack', name: 'Better Stack', authShape: 'token', setupRequired: false,
+    setupNote: 'paste a Better Stack API token from app.betterstack.com; it is stored only in the app vault, never requested or shown in chat',
+    actions: [
+      { id: 'list_monitors', label: 'List Better Stack monitors (capped)', scope: 'monitors.read', kind: 'read_only',
+        params: [{ name: 'page', required: false, maxLength: 3 }],
+        build: function (p, token) {
+          let page = '1';
+          if (p.page !== undefined && p.page !== '') {
+            if (!/^\d+$/.test(String(p.page)) || parseInt(p.page, 10) < 1 || parseInt(p.page, 10) > 100) return { error: 'param_invalid' };
+            page = String(p.page);
+          }
+          return { method: 'GET', url: 'https://api.betterstack.com/api/v1/monitors?page=' + page, headers: { Authorization: 'Bearer ' + token }, body: null, urlContainsSecret: false };
+        } },
+    ],
+  };
+
+  ADAPTERS['backblaze-b2'] = {
+    id: 'backblaze-b2', name: 'Backblaze B2', authShape: 'token', setupRequired: false,
+    setupNote: 'paste a Backblaze B2 application key token; it is stored only in the app vault, never requested or shown in chat',
+    actions: [
+      { id: 'list_buckets', label: 'List Backblaze B2 buckets (capped)', scope: 'objects.read', kind: 'read_only',
+        params: [],
+        build: function (p, token) {
+          return { method: 'POST', url: 'https://api.backblazeb2.com/b2api/v2/b2_list_buckets', headers: { Authorization: token, 'Content-Type': 'application/json' }, body: JSON.stringify({ maxBucketCount: 100 }), urlContainsSecret: false };
+        } },
+    ],
+  };
+
   ADAPTERS.trakt = {
     id: 'trakt', name: 'Trakt', authShape: 'token', setupRequired: false,
     setupNote: 'paste a Trakt API client id from trakt.tv/api-docs; it is stored only in the app vault, never requested or shown in chat',
