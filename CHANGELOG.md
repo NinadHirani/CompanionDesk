@@ -1,5 +1,10 @@
 # Changelog
 
+## M8 batch 55 (28 Nov 2026) - release-prep config coherence pin
+
+- New tests/release-config-coherence.test.js hardens the static release config without building, publishing or releasing anything: package.json version is semver the STABLE_TAG format can carry; every icon path the build config references exists on disk; the build targets (mac dmg arm64+x64, win nsis x64, linux AppImage x64) match scripts/build-dist.js's target table; the linux artifact name is pinned; docs/DISTRIBUTION.md only names npm scripts and node scripts that exist and only names publish modes build-dist accepts; publish defaults to never in code as the doc promises; and a bogus platform flag exits 1 with the usage line, building nothing.
+- Publish-pipeline decision logic (publishConfig, continuous/stable gates, draft-only stable releases) stays covered by the existing update-policy and ci-release test files; this batch adds only the coherence layer around it. Repo-file reads and one immediate-exit spawn; no device testing, no signing, no distribution.
+
 ## M8 batch 54 (28 Nov 2026) - uniform OAuth credential contract sweep
 
 - New tests/connector-oauth-contract.test.js pins the OAuth surface for all 11 oauth_json adapters (gmail, google-docs/sheets/drive/calendar, microsoft-excel/word/teams/onedrive/outlook/calendar): authorizeUrl, tokenRequest and refreshRequest exist on every adapter; token and refresh POSTs carry client_id/client_secret/refresh_token in the form body only (never in the URL); grant_type is exact; endpoints are the provider's own; Microsoft scopes include offline_access and Google authorize URLs ask for offline consent.
