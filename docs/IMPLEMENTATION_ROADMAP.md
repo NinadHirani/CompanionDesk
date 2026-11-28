@@ -14,6 +14,7 @@ table below was refreshed in the next commit, which is docs-only.
 | GATE 2 agent foundation | IN PROGRESS (security workstream, SUPPORTS the product phases) | slices 1-4, persistence wiring, 3j.3-3j.6 notification gates, run-driver Stage A (3j.9), the scheduling gate (schedule_create, 3j.11, D-S1 approved 24 Nov), the run entry point (3j.12, D1 option a approved 25 Nov) and run-driver Stage B (3j.10, approved and implemented 26 Nov 2026: the calendar_upcoming read-only projection plus grant/revocation/hydrate audit entries) implemented; the enable step landed 26 Nov 2026 (approved by Ninad the same day, D-B2 resolved: grant path (a)): main.js registers EXACTLY ONE tool, the scheduling gate's schedule_create (capability sensitive, guardrails tested in tests/gate2-scheduling-enable.test.js), while the Stage B calendar_upcoming tool stays unregistered, the run entry point fires nothing (requestRun has no caller in this build; D-S2 decided DEFER 25 Nov 2026, see docs/D_S2_DECISION_BRIEF.md), and the production registry carries exactly that one registered tool; the file-output gate (3j.13, D-F1/F2/F3 approved and implemented 26 Nov 2026: the pure validation/policy layer with the injected io adapter contract, root unset by default) is implemented but NOT registered or wired; the Gate 4 file-access gate (Ninad's decision C, 26 Nov 2026 evening: src/agent-tool-file-access.js, a pure decide core with target visibility, overwrite/delete confirmation gates, unknown-action/relative-path refusals, scoped roots unset by default and an explicit OS-sandbox note) landed with its EXECUTION SLICE the same night (f239a93, suite 1323/1323): every operation runs through the policy first, a refusal never reaches the io layer, the executor probes the real existence once before refusing a write as an overwrite (a genuinely new path proceeds, an existing one still demands confirmed), deletes still require confirmed, OS errors surface verbatim (code + message, performed: true, no silent destructive operations), and the write is byte-capped at 64 KiB (the real adapter caps reads at 256 KiB and listings at 500 entries). main.js registers it as the SECOND tool, mirroring the scheduling gate's enable step (registration alone lets no run start: requestRun still has no caller, and the sensitive class forces a fresh one-time approval per call), and wires the real fs adapter through it; the guardrail tests carry exactly two registration literals, and the Stage B calendar_upcoming tool stays unregistered. On 26 Nov 2026 Ninad approved the remaining decision-sheet defaults (schedule_create enable with guardrails, file-output D-F1/F2/F3 with the root unset by default, M8 schemas-first with no connectors until he names services, M4 sensitive sidecar markings with sensitive content session-only, M6 OS-native TTS only with piper1-gpl deferred) and explicitly deferred M7 (capture engine) and M9 (release readiness); their implementation slices follow in that order. Per Ninad's 24 Nov direction the run-driver work proceeds only through these approved slices |
 | M4 memory v2 | DECIDED + WIRED (slices 1-2) | the owner resolved all four decisions 24 Nov 2026 (`docs/M4_MEMORY_DECISIONS.md`, Resolution); `189e3a7` wired the defaults (measured ranker in the persona/chat path, budgets chat 12/screen 6/goal 8/vision 0, screen-derived asks pull zero memory, fail-closed sensitive storage gate). WIRED SLICE 2: `src/memory-session.js` runs the v2 store contract (`src/memory-store.js`) as the product's in-session memory view; every memory operation (list, add, forget, suggest, decide, onboarding, chat ask path, screen ask) flows through it. The About-me file stays canonical with SINGLE-bullet writes (manual edits survive; the contract's toMarkdown is deliberately not used for persistence) and sync-on-demand stat freshness replaces the per-ask re-read with the same guarantee. Session-only sensitivity marks survive refreshes within a session; `persistSensitive()` stays fail-closed (`sensitive_storage_blocked`) and no product surface passes sensitive entries yet. The owner sub-decision on sensitive state is RESOLVED (26 Nov 2026, decision-sheet item 6): a session-only sidecar (`src/memory-sidecar.js`), deliberately NO on-disk format. UI SLICE LANDED (26 Nov 2026, Ninad explicitly reopened the M2/M4 UI paths for this scoped slice only): `renderer/memory-panel.js` plus the pure shaper `src/memory-view.js` make the mark/persist interfaces explicit: mark/unmark with visible status lines ([saved] / [session-only, not saved] / [sensitive]; a mark on a saved bullet is labelled mark-session-only, a restart drops it), session-only adds behind an explicit off-by-default control, the fail-closed `persistSensitive` refusal surfaced verbatim through a try-to-save control, consent-gated retrieval with a per-search consent control (default off) and the budget/matched-terms header served from the frozen BUDGETS, textContent-only rendering with aria labels and a live status region; channels memory:items/mark/persist/search wired main->personal->session, `persisted()` provenance on the session, and `addMemory` passes user-commanded sensitive entries only. ERROR-SAFETY/CONSENT COMPLETION (26 Nov 2026 evening, four red-first panel-only slices, no closed file touched): `d48f07f` row actions degrade via a guarded `outcomeText` and every button carries an in-flight double-click guard; `d7247f5` mount and search degrade honestly when the shaper is partial and the add path announces a missing bridge; `c22625a` per-search consent resets in try/finally after every search attempt with the empty-query boundary preserved; `84d8e75` the search path announces a missing bridge like add. The suite grew 1261 to 1268 with nine behavioral tests in tests/memory-panel-errors.test.js; both CI workflows green on every commit (45818563456/45818563487, 45827758579/45827758304, 45828714608/45828714590, 45829339614/45829339623). Still NO on-disk sensitive format and no embeddings downloads. STILL GATED: nothing in the M4 UI lane |
 | M5 proactive / M6 voice / M7 screen understanding v2 / M8 integrations + workspace UI | SLICES LANDED, MILESTONES OPEN | M5 complete as specified (slices 1-4, scheduler + panel + settings + quiet-hours visibility). M6 slices 1-4 landed incl. wake milestone 2 (dynamic-name engine, platform gate, honest listener state; training pipeline, provenance `docs/WAKE_PROVENANCE.md`, reproducible eval `scripts/wake/repro_eval.py`); wake stays default-off pending physical mic validation on macOS/Windows/Linux/Android and is out of the milestone lane unless Ninad reopens it. The TTS engine decision resolved 26 Nov 2026 (decision-sheet item 7): OS-native speechSynthesis ONLY, piper1-gpl deferred and unbundled, guarded by tests/m6-tts-decision.test.js. M7 policy slice + observation-session machine landed; the capture engine stays unbuilt pending real permission flows and device testing. M8 slices 1-3 landed (integrations registry, Device Access Centre policy core, workspace-views groundwork); M8 slice 4 landed 26 Nov 2026 (the schemas-first wiring Ninad approved the same day, no connectors): six further view schemas wired in src/workspace-views.js, each mirroring one owning module's rows exactly and none touching a closed file (tasks <- agent-reminders, memory <- memory-session.items with sensitive-flagged rows skipped until M4 defines the workspace treatment, tools <- tool-registry.list, permissions <- device-access.list, activity <- audit-log entries incl. the append-allowlisted extras and chain fields, integrations <- integrations.js list); files, workflows and models got their owning row stores on 26 Nov 2026 evening (Ninad's Gate 8 decision A: src/workspace-stores.js pure bounded stores with per-field types, enums, frozen rows and bounded search; three stores created in main.js, three schemas wired in workspace-views.js, providers wired, stores start EMPTY with no auto-scan/no auto-exposure/no model downloads, in-memory this slice) and settings stays unwired because its owning module (settings.js) is in the m84 checkpoint-closed set; real connectors and floating-companion customization still await the owner's picks; the connector catalog/settings CORE landed 26 Nov 2026 evening (Ninad's Gate 2 decision, 22:10 IST: free-first discovery catalog of 20 shipped entries, extensible reviewed registration, explicit per-connector scopes with per-scope classes, full lifecycle connect/disconnect/reconnect/revoke/readmit, single-use approval gates for write/send/delete/external/sensitive scopes, opaque credential references only (keychain:/vault:/credential-store:), cost and limits surfaced before activation, AUTO_CONNECT false, audit on accepted changes only) as src/connectors.js with 12 red-first tests in tests/connectors-catalog.test.js; it is unregistered in main.js and NOTHING is connected; naming a real service and an explicit per-connector activation remain Ninad's calls |
+| M9 release readiness | DEFINED (28 Nov 2026, owner); groundwork landed; no release exists | docs/M9_RELEASE_BRIEF.md adopted as the definition (section below); CHANGELOG and first-run defaults pin landed 25 Nov 2026; packaging, signing and distribution unstarted; physical device pass outstanding |
 
 Verified state: full `npm test` on 24 Nov 2026: 950/950 pass,
 selftest PASS (937/937 at `2ca99d4`, CI runs 45426721777, 45426721768;
@@ -871,6 +872,60 @@ connectors chosen by Ninad and verified against official APIs before any
 capability claim; workspace views (conversations, tasks, memory, tools,
 files, workflows, settings, permissions, activity, models, integrations);
 floating companion move/resize/remember/customization.
+
+## M9 - Release readiness (owner-defined 28 Nov 2026)
+
+Ninad defined M9 in chat on 28 Nov 2026 (~12:45 IST): adopt the
+coordinated-release brief (`docs/M9_RELEASE_BRIEF.md`) as the phase
+definition. M9 ships one versioned, installable macOS build of the
+already-landed M0-M5 and Gate 2 slices with the release engineering around
+it (versioning, packaging, update story, first-run experience, release
+checklist). It coordinates what exists; it adds no new product capability.
+
+Scope (the brief's six items, now governing):
+
+1. Versioning and changelog discipline: one version source
+   (package.json), this changelog, and the preview-tag precedent.
+2. Desktop packaging (macOS first): the electron-builder target the dist
+   path already uses produces the app bundle; a packaged-app smoke
+   checklist (models dir, secure storage, notification paths, settings)
+   gates every release candidate.
+3. Signing and notarization decision (Ninad's, with a real cost): macOS
+   Developer ID plus notarization is an Apple Developer Program spend
+   (US$99/yr at the last check); Windows signing is separate. Unsigned
+   ships with Gatekeeper/SmartScreen warnings - an explicit, documented
+   tradeoff, never a silent one.
+4. Update story: the free-first default is manual download plus the
+   in-app version display; an auto-update feed only follows a signing
+   decision, and never updates silently.
+5. First-run experience: the standing privacy defaults verified on a
+   fresh install (cloud off, voice off, proactive delivery off, nothing
+   captured, no permission requested at startup), pinned by
+   tests/first-run-defaults.test.js (landed 25 Nov 2026).
+6. Release checklist and acceptance (below).
+
+Acceptance criteria (the brief's, now governing):
+
+- A tagged release candidate builds from a clean clone with no secrets and
+  no network access during the build.
+- The packaged app passes the smoke checklist on macOS; the CI matrix
+  stays as it is (Windows/Linux CI-only).
+- Every default-privacy claim in the release notes is backed by a test
+  that passes on the tagged commit.
+- Nothing in this phase enables execution capability, capture, wake word,
+  or cloud by default.
+
+Gates M9 waits on: the Gate 1 device measurements (physical OnePlus 12R
+time); the physical device pass (`docs/DEVICE_VALIDATION_CHECKLIST.md`);
+the signing spend and any public distribution (Ninad's explicit approvals;
+nothing public before review); run-driver Stage B/C separate reviews (the
+24 Nov direction stands). No performance claim appears in any release note
+without measured numbers.
+
+Status: DEFINED (28 Nov 2026); no release exists yet. Landed groundwork:
+the CHANGELOG and the first-run defaults pin (25 Nov 2026), this
+definition. Unstarted: any packaging run, signing, distribution. The
+file-output enable (28 Nov 2026) landed under Gate 2, not M9.
 
 ## Test strategy
 

@@ -187,11 +187,17 @@ fresh one-time approval per call.
 Decision: (a) green-light now (it brings the real permission flows and
 device-testing needs with it), or (b) keep deferred.
 
-## 6. M9 release readiness (deferred item 8)
+## 6. M9 release readiness -- RESOLVED (28 Nov 2026, ~12:45 IST)
 
-A docs-only proposal exists (docs/M9_RELEASE_BRIEF.md); it is not a
-definition. Decision: (a) define the phase now (say what M9 must contain),
-or (b) keep deferred.
+Ninad defined M9 in chat: the coordinated-release brief
+(docs/M9_RELEASE_BRIEF.md) becomes the phase definition - one versioned,
+installable macOS build of the landed M0-M5 and Gate 2 slices plus the
+release engineering around it, no new product capability. The governing
+definition lives in docs/IMPLEMENTATION_ROADMAP.md ("M9 - Release
+readiness (owner-defined 28 Nov 2026)"). Signing spend, public
+distribution and any auto-update feed remain Ninad's explicit decisions;
+the physical device pass remains the owner's. Implementation proceeds
+slice by slice; nothing here starts packaging or distribution.
 
 ## 7. Sensitive-memory UI -- RESOLVED (26 Nov 2026 evening)
 

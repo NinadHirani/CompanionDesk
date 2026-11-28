@@ -7,6 +7,15 @@ gated, disabled, or unmeasured; every line matches the roadmap evidence.
 
 ## [Unreleased]
 
+### 28 November 2026
+- M9 defined by Ninad in chat: the coordinated-release brief
+  (docs/M9_RELEASE_BRIEF.md) is adopted as the phase definition - one
+  versioned, installable macOS build of the landed M0-M5 and Gate 2 slices
+  plus the release engineering around it, no new product capability. The
+  governing definition lives in docs/IMPLEMENTATION_ROADMAP.md; signing
+  spend, public distribution and any auto-update feed stay Ninad's
+  explicit decisions, and no release exists yet.
+
 ### 26 November 2026
 - Gate 2 run-driver Stage B: the first read-only tool, calendar_upcoming
   (blueprint 3j.10, approved by Ninad on 26 Nov 2026). A bounded projection
