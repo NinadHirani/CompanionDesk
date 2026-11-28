@@ -1020,3 +1020,22 @@ test('deepgram and assemblyai refuse before connect and ride their credentials o
     assert.ok(seen.headers.Authorization.indexOf('speech-tok') >= 0, id + ' credential rides the Authorization header');
   }
 });
+
+// ---- batch 42 (28 Nov 2026): plausible + amplitude credential gates ----
+
+test('plausible and amplitude refuse before connect and ride their credentials on reads', async () => {
+  let seen = null;
+  const transport = async (req) => { seen = req; return { status: 200, body: JSON.stringify([]) }; };
+  const { catalog, engine } = makeEngine(transport, 'analytics-tok');
+  for (const [id, action, params, scope] of [
+    ['plausible', 'list_sites', {}, 'stats.read'],
+    ['amplitude', 'list_projects', {}, 'events.read'],
+  ]) {
+    assert.equal((await engine.run(id, action, params)).reason, 'not_connected', id + ' refuses before connect');
+    const c = catalog.connect(id, { userInitiated: true, scopes: [scope], credentialRef: 'vault:' + id + '-cred' });
+    assert.equal(c.ok, true, id + ' connects');
+    const r = await engine.run(id, action, params);
+    assert.equal(r.ok, true, id + ' reads with a credential');
+    assert.ok(seen.headers.Authorization.indexOf('analytics-tok') >= 0, id + ' credential rides the Authorization header');
+  }
+});

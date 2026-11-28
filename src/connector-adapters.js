@@ -157,6 +157,30 @@
     ],
   };
 
+  ADAPTERS.plausible = {
+    id: 'plausible', name: 'Plausible', authShape: 'token', setupRequired: false,
+    setupNote: 'paste a Plausible API key from your Plausible account settings; it is stored only in the app vault, never requested or shown in chat',
+    actions: [
+      { id: 'list_sites', label: 'List Plausible sites (capped)', scope: 'stats.read', kind: 'read_only',
+        params: [],
+        build: function (p, token) {
+          return { method: 'GET', url: 'https://plausible.io/api/v1/sites', headers: { Authorization: 'Bearer ' + token }, body: null, urlContainsSecret: false };
+        } },
+    ],
+  };
+
+  ADAPTERS.amplitude = {
+    id: 'amplitude', name: 'Amplitude', authShape: 'token', setupRequired: false,
+    setupNote: 'paste an Amplitude Management API token (service account); it is stored only in the app vault, never requested or shown in chat',
+    actions: [
+      { id: 'list_projects', label: 'List Amplitude projects (capped)', scope: 'events.read', kind: 'read_only',
+        params: [],
+        build: function (p, token) {
+          return { method: 'GET', url: 'https://api2.amplitude.com/2/projects', headers: { Authorization: 'Bearer ' + token }, body: null, urlContainsSecret: false };
+        } },
+    ],
+  };
+
   ADAPTERS.deepgram = {
     id: 'deepgram', name: 'Deepgram', authShape: 'token', setupRequired: false,
     setupNote: 'paste a Deepgram API key from console.deepgram.com; it is stored only in the app vault, never requested or shown in chat',

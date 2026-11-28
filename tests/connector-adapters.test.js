@@ -12,7 +12,7 @@ const assert = require('node:assert');
 const adapters = require('../src/connector-adapters.js');
 const { createConnectorCatalog } = require('../src/connectors.js');
 
-const IMPLEMENTED = ['anthropic', 'brave-search', 'arxiv', 'airtable', 'coda', 'circleci', 'cloudflare', 'crossref', 'digitalocean', 'discord', 'docker-hub', 'github', 'gitlab', 'gmail', 'heroku', 'google-calendar', 'google-docs', 'google-sheets', 'google-drive', 'google-gemini', 'huggingface', 'internet-archive', 'jira', 'mailgun', 'postmark', 'sendgrid', 'linear', 'microsoft-calendar', 'microsoft-onedrive', 'microsoft-excel', 'microsoft-outlook', 'microsoft-teams', 'microsoft-word', 'musicbrainz', 'notion', 'npm', 'open-meteo', 'openai', 'openalex', 'openlibrary', 'openstreetmap', 'pypi', 'render', 'slack', 'supabase', 'sentry', 'pagerduty', 'tmdb', 'unsplash', 'new-relic', 'pinecone', 'pexels', 'kaggle', 'stripe', 'groq', 'cohere', 'xai', 'mistral', 'openrouter', 'replicate', 'together-ai', 'stability-ai', 'elevenlabs', 'google-maps', 'mapbox', 'deepgram', 'assemblyai', 'tavily', 'telegram', 'trello', 'todoist', 'wikimedia'];
+const IMPLEMENTED = ['anthropic', 'brave-search', 'arxiv', 'airtable', 'coda', 'circleci', 'cloudflare', 'crossref', 'digitalocean', 'discord', 'docker-hub', 'github', 'gitlab', 'gmail', 'heroku', 'google-calendar', 'google-docs', 'google-sheets', 'google-drive', 'google-gemini', 'huggingface', 'internet-archive', 'jira', 'mailgun', 'postmark', 'sendgrid', 'linear', 'microsoft-calendar', 'microsoft-onedrive', 'microsoft-excel', 'microsoft-outlook', 'microsoft-teams', 'microsoft-word', 'musicbrainz', 'notion', 'npm', 'open-meteo', 'openai', 'openalex', 'openlibrary', 'openstreetmap', 'pypi', 'render', 'slack', 'supabase', 'sentry', 'pagerduty', 'tmdb', 'unsplash', 'new-relic', 'pinecone', 'pexels', 'kaggle', 'stripe', 'groq', 'cohere', 'xai', 'mistral', 'openrouter', 'replicate', 'together-ai', 'stability-ai', 'elevenlabs', 'google-maps', 'mapbox', 'deepgram', 'assemblyai', 'plausible', 'amplitude', 'tavily', 'telegram', 'trello', 'todoist', 'wikimedia'];
 const OAUTH = ['gmail', 'google-calendar', 'google-drive', 'microsoft-calendar', 'microsoft-onedrive', 'microsoft-outlook'];
 
 test('the adapter registry covers exactly the implemented catalog entries', () => {
@@ -1563,5 +1563,31 @@ test('assemblyai builds bearer transcript reads with strict limit validation and
   for (const a of adapters.listActions('assemblyai')) {
     assert.equal(a.kind, 'read_only', 'assemblyai is read-only');
     assert.equal(a.scope, 'transcripts.read');
+  }
+});
+
+// ---- batch 42 (28 Nov 2026): plausible + amplitude bearer reads ----
+
+test('plausible builds bearer site reads and never queries stats in this build', () => {
+  const r = adapters.buildRequest('plausible', 'list_sites', {}, 'pl-key');
+  assert.equal(r.ok, true);
+  assert.equal(r.request.url, 'https://plausible.io/api/v1/sites');
+  assert.equal(r.request.headers.Authorization, 'Bearer pl-key');
+  assert.equal(adapters.listActions('plausible').length, 1, 'only the site listing is implemented');
+  for (const a of adapters.listActions('plausible')) {
+    assert.equal(a.kind, 'read_only', 'plausible is read-only');
+    assert.equal(a.scope, 'stats.read');
+  }
+});
+
+test('amplitude builds bearer project reads and never queries events in this build', () => {
+  const r = adapters.buildRequest('amplitude', 'list_projects', {}, 'amp-tok');
+  assert.equal(r.ok, true);
+  assert.equal(r.request.url, 'https://api2.amplitude.com/2/projects');
+  assert.equal(r.request.headers.Authorization, 'Bearer amp-tok');
+  assert.equal(adapters.listActions('amplitude').length, 1, 'only the project listing is implemented');
+  for (const a of adapters.listActions('amplitude')) {
+    assert.equal(a.kind, 'read_only', 'amplitude is read-only');
+    assert.equal(a.scope, 'events.read');
   }
 });

@@ -741,3 +741,14 @@ Actions:
 The credentials are the user's own keys pasted into the app vault.
 
 Tests: adapter build/validation (exact URLs, limit bounds, read-only sweeps), engine gates (each refuses before connect and its credential rides the Authorization header). Catalog count pins: 99 still-definition-only expanded rows, 103 definition-only total.
+## Batch 42 (28 Nov 2026): Plausible, Amplitude
+
+Upgraded two analytics connectors to key-bound READ-ONLY adapters (each `auth: api_key`, `authShape: token`).
+
+Actions:
+- Plausible (pinned `plausible.io/api/v1`): `list_sites` (Bearer header). Self-hosted instances use their own URL and are outside the pinned host; noted in the catalog and docs. No stats queries in this build.
+- Amplitude (pinned `api2.amplitude.com/2`): `list_projects` (Bearer Management API token). No event queries or chart exports in this build.
+
+The credentials are the user's own keys pasted into the app vault.
+
+Tests: adapter build (exact URLs, single-action shapes, read-only sweeps), engine gates (each refuses before connect and its credential rides the Authorization header). Catalog count pins: 97 still-definition-only expanded rows, 101 definition-only total.
