@@ -35,14 +35,36 @@ function fakeEngine(response) {
   };
 }
 
-test('the definition exists, is ordinary capability and names no credential field', () => {
+test('the definition registers on the strict registry, reversible_write, no credential field', async () => {
   assert.equal(CONNECTORS_TOOL_DEFINITION.name, 'connector_status');
-  assert.equal(CONNECTORS_TOOL_DEFINITION.capability, 'ordinary');
+  // 28 Nov 2026 fix (decision-sheet item 9): the definition used
+  // capability 'ordinary', which is not a registry class, carried an
+  // object-typed params field the registry rejects, and exceeded the
+  // 400-char description limit, so define() refused it and the tool never
+  // joined the production registry. The honest class is reversible_write:
+  // list is a read, request_connect writes a dismissible user-facing
+  // request row, and run executes read-only actions behind the tool's own
+  // consent gate. params is validated inside the tool (plain object, at
+  // most 20 keys) because the registry schema types have no object form.
+  assert.equal(CONNECTORS_TOOL_DEFINITION.capability, 'reversible_write');
   assert.equal(CONNECTORS_TOOL_DEFINITION.critical, false);
   const fields = Object.keys(CONNECTORS_TOOL_DEFINITION.schema.properties);
-  assert.deepEqual(fields, ['action', 'connector_id', 'action_id', 'params', 'reason']);
+  assert.deepEqual(fields, ['action', 'connector_id', 'action_id', 'reason']);
   const blob = JSON.stringify(CONNECTORS_TOOL_DEFINITION);
   assert.equal(/keychain:|vault:|credential-store:/i.test(blob), false, 'no credential material in the definition');
+  assert.ok(CONNECTORS_TOOL_DEFINITION.description.length <= 400, 'description within the registry limit');
+  // Red-first pin for item 9: the strict registry must ACCEPT the
+  // definition and a standing grant must authorize it with no per-call
+  // approval (nothing here changes a connection state).
+  const { createAgentStack } = require('../src/agent-runtime.js');
+  const LocalDb = require('../src/db.js');
+  const db = await LocalDb.open({ storage: { load: async () => null, save: async () => {} } });
+  const stack = createAgentStack({ db, clock: () => 1_700_000_000_000 });
+  const r = stack.registry.define(CONNECTORS_TOOL_DEFINITION);
+  assert.equal(r.ok, true, JSON.stringify(r));
+  assert.equal(stack.engine.grantTool({ tool: 'connector_status' }).ok, true);
+  const ok = stack.engine.authorize({ tool: 'connector_status', args: { action: 'list' } });
+  assert.equal(ok.allowed, true, 'a standing grant authorizes it; no per-call approval');
 });
 
 test('list returns the catalog with live states and the open requests', async () => {

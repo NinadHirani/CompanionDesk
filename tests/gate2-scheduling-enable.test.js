@@ -36,11 +36,9 @@ async function enabledStack() {
   assert.equal(loaded.ok, true, 'world must load clean: ' + JSON.stringify(loaded.problems));
   // The four registration literals, exactly as main.js performs them
   // (the connector flow, 27 Nov 2026; the file-output enable, 28 Nov 2026).
-  // KNOWN FLAG (28 Nov 2026, owner decision pending): the connectors
-  // definition's define() returns ok:false against the strict registry
-  // (bad_description, bad_capability, bad_field_type:params), so it never
-  // joins the runtime registry; the fix is connector-band work. The three
-  // valid definitions below are what the registry carries.
+  // 28 Nov 2026 (item 9 fixed under Ninad's standing authorization): the
+  // connectors definition now registers cleanly, so all four definitions
+  // below join the runtime registry.
   stack.registry.define(SCHEDULING_TOOL_DEFINITION);
   stack.registry.define(FILE_ACCESS_TOOL_DEFINITION);
   stack.registry.define(CONNECTORS_TOOL_DEFINITION);
@@ -73,19 +71,22 @@ test('the enable registers exactly four tools in main and nothing else fires', (
   assert.deepEqual(KINDS, ['user'], "the driver's kind allowlist stays ['user']");
 });
 
-test('the enabled registry carries exactly three valid tools, all sensitive and non-critical', async () => {
+test('the enabled registry carries exactly four tools with their approved classes', async () => {
   const { stack } = await enabledStack();
   const list = stack.registry.list();
-  assert.equal(list.length, 3);
+  assert.equal(list.length, 4);
   assert.equal(list[0].name, 'schedule_create');
   assert.equal(list[0].capability, 'sensitive');
   assert.equal(list[0].critical, false);
   assert.equal(list[1].name, 'file_access');
   assert.equal(list[1].capability, 'sensitive');
   assert.equal(list[1].critical, false);
-  assert.equal(list[2].name, 'file_write');
-  assert.equal(list[2].capability, 'sensitive');
+  assert.equal(list[2].name, 'connector_status');
+  assert.equal(list[2].capability, 'reversible_write');
   assert.equal(list[2].critical, false);
+  assert.equal(list[3].name, 'file_write');
+  assert.equal(list[3].capability, 'sensitive');
+  assert.equal(list[3].critical, false);
 });
 
 test('a standing grant can never authorize it; only a fresh one-time approval can', async () => {
@@ -164,7 +165,7 @@ test('scope and horizon refusals stay in force', async () => {
 test('Stage B tools stay unregistered: calendar_upcoming never joins the registry', async () => {
   const { stack } = await enabledStack();
   assert.equal(stack.registry.has('calendar_upcoming'), false);
-  assert.equal(stack.registry.list().length, 3);
+  assert.equal(stack.registry.list().length, 4);
 });
 
 // --- file-output enable (28 Nov 2026) ---------------------------------------

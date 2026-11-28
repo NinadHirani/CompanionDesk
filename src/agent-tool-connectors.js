@@ -16,17 +16,27 @@
 })(typeof self !== 'undefined' ? self : this, function () {
   'use strict';
 
+  // 28 Nov 2026 fix (decision-sheet item 9, under Ninad's standing
+  // authorization): the original definition used capability 'ordinary',
+  // which is not a registry class, carried an object-typed params field
+  // the registry's schema types reject, and exceeded the 400-char
+  // description limit, so define() refused it and this tool never joined
+  // the production registry. The honest class is reversible_write: list
+  // is a read, request_connect writes a dismissible user-facing request
+  // row, and run executes read-only actions behind this tool's own
+  // consent gate (write/send still come back approval_required). params
+  // is validated inside execute (plain object, at most 20 keys) because
+  // the registry schema types have no object form.
   var CONNECTORS_TOOL_DEFINITION = {
     name: 'connector_status',
-    description: 'read connector catalog states, raise a user-facing connect request that the user must approve in the Workspace panel, or RUN a read-only connector action through the same consent gates the panel uses; it never connects, grants or touches credentials, and send/write actions always come back approval_required for the user to run from the panel (Gate 2 AI-access decision, 27 Nov 2026; batch 2 action calling)',
-    capability: 'ordinary',
+    description: 'read connector catalog states, raise a user-facing connect request the user must approve in the Workspace panel, or run a read-only connector action through the same consent gates the panel uses; it never connects, grants or touches credentials, and write/send actions always come back approval_required for the user to run from the panel (Gate 2 AI-access, 27 Nov 2026)',
+    capability: 'reversible_write',
     critical: false,
     schema: {
       properties: {
         action: { type: 'string', required: true, maxLength: 14, enum: ['list', 'request_connect', 'run'] },
         connector_id: { type: 'string', maxLength: 64 },
         action_id: { type: 'string', maxLength: 64 },
-        params: { type: 'object' },
         reason: { type: 'string', maxLength: 280 },
       },
     },
