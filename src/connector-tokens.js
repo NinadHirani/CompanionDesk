@@ -72,7 +72,12 @@
       ok: true,
       token: {
         access_token: tok.access_token,
-        expires_in: typeof tok.expires_in === 'number' && isFinite(tok.expires_in) ? tok.expires_in : null,
+        // A lifetime must be a finite positive number. Zero or negative
+        // would mint a credential that is born expired (needsRefresh fires
+        // immediately, which can push a caller into a refresh loop), so a
+        // non-positive or non-finite expires_in is an UNKNOWN expiry, not
+        // a past one.
+        expires_in: (typeof tok.expires_in === 'number' && isFinite(tok.expires_in) && tok.expires_in > 0) ? tok.expires_in : null,
         refresh_token: hasText(tok.refresh_token) ? tok.refresh_token : null,
       },
     };
