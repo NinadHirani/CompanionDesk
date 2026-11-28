@@ -12,7 +12,7 @@ const assert = require('node:assert');
 const adapters = require('../src/connector-adapters.js');
 const { createConnectorCatalog } = require('../src/connectors.js');
 
-const IMPLEMENTED = ['anthropic', 'brave-search', 'arxiv', 'airtable', 'coda', 'circleci', 'cloudflare', 'crossref', 'digitalocean', 'discord', 'docker-hub', 'github', 'gitlab', 'gmail', 'heroku', 'google-calendar', 'google-docs', 'google-sheets', 'google-drive', 'google-gemini', 'huggingface', 'internet-archive', 'jira', 'mailgun', 'postmark', 'sendgrid', 'linear', 'microsoft-calendar', 'microsoft-onedrive', 'microsoft-excel', 'microsoft-outlook', 'microsoft-teams', 'microsoft-word', 'musicbrainz', 'notion', 'npm', 'open-meteo', 'openai', 'openalex', 'openlibrary', 'openstreetmap', 'pypi', 'render', 'slack', 'supabase', 'sentry', 'pagerduty', 'tmdb', 'unsplash', 'new-relic', 'pinecone', 'pexels', 'kaggle', 'stripe', 'groq', 'cohere', 'xai', 'mistral', 'openrouter', 'replicate', 'together-ai', 'stability-ai', 'elevenlabs', 'google-maps', 'mapbox', 'deepgram', 'assemblyai', 'plausible', 'amplitude', 'mixpanel', 'posthog', 'flickr', 'pipedrive', 'razorpay', 'zerodha-kite', 'upstox', 'udemy', 'trakt', 'hetzner', 'better-stack', 'backblaze-b2', 'tripadvisor', 'datadog', 'tavily', 'telegram', 'trello', 'todoist', 'wikimedia'];
+const IMPLEMENTED = ['anthropic', 'brave-search', 'arxiv', 'airtable', 'coda', 'circleci', 'cloudflare', 'crossref', 'digitalocean', 'discord', 'docker-hub', 'github', 'gitlab', 'gmail', 'heroku', 'google-calendar', 'google-docs', 'google-sheets', 'google-drive', 'google-gemini', 'huggingface', 'internet-archive', 'jira', 'mailgun', 'postmark', 'sendgrid', 'linear', 'microsoft-calendar', 'microsoft-onedrive', 'microsoft-excel', 'microsoft-outlook', 'microsoft-teams', 'microsoft-word', 'musicbrainz', 'notion', 'npm', 'open-meteo', 'openai', 'openalex', 'openlibrary', 'openstreetmap', 'pypi', 'render', 'slack', 'supabase', 'sentry', 'pagerduty', 'tmdb', 'unsplash', 'new-relic', 'pinecone', 'pexels', 'kaggle', 'stripe', 'groq', 'cohere', 'xai', 'mistral', 'openrouter', 'replicate', 'together-ai', 'stability-ai', 'elevenlabs', 'google-maps', 'mapbox', 'deepgram', 'assemblyai', 'plausible', 'amplitude', 'mixpanel', 'posthog', 'flickr', 'pipedrive', 'razorpay', 'zerodha-kite', 'upstox', 'udemy', 'trakt', 'hetzner', 'better-stack', 'backblaze-b2', 'tripadvisor', 'datadog', 'plaid', 'railway', 'tavily', 'telegram', 'trello', 'todoist', 'wikimedia'];
 const OAUTH = ['gmail', 'google-calendar', 'google-drive', 'microsoft-calendar', 'microsoft-onedrive', 'microsoft-outlook'];
 
 test('the adapter registry covers exactly the implemented catalog entries', () => {
@@ -1817,5 +1817,35 @@ test('datadog builds dual-key monitor reads and never writes monitors', () => {
   for (const a of adapters.listActions('datadog')) {
     assert.equal(a.kind, 'read_only', 'datadog is read-only');
     assert.equal(a.scope, 'metrics.read');
+  }
+});
+
+// ---- batch 50 (28 Nov 2026): plaid + railway reads ----
+
+test('plaid builds body-credential institution reads and never reads transactions', () => {
+  const r = adapters.buildRequest('plaid', 'list_institutions', {}, 'cid:psecret');
+  assert.equal(r.ok, true);
+  assert.equal(r.request.url, 'https://production.plaid.com/institutions/get');
+  assert.equal(r.request.body, JSON.stringify({ client_id: 'cid', secret: 'psecret', count: 25 }), 'credentials ride the request body, capped');
+  const capped = adapters.buildRequest('plaid', 'list_institutions', { count: '50' }, 'cid:psecret');
+  assert.equal(capped.ok, true);
+  assert.ok(capped.request.body.indexOf('"count":50') >= 0, 'count rides the body');
+  assert.equal(adapters.buildRequest('plaid', 'list_institutions', { count: '51' }, 'cid:psecret').reason, 'param_invalid', 'count above the cap');
+  for (const a of adapters.listActions('plaid')) {
+    assert.equal(a.kind, 'read_only', 'plaid is read-only');
+    assert.equal(a.scope, 'transactions.read');
+  }
+});
+
+test('railway builds bearer GraphQL project reads and never deploys', () => {
+  const r = adapters.buildRequest('railway', 'list_projects', {}, 'railway-tok');
+  assert.equal(r.ok, true);
+  assert.equal(r.request.url, 'https://backboard.railway.app/graphql/v2');
+  assert.equal(r.request.headers.Authorization, 'Bearer railway-tok');
+  assert.ok(r.request.body.indexOf('projects(first: 50)') >= 0, 'the query is bounded');
+  assert.equal(adapters.listActions('railway').length, 1, 'only the project list is implemented');
+  for (const a of adapters.listActions('railway')) {
+    assert.equal(a.kind, 'read_only', 'railway is read-only');
+    assert.equal(a.scope, 'services.read');
   }
 });

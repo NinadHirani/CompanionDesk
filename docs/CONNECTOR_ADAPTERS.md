@@ -829,3 +829,14 @@ Actions:
 The credentials are the user's own keys pasted into the app vault.
 
 Tests: adapter build/validation (exact URLs, caps, category whitelist, integer id bounds, dual-key headers, read-only sweeps), engine gates (each refuses before connect; tripadvisor's credential rides X-API-Key, datadog's rides the DD-API-KEY/DD-APPLICATION-KEY pair). Catalog count pins: 83 still-definition-only expanded rows, 87 definition-only total.
+## Batch 50 (28 Nov 2026): Plaid, Railway
+
+Upgraded two connectors to key-bound READ-ONLY adapters (each `auth: api_key`, `authShape: token`).
+
+Actions:
+- Plaid (pinned `production.plaid.com`): `list_institutions` (count 1-50 default 25, the pasted `client_id:secret` pair rides the JSON request body, Plaid's own auth shape). No accounts, transactions or writes.
+- Railway (pinned `backboard.railway.app/graphql/v2`): `list_projects` (GraphQL query bounded to the first 50 projects, Bearer token). No deployments, deletes or writes.
+
+The credentials are the user's own keys pasted into the app vault.
+
+Tests: adapter build/validation (exact URLs, caps, body-credential shape, bounded GraphQL query, read-only sweeps), engine gates (each refuses before connect; plaid's credentials ride the request body, railway's rides the Bearer header). Catalog count pins: 81 still-definition-only expanded rows, 85 definition-only total.

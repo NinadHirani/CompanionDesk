@@ -1173,3 +1173,23 @@ test('tripadvisor and datadog refuse before connect and ride their credentials o
   assert.equal(seen.headers['DD-API-KEY'], '', 'datadog api-key part rides the DD-API-KEY header');
   assert.equal(seen.headers['DD-APPLICATION-KEY'], 'ops-pair', 'datadog application-key part rides the DD-APPLICATION-KEY header');
 });
+
+// ---- batch 50 (28 Nov 2026): plaid + railway credential gates ----
+
+test('plaid and railway refuse before connect and ride their credentials on reads', async () => {
+  let seen = null;
+  const transport = async (req) => { seen = req; return { status: 200, body: JSON.stringify({}) }; };
+  const { catalog, engine } = makeEngine(transport, 'dev-tok');
+  assert.equal((await engine.run('plaid', 'list_institutions', {})).reason, 'not_connected', 'plaid refuses before connect');
+  assert.equal(catalog.connect('plaid', { userInitiated: true, scopes: ['transactions.read'], credentialRef: 'vault:plaid-cred' }).ok, true, 'plaid connects');
+  let r = await engine.run('plaid', 'list_institutions', {});
+  assert.equal(r.ok, true, 'plaid reads with a credential');
+  assert.ok(seen.body.indexOf('"client_id":""') >= 0 && seen.body.indexOf('"secret":"dev-tok"') >= 0, 'plaid credential rides the request body');
+  assert.ok(seen.body.indexOf('dev-tok') >= 0, 'the credential is present on the read');
+
+  assert.equal((await engine.run('railway', 'list_projects', {})).reason, 'not_connected', 'railway refuses before connect');
+  assert.equal(catalog.connect('railway', { userInitiated: true, scopes: ['services.read'], credentialRef: 'vault:railway-cred' }).ok, true, 'railway connects');
+  r = await engine.run('railway', 'list_projects', {});
+  assert.equal(r.ok, true, 'railway reads with a credential');
+  assert.equal(seen.headers.Authorization, 'Bearer dev-tok', 'railway credential rides the Bearer header');
+});

@@ -157,6 +157,38 @@
     ],
   };
 
+  ADAPTERS.plaid = {
+    id: 'plaid', name: 'Plaid', authShape: 'token', setupRequired: false,
+    setupNote: 'paste your Plaid credentials as client_id:secret; they are stored only in the app vault, never requested or shown in chat',
+    actions: [
+      { id: 'list_institutions', label: 'List Plaid institutions (capped)', scope: 'transactions.read', kind: 'read_only',
+        params: [{ name: 'count', required: false, maxLength: 3 }],
+        build: function (p, token) {
+          let n = 25;
+          if (p.count !== undefined && p.count !== '') {
+            if (!/^\d+$/.test(String(p.count)) || parseInt(p.count, 10) < 1 || parseInt(p.count, 10) > 50) return { error: 'param_invalid' };
+            n = parseInt(p.count, 10);
+          }
+          const sep = token.indexOf(':');
+          const clientId = sep > 0 ? token.slice(0, sep) : '';
+          const secret = sep > 0 ? token.slice(sep + 1) : token;
+          return { method: 'POST', url: 'https://production.plaid.com/institutions/get', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ client_id: clientId, secret: secret, count: n }), urlContainsSecret: false };
+        } },
+    ],
+  };
+
+  ADAPTERS.railway = {
+    id: 'railway', name: 'Railway', authShape: 'token', setupRequired: false,
+    setupNote: 'paste a Railway API token from railway.com/settings/tokens; it is stored only in the app vault, never requested or shown in chat',
+    actions: [
+      { id: 'list_projects', label: 'List Railway projects (capped)', scope: 'services.read', kind: 'read_only',
+        params: [],
+        build: function (p, token) {
+          return { method: 'POST', url: 'https://backboard.railway.app/graphql/v2', headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' }, body: JSON.stringify({ query: 'query { projects(first: 50) { edges { node { id name } } } }' }), urlContainsSecret: false };
+        } },
+    ],
+  };
+
   ADAPTERS.tripadvisor = {
     id: 'tripadvisor', name: 'Tripadvisor', authShape: 'token', setupRequired: false,
     setupNote: 'paste a Tripadvisor Terra API key from tripadvisor.com/developers; it is stored only in the app vault, never requested or shown in chat',
