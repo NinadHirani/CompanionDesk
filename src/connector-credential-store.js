@@ -122,7 +122,18 @@ function createConnectorCredentialStore({ safeStorage, fs = require('fs'), dir, 
     }
     try {
       fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
-      fs.writeFileSync(fileFor(id), Buffer.from(cipher), { mode: 0o600 });
+      // Atomic publish: write to a temp file beside the target, then
+      // rename over it. A crash or disk error mid-write can never leave a
+      // torn partial credential behind (a file that makes hasCredential
+      // say yes while readCredential returns null).
+      const tmp = fileFor(id) + '.tmp';
+      try {
+        fs.writeFileSync(tmp, Buffer.from(cipher), { mode: 0o600 });
+        fs.renameSync(tmp, fileFor(id));
+      } catch (err) {
+        try { fs.unlinkSync(tmp); } catch (e2) { /* already gone: fine */ }
+        throw err;
+      }
     } catch {
       log('connector-credential-store: could not write the credential file');
       return { ok: false, reason: 'credential_file_write_failed' };
