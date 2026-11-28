@@ -283,3 +283,11 @@ details summary { cursor: pointer; margin: 6px 0; }
 
 /* Screen-reader-only text: visually hidden, still announced. */
 .sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+
+/* Reduced motion: the stylesheet's only animated property today is the
+   onboarding setup progress bar; a user whose OS asks for reduced motion
+   gets it without the transition. Any future animation must join this
+   block (tests/reduced-motion.test.js enforces the coverage). */
+@media (prefers-reduced-motion: reduce) {
+  .setup-progress > div { transition: none; }
+}
