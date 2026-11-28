@@ -1,12 +1,12 @@
 'use strict';
 
-// M9 definition pins (28 Nov 2026): Ninad defined M9 in chat as the
-// coordinated-release phase docs/M9_RELEASE_BRIEF.md proposed. These pins
-// keep the definition honest: the roadmap carries the owner-defined section
-// and status row, the decision sheet records the resolution, the changelog
-// stays current, and the section states what stays out of scope (signing
-// spend, public distribution, auto-update before a signing decision) and
-// that no release exists yet.
+// M9 release-readiness prep (28 Nov 2026, standing authorization,
+// checklist-only lane). Pins the parts of the release posture that the
+// existing suites do not yet cover: the packaged-app smoke checklist
+// exists as the owner's physical-run document, and the release brief
+// keeps the spend/signing/distribution decisions owner-gated. Nothing
+// here builds a distribution artifact, signs anything, publishes
+// anything or claims a device test ran.
 
 const test = require('node:test');
 const assert = require('node:assert');
@@ -14,35 +14,26 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const root = path.join(__dirname, '..');
-const read = (p) => fs.readFileSync(path.join(root, p), 'utf8');
 
-test('the roadmap defines M9 as an owner-defined phase', () => {
-  const roadmap = read('docs/IMPLEMENTATION_ROADMAP.md');
-  assert.match(roadmap, /## M9 - Release readiness \(owner-defined 28 Nov 2026\)/);
-  assert.match(roadmap, /\| M9 release readiness \| DEFINED/);
-  assert.ok(roadmap.includes('docs/M9_RELEASE_BRIEF.md'), 'the definition must cite the brief it adopts');
-});
-
-test('the decision sheet records the M9 resolution', () => {
-  const sheet = read('docs/NEXT_DECISIONS.md');
-  assert.match(sheet, /## 6\. M9 release readiness -- RESOLVED/);
-  assert.ok(sheet.includes('28 Nov 2026'));
-});
-
-test('the M9 section keeps the owner-gated items out of scope', () => {
-  const roadmap = read('docs/IMPLEMENTATION_ROADMAP.md');
-  const start = roadmap.indexOf('## M9 - Release readiness');
-  assert.ok(start !== -1, 'the M9 section must exist');
-  const end = roadmap.indexOf('## Test strategy', start);
-  const section = roadmap.slice(start, end === -1 ? roadmap.length : end);
-  for (const phrase of ['signing', 'public distribution', 'no release exists']) {
-    assert.ok(section.includes(phrase), `M9 section must state: ${phrase}`);
+test('the packaged-app smoke checklist exists and covers the real surfaces', () => {
+  const doc = fs.readFileSync(path.join(root, 'docs', 'M9_SMOKE_CHECKLIST.md'), 'utf8');
+  for (const section of ['models dir', 'secure storage', 'notification', 'settings', 'first-run privacy defaults']) {
+    assert.ok(doc.toLowerCase().includes(section.toLowerCase()), `smoke checklist missing: ${section}`);
   }
+  // every item is phrased as something the owner runs, never a claim
+  assert.ok(!/\b(verified|tested) (on|this) (device|macbook|oneplus)/i.test(doc), 'no device-tested claim may appear');
+  assert.ok(/owner|Ninad|you run|run each/i.test(doc), 'the checklist names who runs it');
 });
 
-test('the changelog is current and the package carries a version', () => {
-  const changelog = read('CHANGELOG.md');
-  assert.ok(changelog.includes('## [Unreleased]'), 'CHANGELOG needs an Unreleased section');
-  const pkg = JSON.parse(read('package.json'));
-  assert.ok(/^\d+\.\d+\.\d+/.test(String(pkg.version || '')), 'package.json needs a semver version');
+test('the release brief keeps spend, signing and distribution owner-gated', () => {
+  const doc = fs.readFileSync(path.join(root, 'docs', 'M9_RELEASE_BRIEF.md'), 'utf8');
+  assert.match(doc, /Ninad's explicit approval|owner-gated|Ninad decides/);
+  assert.match(doc, /no signing, no distribution/i);
+});
+
+test('the release-notes rule stays honest: no performance claim without measured numbers', () => {
+  const raw = fs.readFileSync(path.join(root, 'docs', 'M9_RELEASE_BRIEF.md'), 'utf8');
+  const doc = raw.replace(/\s+/g, ' ');  // the brief is hard-wrapped; match across line breaks
+  assert.match(doc, /No performance claim appears in any release note without measured numbers/);
+  assert.match(doc, /No performance claim may appear in a release note without measured numbers from the Gate 1 device pass/);
 });

@@ -62,6 +62,21 @@ product capability.
 - Nothing in this phase enables execution capability, capture, wake word, or
   cloud by default.
 
+## Software preparation status (28 Nov 2026)
+
+Under the 28 Nov standing authorization the software/checklist lane of this
+brief is prepared, spend-free and signature-free: the release engineering is
+draft-gated end to end (scripts/build-dist.js defaults DISTRIBUTION_PUBLISH to
+'never', the npm dist scripts carry --publish never, a stable publish is
+draft:true so nothing becomes publicly visible until a person publishes it,
+and mac.identity stays null), pinned by tests/ci-release.test.js and
+tests/m9-release-readiness.test.js; the packaged-app smoke checklist is
+prepared as docs/M9_SMOKE_CHECKLIST.md. Still owner-gated and NOT prepared:
+any signing purchase, any notarization run, any public distribution, any
+tagged release candidate, and the physical smoke run itself, which only the
+owner performs. No performance claim may appear in a release note without
+measured numbers from the Gate 1 device pass.
+
 ## Explicitly out of scope until decided
 
 Public distribution, any app-store presence, and any signing purchase. The
