@@ -27,17 +27,18 @@ function releaseNotesFromGit(opts) {
   // tag always produces the same notes; with no ref they default to
   // HEAD (continuous builds).
   const ref = opts && typeof opts.ref === 'string' ? opts.ref : 'HEAD';
+  const cwd = opts && typeof opts.cwd === 'string' ? opts.cwd : undefined;
   let log;
   try {
     log = execFileSync('git', ['log', ref, '-15', '--pretty=format:- %h %s'],
-                       { encoding: 'utf8' });
+                       { encoding: 'utf8', cwd });
   } catch (err) {
     log = null;
   }
   const sha = (function shortSha() {
     try {
       return execFileSync('git', ['rev-parse', '--short', ref],
-                          { encoding: 'utf8' }).trim();
+                          { encoding: 'utf8', cwd }).trim();
     } catch (err) {
       return 'unknown';
     }

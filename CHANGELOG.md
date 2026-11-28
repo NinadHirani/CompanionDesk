@@ -5,7 +5,7 @@
 - Two real defects in scripts/build-dist.js, both caught red-first by tests/build-dist-release-coherence.test.js:
   1. A stable publish (DISTRIBUTION_PUBLISH=always, channel=stable) validated STABLE_TAG's shape but never that it matches package.json's version. A draft release could be tagged v9.9.9 while every artifact self-reports 0.1.0, silently breaking the updater's version math. Now refused with an explicit error; the matching tag still drafts (releaseType release, draft true), and the never-publish local path stays tagless and unaffected.
   2. Stable release notes were cut from HEAD (git log -15), so rebuilding the same tag after more commits shipped different notes. releaseNotesFromGit now takes an optional ref and is anchored at STABLE_TAG when that tag exists in the checkout (continuous builds and builds without a tag keep HEAD); a pinned test proves an anchored list names its anchor and cannot drift as HEAD moves.
-- No builds run, no network, no credentials, no tags created, nothing published.
+- CI follow-up (same batch): the anchoring test initially leaned on HEAD~30, which shallow CI checkouts do not have (run 46145081069). It now builds its own three-commit temp git repo, so it holds at any checkout depth; releaseNotesFromGit gained a cwd passthrough for that. No builds run, no network, no credentials, no tags created, nothing published.
 
 ## M8 batch 56 (28 Nov 2026) - offline-simulation hardening: bounded audit on the capture simulator
 

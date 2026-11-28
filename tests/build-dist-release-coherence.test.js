@@ -54,13 +54,31 @@ test('stable tag mismatch does not disturb the never-publish path', () => {
 });
 
 test('release notes can be anchored at a ref instead of drifting with HEAD', () => {
-  // Anchor 30 commits back: the note's first listed commit must be that
-  // commit, whatever new commits land later. HEAD-anchored notes cannot
-  // pass this test once history moves.
-  const older = execFileSync('git', ['rev-parse', '--short', 'HEAD~30'], { encoding: 'utf8' }).trim();
-  const notes = releaseNotesFromGit({ ref: 'HEAD~30' });
-  assert.ok(notes.includes(older), 'the anchored list names the anchored commit (' + older + ')');
-  const headShort = execFileSync('git', ['rev-parse', '--short', 'HEAD'], { encoding: 'utf8' }).trim();
-  assert.ok(notes.includes('Built from commit ' + older), 'the built-from line names the anchored ref, not a later HEAD');
-  void headShort;
+  // Self-contained: a temp repo with three commits, notes anchored at
+  // HEAD~1. This holds on shallow CI checkouts where HEAD~30 does not
+  // exist. The first listed commit must be the anchored one whatever
+  // later commits land; HEAD-anchored notes cannot pass this.
+  const os = require('node:os');
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'release-notes-anchor-'));
+  try {
+    const run = (args) => execFileSync(
+      'git',
+      ['-c', 'user.email=test@example.com', '-c', 'user.name=test'].concat(args),
+      { cwd: tmp, encoding: 'utf8' }
+    );
+    run(['init', '-q']);
+    run(['add', '.']);
+    run(['commit', '-q', '--allow-empty', '-m', 'c1']);
+    run(['commit', '-q', '--allow-empty', '-m', 'c2']);
+    run(['commit', '-q', '--allow-empty', '-m', 'c3']);
+    const anchor = run(['rev-parse', '--short', 'HEAD~1']).trim();
+    const notes = releaseNotesFromGit({ ref: 'HEAD~1', cwd: tmp });
+    assert.ok(notes.includes('Built from commit ' + anchor), 'the built-from line names the anchored ref (' + anchor + ')');
+    assert.ok(notes.includes('- ' + anchor + ' c2'), 'the anchored list starts at the anchored commit');
+    assert.ok(!notes.includes('c3'), 'later commits do not leak into anchored notes');
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
 });
