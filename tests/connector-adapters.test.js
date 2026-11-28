@@ -12,7 +12,7 @@ const assert = require('node:assert');
 const adapters = require('../src/connector-adapters.js');
 const { createConnectorCatalog } = require('../src/connectors.js');
 
-const IMPLEMENTED = ['anthropic', 'brave-search', 'arxiv', 'airtable', 'coda', 'circleci', 'cloudflare', 'crossref', 'digitalocean', 'discord', 'docker-hub', 'github', 'gitlab', 'gmail', 'heroku', 'google-calendar', 'google-docs', 'google-sheets', 'google-drive', 'google-gemini', 'huggingface', 'internet-archive', 'jira', 'mailgun', 'postmark', 'sendgrid', 'linear', 'microsoft-calendar', 'microsoft-onedrive', 'microsoft-excel', 'microsoft-outlook', 'microsoft-teams', 'microsoft-word', 'musicbrainz', 'notion', 'npm', 'open-meteo', 'openai', 'openalex', 'openlibrary', 'openstreetmap', 'pypi', 'render', 'slack', 'supabase', 'sentry', 'pagerduty', 'tmdb', 'unsplash', 'new-relic', 'pinecone', 'pexels', 'kaggle', 'stripe', 'groq', 'cohere', 'xai', 'mistral', 'openrouter', 'replicate', 'together-ai', 'stability-ai', 'elevenlabs', 'google-maps', 'mapbox', 'deepgram', 'assemblyai', 'plausible', 'amplitude', 'mixpanel', 'posthog', 'flickr', 'pipedrive', 'razorpay', 'zerodha-kite', 'upstox', 'udemy', 'trakt', 'hetzner', 'better-stack', 'backblaze-b2', 'tripadvisor', 'datadog', 'plaid', 'railway', 'tavily', 'telegram', 'trello', 'todoist', 'wikimedia'];
+const IMPLEMENTED = ['anthropic', 'brave-search', 'arxiv', 'airtable', 'coda', 'circleci', 'cloudflare', 'crossref', 'digitalocean', 'discord', 'docker-hub', 'github', 'gitlab', 'gmail', 'heroku', 'google-calendar', 'google-docs', 'google-sheets', 'google-drive', 'google-gemini', 'huggingface', 'internet-archive', 'jira', 'mailgun', 'postmark', 'sendgrid', 'linear', 'microsoft-calendar', 'microsoft-onedrive', 'microsoft-excel', 'microsoft-outlook', 'microsoft-teams', 'microsoft-word', 'musicbrainz', 'notion', 'npm', 'open-meteo', 'openai', 'openalex', 'openlibrary', 'openstreetmap', 'pypi', 'render', 'slack', 'supabase', 'sentry', 'pagerduty', 'tmdb', 'unsplash', 'new-relic', 'pinecone', 'pexels', 'kaggle', 'stripe', 'groq', 'cohere', 'xai', 'mistral', 'openrouter', 'replicate', 'together-ai', 'stability-ai', 'elevenlabs', 'google-maps', 'mapbox', 'deepgram', 'assemblyai', 'plausible', 'amplitude', 'mixpanel', 'posthog', 'flickr', 'pipedrive', 'razorpay', 'zerodha-kite', 'upstox', 'udemy', 'trakt', 'hetzner', 'better-stack', 'backblaze-b2', 'tripadvisor', 'datadog', 'plaid', 'railway', 'twilio', 'tavily', 'telegram', 'trello', 'todoist', 'wikimedia'];
 const OAUTH = ['gmail', 'google-calendar', 'google-drive', 'microsoft-calendar', 'microsoft-onedrive', 'microsoft-outlook'];
 
 test('the adapter registry covers exactly the implemented catalog entries', () => {
@@ -1847,5 +1847,22 @@ test('railway builds bearer GraphQL project reads and never deploys', () => {
   for (const a of adapters.listActions('railway')) {
     assert.equal(a.kind, 'read_only', 'railway is read-only');
     assert.equal(a.scope, 'services.read');
+  }
+});
+
+// ---- batch 51 (28 Nov 2026): twilio read ----
+
+test('twilio builds basic-auth message reads and never sends', () => {
+  const r = adapters.buildRequest('twilio', 'list_messages', {}, 'AC123:authtok');
+  assert.equal(r.ok, true);
+  assert.equal(r.request.url, 'https://api.twilio.com/2010-04-01/Accounts/AC123/Messages.json?PageSize=20', 'the account SID rides the URL, the token rides Basic');
+  const capped = adapters.buildRequest('twilio', 'list_messages', { page_size: '50' }, 'AC123:authtok');
+  assert.equal(capped.ok, true);
+  assert.ok(capped.request.url.indexOf('PageSize=50') >= 0, 'page size is bounded');
+  assert.equal(adapters.buildRequest('twilio', 'list_messages', { page_size: '51' }, 'AC123:authtok').reason, 'param_invalid', 'page size above the cap');
+  assert.equal(adapters.buildRequest('twilio', 'list_messages', {}, 'authtok').reason, 'param_invalid', 'a token without an SID prefix is refused');
+  for (const a of adapters.listActions('twilio')) {
+    assert.equal(a.kind, 'read_only', 'twilio stays read-only');
+    assert.equal(a.scope, 'messages.read');
   }
 });

@@ -198,7 +198,7 @@ Nothing auto-connects. The module constant AUTO_CONNECT is false, the catalog is
 | `shopify` | Shopify | Shopify | business | cloud | paid | Paid subscriptions; a free trial exists | Per-shop API rate limits | oauth2 | products.read | definition only: no integration actions are implemented for Shopify in this build |
 | `stability-ai` | Stability AI | Stability AI | ai_cloud | cloud | paid | Paid per credit | Credit and rate limits | api_key | account.read, images.generate | adapter implemented: read-only engine list after connect with your own API key pasted into the app vault; Bearer auth pinned to api.stability.ai/v1; the images.generate scope is never requested and nothing is generated |
 | `together-ai` | Together AI | Together AI | ai_cloud | cloud | paid | Paid per token | Model-dependent rate limits | api_key | models.read, completions.send | adapter implemented: read-only model list after connect with your own API key pasted into the app vault; Bearer auth pinned to api.together.xyz/v1; the completions.send scope is never requested and nothing is sent to a model |
-| `twilio` | Twilio | Twilio | messaging | cloud | paid | Paid per message or minute; trial credit only | Per-message and per-minute billing | api_key | messages.send | - |
+| `twilio` | Twilio | Twilio | messaging | cloud | paid | Paid per message or minute; trial credit only | Per-message and per-minute billing | api_key | messages.read | adapter implemented: read-only message listing (PageSize 1-50) after connect with your own Account SID:auth token pasted into the app vault (Basic auth, pinned api.twilio.com/2010-04-01); no sending, calls or writes |
 | `brave-search` | Brave Search | Brave Software | search | cloud | free_tier | Free tier with a monthly query allowance; paid plans beyond | Free tier rate limits and a monthly query allowance apply | api_key | search.read | adapter implemented: read-only web search runs after connect; no writes; setup: create your own API key at brave.com/search/api and paste it; your key is requested only in the app UI, never in chat |
 | `tavily` | Tavily | Tavily | search | cloud | free_tier | Free tier includes a monthly credit allowance; paid plans beyond | Free tier: monthly credit allowance and rate limits apply | api_key | search.read | adapter implemented: read-only web search runs after connect; no writes; setup: create your own API key at app.tavily.com and paste it; your key is requested only in the app UI, never in chat |
 | `wasabi` | Wasabi | Wasabi | cloud | cloud | paid | Paid per terabyte-month; no egress fees | Plan quotas apply | api_key | objects.read | definition only: no integration actions are implemented for Wasabi in this build |
@@ -285,18 +285,29 @@ through the existing request center; approval still runs the same explicit
 connect gate. No real service is activated by any of this until the user
 chooses one, enters its credential and approves its scopes.
 
-## Final connector-section audit (28 Nov 2026)
+## Final connector-section audit (28 Nov 2026, corrected after batch 51)
 
 Scope: every catalog row in `src/connectors.js`, classified as implemented or definition-only with a concrete reason. Nothing was silently skipped.
 
-Inventory: 187 catalog rows; 90 implemented (59 api_key, 14 OAuth 2.0, 12 unauthenticated, 5 access-token); 97 definition-only (18 api_key, 47 OAuth 2.0, 18 access-token, 1 local, 1 unauthenticated self-hosted).
+Inventory: 187 catalog rows; 91 implemented (60 api_key, plus OAuth 2.0, unauthenticated and access-token adapters); 96 definition-only (23 api_key). 11 rows carried no integrationImplemented flag in the catalog and no adapter; the audit classifies them below, and the audit itself produced batch 51 (twilio), which was previously unflagged and unimplemented.
 
-The api_key lane is exhausted: batches 1-50 implemented 59 api_key connectors; the remaining 18 each carry a structural blocker below.
+The api_key lane is exhausted: batches 1-51 implemented 60 api_key connectors; the remaining 23 each carry a structural blocker below.
 
-Class reasons for the non-api_key definition-only rows: OAuth 2.0 rows need the user sign-in grant at the provider (and the standing rule is the user chooses each service manually); access-token rows need an account-issued token from the provider; the local row has no remote API; the unauthenticated self-hosted row has an instance-specific URL.
+Class reasons for the non-api_key definition-only rows: OAuth 2.0 rows need the user sign-in grant at the provider (and the standing rule is the user chooses each service manually); access-token rows need an account-issued token from the provider; app-password rows are self-hosted; the local rows have no remote API.
 
 | id | auth | hosting | reason |
 |---|---|---|---|
+| `rss` | none | local | self-hosted instance URL, cannot be pinned safely (catalog row carries no integrationImplemented flag; no adapter exists) |
+| `ollama` | local | local | local-only integration surface, no remote API to call (catalog row carries no integrationImplemented flag; no adapter exists) |
+| `matrix` | access_token | self_hostable | requires an account-issued token from the provider (sign-in or app review); no self-serve pastable credential in this lane (catalog row carries no integrationImplemented flag; no adapter exists) |
+| `mastodon` | oauth2 | self_hostable | requires the provider OAuth 2.0 account grant (user sign-in at the provider), outside the credential-paste lane (catalog row carries no integrationImplemented flag; no adapter exists) |
+| `nextcloud` | app_password | self_hostable | self-hosted instance URL (app-password auth), cannot be pinned safely (catalog row carries no integrationImplemented flag; no adapter exists) |
+| `jellyfin` | api_key | self_hostable | self-hosted media server (instance-specific URL, cannot be pinned safely) (catalog row carries no integrationImplemented flag; no adapter exists) |
+| `grafana` | api_key | self_hostable | self-hosted or per-instance cloud URL (cannot be pinned safely) (catalog row carries no integrationImplemented flag; no adapter exists) |
+| `miniflux` | api_key | self_hostable | self-hosted reader server (instance-specific URL, cannot be pinned safely) (catalog row carries no integrationImplemented flag; no adapter exists) |
+| `joplin` | api_key | self_hostable | self-hosted sync server (instance-specific URL, cannot be pinned safely) (catalog row carries no integrationImplemented flag; no adapter exists) |
+| `home-assistant` | access_token | self_hostable | requires an account-issued token from the provider (sign-in or app review); no self-serve pastable credential in this lane (catalog row carries no integrationImplemented flag; no adapter exists) |
+| `healthchecks-io` | api_key | self_hostable | self-hostable instance URL (cannot be pinned safely) (catalog row carries no integrationImplemented flag; no adapter exists) |
 | `dropbox` | oauth2 | cloud | requires the provider OAuth 2.0 account grant (user sign-in at the provider), outside the credential-paste lane |
 | `youtube` | oauth2 | cloud | requires the provider OAuth 2.0 account grant (user sign-in at the provider), outside the credential-paste lane |
 | `spotify` | oauth2 | cloud | requires the provider OAuth 2.0 account grant (user sign-in at the provider), outside the credential-paste lane |

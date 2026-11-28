@@ -157,6 +157,33 @@
     ],
   };
 
+  ADAPTERS.twilio = {
+    id: 'twilio', name: 'Twilio', authShape: 'token', setupRequired: false,
+    setupNote: 'paste your Twilio Account SID and auth token as sid:token from the console; they are stored only in the app vault, never requested or shown in chat',
+    buildHeaders: function (token) {
+      const sep = token.indexOf(':');
+      const sid = sep > 0 ? token.slice(0, sep) : '';
+      const secret = sep > 0 ? token.slice(sep + 1) : token;
+      const basic = Buffer.from(sid + ':' + secret).toString('base64');
+      return { Authorization: 'Basic ' + basic };
+    },
+    actions: [
+      { id: 'list_messages', label: 'List Twilio messages (capped)', scope: 'messages.read', kind: 'read_only',
+        params: [{ name: 'page_size', required: false, maxLength: 3 }],
+        build: function (p, token) {
+          let n = '20';
+          if (p.page_size !== undefined && p.page_size !== '') {
+            if (!/^\d+$/.test(String(p.page_size)) || parseInt(p.page_size, 10) < 1 || parseInt(p.page_size, 10) > 50) return { error: 'param_invalid' };
+            n = String(p.page_size);
+          }
+          const sep = token.indexOf(':');
+          const sid = sep > 0 ? token.slice(0, sep) : '';
+          if (!sid) return { error: 'param_invalid' };
+          return { method: 'GET', url: 'https://api.twilio.com/2010-04-01/Accounts/' + sid + '/Messages.json?PageSize=' + n, headers: this.buildHeaders(token), body: null, urlContainsSecret: false };
+        } },
+    ],
+  };
+
   ADAPTERS.plaid = {
     id: 'plaid', name: 'Plaid', authShape: 'token', setupRequired: false,
     setupNote: 'paste your Plaid credentials as client_id:secret; they are stored only in the app vault, never requested or shown in chat',

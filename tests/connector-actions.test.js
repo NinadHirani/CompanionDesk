@@ -1193,3 +1193,18 @@ test('plaid and railway refuse before connect and ride their credentials on read
   assert.equal(r.ok, true, 'railway reads with a credential');
   assert.equal(seen.headers.Authorization, 'Bearer dev-tok', 'railway credential rides the Bearer header');
 });
+
+// ---- batch 51 (28 Nov 2026): twilio credential gate ----
+
+test('twilio refuses before connect and rides its basic credential on reads', async () => {
+  let seen = null;
+  const transport = async (req) => { seen = req; return { status: 200, body: JSON.stringify({}) }; };
+  const { catalog, engine } = makeEngine(transport, 'AC123:authtok');
+  assert.equal((await engine.run('twilio', 'list_messages', {})).reason, 'not_connected', 'twilio refuses before connect');
+  assert.equal(catalog.connect('twilio', { userInitiated: true, scopes: ['messages.read'], credentialRef: 'vault:twilio-cred' }).ok, true, 'twilio connects');
+  const r = await engine.run('twilio', 'list_messages', {});
+  assert.equal(r.ok, true, 'twilio reads with a credential');
+  assert.ok(seen.headers.Authorization.indexOf('Basic ') === 0, 'twilio credential rides the Basic header');
+  assert.ok(seen.url.indexOf('authtok') < 0, 'the token secret never lands in the URL');
+  assert.ok(seen.url.indexOf('/Accounts/AC123/') >= 0, 'the account SID rides the URL');
+});
