@@ -785,3 +785,14 @@ Actions:
 The credentials are the user's own keys pasted into the app vault.
 
 Tests: adapter build/validation (exact URLs, count bounds, computed-Basic header asserted against the expected value, read-only sweeps), engine gates (each refuses before connect; razorpay's credential rides as the computed Basic value, zerodha-kite's rides the Token header). Catalog count pins: 91 still-definition-only expanded rows, 95 definition-only total.
+## Batch 46 (28 Nov 2026): Upstox, Udemy
+
+Upgraded two connectors to key-bound READ-ONLY adapters (each `auth: api_key`, `authShape: token`).
+
+Actions:
+- Upstox (pinned `api.upstox.com/v2`): `get_user_profile` (Bearer access token). No holdings, orders or writes in this build.
+- Udemy (pinned `www.udemy.com/api-2.0`): `search_courses` (query required maxLength 100, page_size capped 1-20 default 10, Basic auth computed from pasted affiliate `client_id:client_secret`). No enrollments or writes.
+
+The credentials are the user's own keys pasted into the app vault.
+
+Tests: adapter build/validation (exact URLs, caps, computed-Basic header asserted against the expected value, read-only sweeps), engine gates (each refuses before connect; upstox's credential rides the Bearer header, udemy's rides the computed Basic value). Catalog count pins: 89 still-definition-only expanded rows, 93 definition-only total.

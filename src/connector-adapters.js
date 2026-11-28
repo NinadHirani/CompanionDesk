@@ -157,6 +157,44 @@
     ],
   };
 
+  ADAPTERS.upstox = {
+    id: 'upstox', name: 'Upstox', authShape: 'token', setupRequired: false,
+    setupNote: 'paste an Upstox API access token; it is stored only in the app vault, never requested or shown in chat',
+    actions: [
+      { id: 'get_user_profile', label: 'Read the Upstox user profile (capped)', scope: 'portfolio.read', kind: 'read_only',
+        params: [],
+        build: function (p, token) {
+          return { method: 'GET', url: 'https://api.upstox.com/v2/user/profile', headers: { Authorization: 'Bearer ' + token }, body: null, urlContainsSecret: false };
+        } },
+    ],
+  };
+
+  ADAPTERS.udemy = {
+    id: 'udemy', name: 'Udemy', authShape: 'token', setupRequired: false,
+    setupNote: 'paste your Udemy affiliate client credentials as client_id:client_secret; they are stored only in the app vault, never requested or shown in chat',
+    buildHeaders: function (token) {
+      const sep = token.indexOf(':');
+      const id = sep > 0 ? token.slice(0, sep) : '';
+      const secret = sep > 0 ? token.slice(sep + 1) : token;
+      const basic = Buffer.from(id + ':' + secret).toString('base64');
+      return { Authorization: 'Basic ' + basic };
+    },
+    actions: [
+      { id: 'search_courses', label: 'Search Udemy courses (capped)', scope: 'courses.read', kind: 'read_only',
+        params: [{ name: 'query', required: true, maxLength: 100 }, { name: 'page_size', required: false, maxLength: 2 }],
+        build: function (p, token) {
+          if (!p.query) return { error: 'param_missing' };
+          if (p.query.length > 100) return { error: 'param_invalid' };
+          let n = '10';
+          if (p.page_size !== undefined && p.page_size !== '') {
+            if (!/^\d+$/.test(String(p.page_size)) || parseInt(p.page_size, 10) < 1 || parseInt(p.page_size, 10) > 20) return { error: 'param_invalid' };
+            n = String(p.page_size);
+          }
+          return { method: 'GET', url: 'https://www.udemy.com/api-2.0/courses/?search=' + encodeURIComponent(p.query) + '&page_size=' + n, headers: this.buildHeaders(token), body: null, urlContainsSecret: false };
+        } },
+    ],
+  };
+
   ADAPTERS.razorpay = {
     id: 'razorpay', name: 'Razorpay', authShape: 'token', setupRequired: false,
     setupNote: 'paste your Razorpay credentials as key_id:key_secret from the dashboard; they are stored only in the app vault, never requested or shown in chat',

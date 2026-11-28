@@ -1096,3 +1096,22 @@ test('razorpay and zerodha-kite refuse before connect and ride their credentials
   assert.equal(r.ok, true, 'zerodha-kite reads with a credential');
   assert.equal(seen.headers.Authorization, 'Token fin-tok', 'zerodha-kite credential rides the Token header');
 });
+
+// ---- batch 46 (28 Nov 2026): upstox + udemy credential gates ----
+
+test('upstox and udemy refuse before connect and ride their credentials on reads', async () => {
+  let seen = null;
+  const transport = async (req) => { seen = req; return { status: 200, body: JSON.stringify({}) }; };
+  const { catalog, engine } = makeEngine(transport, 'learn-tok');
+  assert.equal((await engine.run('upstox', 'get_user_profile', {})).reason, 'not_connected', 'upstox refuses before connect');
+  assert.equal(catalog.connect('upstox', { userInitiated: true, scopes: ['portfolio.read'], credentialRef: 'vault:upstox-cred' }).ok, true, 'upstox connects');
+  let r = await engine.run('upstox', 'get_user_profile', {});
+  assert.equal(r.ok, true, 'upstox reads with a credential');
+  assert.equal(seen.headers.Authorization, 'Bearer learn-tok', 'upstox credential rides the Bearer header');
+
+  assert.equal((await engine.run('udemy', 'search_courses', { query: 'qiskit' })).reason, 'not_connected', 'udemy refuses before connect');
+  assert.equal(catalog.connect('udemy', { userInitiated: true, scopes: ['courses.read'], credentialRef: 'vault:udemy-cred' }).ok, true, 'udemy connects');
+  r = await engine.run('udemy', 'search_courses', { query: 'qiskit' });
+  assert.equal(r.ok, true, 'udemy reads with a credential');
+  assert.equal(seen.headers.Authorization, 'Basic ' + Buffer.from(':learn-tok').toString('base64'), 'udemy credential rides as the computed Basic value');
+});

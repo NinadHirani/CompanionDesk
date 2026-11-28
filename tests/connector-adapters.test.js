@@ -12,7 +12,7 @@ const assert = require('node:assert');
 const adapters = require('../src/connector-adapters.js');
 const { createConnectorCatalog } = require('../src/connectors.js');
 
-const IMPLEMENTED = ['anthropic', 'brave-search', 'arxiv', 'airtable', 'coda', 'circleci', 'cloudflare', 'crossref', 'digitalocean', 'discord', 'docker-hub', 'github', 'gitlab', 'gmail', 'heroku', 'google-calendar', 'google-docs', 'google-sheets', 'google-drive', 'google-gemini', 'huggingface', 'internet-archive', 'jira', 'mailgun', 'postmark', 'sendgrid', 'linear', 'microsoft-calendar', 'microsoft-onedrive', 'microsoft-excel', 'microsoft-outlook', 'microsoft-teams', 'microsoft-word', 'musicbrainz', 'notion', 'npm', 'open-meteo', 'openai', 'openalex', 'openlibrary', 'openstreetmap', 'pypi', 'render', 'slack', 'supabase', 'sentry', 'pagerduty', 'tmdb', 'unsplash', 'new-relic', 'pinecone', 'pexels', 'kaggle', 'stripe', 'groq', 'cohere', 'xai', 'mistral', 'openrouter', 'replicate', 'together-ai', 'stability-ai', 'elevenlabs', 'google-maps', 'mapbox', 'deepgram', 'assemblyai', 'plausible', 'amplitude', 'mixpanel', 'posthog', 'flickr', 'pipedrive', 'razorpay', 'zerodha-kite', 'tavily', 'telegram', 'trello', 'todoist', 'wikimedia'];
+const IMPLEMENTED = ['anthropic', 'brave-search', 'arxiv', 'airtable', 'coda', 'circleci', 'cloudflare', 'crossref', 'digitalocean', 'discord', 'docker-hub', 'github', 'gitlab', 'gmail', 'heroku', 'google-calendar', 'google-docs', 'google-sheets', 'google-drive', 'google-gemini', 'huggingface', 'internet-archive', 'jira', 'mailgun', 'postmark', 'sendgrid', 'linear', 'microsoft-calendar', 'microsoft-onedrive', 'microsoft-excel', 'microsoft-outlook', 'microsoft-teams', 'microsoft-word', 'musicbrainz', 'notion', 'npm', 'open-meteo', 'openai', 'openalex', 'openlibrary', 'openstreetmap', 'pypi', 'render', 'slack', 'supabase', 'sentry', 'pagerduty', 'tmdb', 'unsplash', 'new-relic', 'pinecone', 'pexels', 'kaggle', 'stripe', 'groq', 'cohere', 'xai', 'mistral', 'openrouter', 'replicate', 'together-ai', 'stability-ai', 'elevenlabs', 'google-maps', 'mapbox', 'deepgram', 'assemblyai', 'plausible', 'amplitude', 'mixpanel', 'posthog', 'flickr', 'pipedrive', 'razorpay', 'zerodha-kite', 'upstox', 'udemy', 'tavily', 'telegram', 'trello', 'todoist', 'wikimedia'];
 const OAUTH = ['gmail', 'google-calendar', 'google-drive', 'microsoft-calendar', 'microsoft-onedrive', 'microsoft-outlook'];
 
 test('the adapter registry covers exactly the implemented catalog entries', () => {
@@ -1680,5 +1680,36 @@ test('zerodha-kite builds Token profile reads and never writes orders', () => {
   for (const a of adapters.listActions('zerodha-kite')) {
     assert.equal(a.kind, 'read_only', 'zerodha-kite is read-only');
     assert.equal(a.scope, 'portfolio.read');
+  }
+});
+
+// ---- batch 46 (28 Nov 2026): upstox + udemy credential reads ----
+
+test('upstox builds bearer profile reads and never reads holdings in this build', () => {
+  const r = adapters.buildRequest('upstox', 'get_user_profile', {}, 'up-tok');
+  assert.equal(r.ok, true);
+  assert.equal(r.request.url, 'https://api.upstox.com/v2/user/profile');
+  assert.equal(r.request.headers.Authorization, 'Bearer up-tok');
+  assert.equal(adapters.listActions('upstox').length, 1, 'only the profile read is implemented');
+  for (const a of adapters.listActions('upstox')) {
+    assert.equal(a.kind, 'read_only', 'upstox is read-only');
+    assert.equal(a.scope, 'portfolio.read');
+  }
+});
+
+test('udemy builds Basic course-search reads with strict validation and no enrollments', () => {
+  const r = adapters.buildRequest('udemy', 'search_courses', { query: 'quantum computing' }, 'cid:csecret');
+  assert.equal(r.ok, true);
+  assert.equal(r.request.url, 'https://www.udemy.com/api-2.0/courses/?search=quantum%20computing&page_size=10');
+  assert.equal(r.request.headers.Authorization, 'Basic ' + Buffer.from('cid:csecret').toString('base64'));
+  const capped = adapters.buildRequest('udemy', 'search_courses', { query: 'qiskit', page_size: '20' }, 'cid:csecret');
+  assert.equal(capped.ok, true);
+  assert.ok(capped.request.url.indexOf('page_size=20') >= 0, 'page_size rides the URL');
+  assert.equal(adapters.buildRequest('udemy', 'search_courses', {}, 'cid:csecret').reason, 'param_missing', 'query required');
+  assert.equal(adapters.buildRequest('udemy', 'search_courses', { query: 'x'.repeat(101) }, 'cid:csecret').reason, 'param_invalid', 'query above the cap');
+  assert.equal(adapters.buildRequest('udemy', 'search_courses', { query: 'qiskit', page_size: '21' }, 'cid:csecret').reason, 'param_invalid', 'page_size above the cap');
+  for (const a of adapters.listActions('udemy')) {
+    assert.equal(a.kind, 'read_only', 'udemy is read-only');
+    assert.equal(a.scope, 'courses.read');
   }
 });
