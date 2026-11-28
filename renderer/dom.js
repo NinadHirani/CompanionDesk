@@ -29,7 +29,27 @@
       else b.removeAttribute('aria-current');
     }
     document.getElementById('tabs').hidden = name === 'onboarding';
-    if (hooks[name]) hooks[name]();
+      // Focus strand: a switch can hide the section keyboard focus was in
+  // (the onboarding handoff is the live path), and a hidden element
+  // cannot hold focus. If the focused element was stranded inside a
+  // hidden section, land it on the section now shown; otherwise never
+  // steal focus (a click on a tab keeps its own focus). Hooks run after
+  // and may move focus themselves.
+  const shown = document.getElementById(`view-${name}`);
+  const active = document.activeElement;
+  if (shown && active) {
+    let inHidden = false;
+    for (const v of views) {
+      if (v === name) continue;
+      const sec = document.getElementById(`view-${v}`);
+      if (sec && sec.hidden && sec.contains(active)) inHidden = true;
+    }
+    if (inHidden) {
+      shown.setAttribute('tabindex', '-1');
+      shown.focus();
+    }
+  }
+  if (hooks[name]) hooks[name]();
   }
 
   window.UI = { api, el, plural, friendlyError: window.friendlyError, show, onShow: (name, fn) => { hooks[name] = fn; } };
