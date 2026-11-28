@@ -136,6 +136,8 @@ const IPC_CHANNELS = Object.freeze([
   // from an explicit renderer click, and approval runs the SAME explicit
   // connect gate as the user's own pick.
   'workspace:connectorRequests',
+  'workspace:fileOutputRoot',
+  'workspace:fileOutputRootSet',
   'workspace:connectorRequestResolve',
   // Custom connectors (27 Nov 2026, Ninad's marketplace instruction): the
   // user may add a connector for an app/website that is not in the built-in

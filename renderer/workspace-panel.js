@@ -276,6 +276,33 @@
             say(r && r.ok ? 'workspace: connector revoked' : 'workspace: revoke refused: ' + ((r && r.reason) || 'unknown'));
             await renderConnectors(a);
           }));
+          // In-place key update (28 Nov 2026): a connected connector's
+          // stored credential can be replaced without disconnecting. Two
+          // explicit clicks: the first reveals the field and calls
+          // nothing, the second saves the new key straight into main's OS
+          // credential vault. The secret is never rendered, logged or
+          // kept here, and a refusal surfaces verbatim.
+          if (e.hasCredential === true && typeof a.workspace_connectorCredentialSet === 'function') {
+            const updWrap = el('div');
+            const updInput = passwordField('new credential for ' + (e.name || e.id));
+            updWrap.appendChild(updInput);
+            updWrap.appendChild(button('Save key for ' + e.name, 'Save new credential for ' + (e.name || e.id), async () => {
+              const secret = updInput.value;
+              updInput.value = '';
+              if (!secret) { say('workspace: enter the new credential for ' + (e.name || e.id) + ' first'); return; }
+              let sr = null;
+              try { sr = await a.workspace_connectorCredentialSet(e.id, secret); } catch (err) { sr = null; }
+              updWrap.hidden = true;
+              say(sr && sr.ok ? 'workspace: credential updated for ' + (e.name || e.id) : 'workspace: credential not saved: ' + ((sr && sr.reason) || 'unavailable'));
+              await renderConnectors(a);
+            }));
+            updWrap.hidden = true;
+            rowEl.appendChild(button('Update key for ' + e.name, 'Update the stored credential for ' + (e.name || e.id), () => {
+              updWrap.hidden = !updWrap.hidden;
+              if (!updWrap.hidden) say('workspace: enter the new credential, then Save key');
+            }));
+            rowEl.appendChild(updWrap);
+          }
           // Batch 2 action surfaces (27 Nov 2026): every action the
           // implemented adapter exposes, run ONLY from an explicit click.
           // Read-only actions with no required parameters run with one
@@ -405,6 +432,48 @@
         }
         await renderConnectors(a);
       }));
+      // Agent file output root (28 Nov 2026): the config surface for the
+      // file-write gate's folder. Text-only rendering, explicit buttons,
+      // honest degradation when the bridge lacks the channel. The model
+      // can never set this: only this panel, on an explicit click.
+      let foState = null;
+      try { foState = await a.workspace_fileOutputRoot(); } catch (e) { foState = { ok: false, reason: 'unavailable' }; }
+      const foStatus = el('div');
+      foStatus.textContent = !foState || !foState.ok
+        ? 'agent file output root: unavailable right now'
+        : (foState.configured ? 'agent file output root: ' + foState.root : 'agent file output root: not configured (agent file writes are refused)');
+      connEl.appendChild(foStatus);
+      const foInput = el('input');
+      foInput.setAttribute('aria-label', 'file output root folder path');
+      const foSet = button('set root', 'set the agent file output root folder', null);
+      const foClear = button('clear root', 'clear the agent file output root folder', null);
+      foSet.addEventListener('click', async () => {
+        if (foSet.disabled) return;
+        const val = foInput.value;
+        if (!val || !val.trim()) { say('file output root: enter a folder path first'); return; }
+        foSet.disabled = true; foClear.disabled = true;
+        try {
+          const r = await a.workspace_fileOutputRootSet({ root: val });
+          if (r && r.ok) { foInput.value = ''; say('file output root set: ' + (r.root || '(cleared)')); }
+          else { say('file output root refused: ' + ((r && r.reason) || 'unknown')); }
+        } catch (e) { say('file output root: unavailable right now'); }
+        foSet.disabled = false; foClear.disabled = false;
+        await renderConnectors(a);
+      });
+      foClear.addEventListener('click', async () => {
+        if (foClear.disabled) return;
+        foSet.disabled = true; foClear.disabled = true;
+        try {
+          const r = await a.workspace_fileOutputRootSet({ root: '' });
+          if (r && r.ok) { foInput.value = ''; say('file output root set: (cleared)'); }
+          else { say('file output root refused: ' + ((r && r.reason) || 'unknown')); }
+        } catch (e) { say('file output root: unavailable right now'); }
+        foSet.disabled = false; foClear.disabled = false;
+        await renderConnectors(a);
+      });
+      connEl.appendChild(foInput);
+      connEl.appendChild(foSet);
+      connEl.appendChild(foClear);
     }
 
     async function refresh() {

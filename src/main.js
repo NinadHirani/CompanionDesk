@@ -65,6 +65,7 @@ const { FILE_ACCESS_TOOL_DEFINITION, createFileAccessTool } = require('./agent-t
 const { CONNECTORS_TOOL_DEFINITION, createConnectorsTool } = require('./agent-tool-connectors');
 const { FILE_OUTPUT_TOOL_DEFINITION, createFileOutputTool } = require('./agent-tool-file-output');
 const { CALENDAR_UPCOMING_DEF } = require('./agent-tool-calendar');
+const { createFileOutputRootConfig } = require('./file-output-config');
 const fsPromises = require('fs').promises;
 // Gate 4 execution slice: the real io adapter the file-access executor runs
 // through. OS errors surface verbatim from these calls (code + message);
@@ -232,6 +233,8 @@ let agentRegistry = null;
 let agentFileAccess = null;
 let agentConnectors = null;
 let agentFileOutput = null;
+let agentFileOutputConfig = null;
+let agentFileOutputRebuild = null;
 let agentApprovals = null;
 let agentStop = null;
 let agentAudit = null;
@@ -525,14 +528,32 @@ async function init() {
       // user setting (file_output_root) and defaults to UNSET, so every
       // call is refused (file_output_root_unconfigured) until the owner
       // configures a folder on the product surface; the renderer and the
-      // model can never set or widen the root, and no product surface
-      // sets it yet.
+      // model can never set or widen the root; the only surface that sets or
+      // clears it is the Workspace panel's explicit control (28 Nov 2026,
+      // standing authorization), wired below
       let fileOutputRoot;
       try {
         const configuredRoot = agentDb.getSetting('file_output_root', '');
         if (typeof configuredRoot === 'string' && configuredRoot.trim()) fileOutputRoot = configuredRoot;
       } catch (e) { fileOutputRoot = undefined; }
       agentFileOutput = createFileOutputTool({ clock: () => Date.now(), io: fileOutputIo, audit: stack.durableAudit, root: fileOutputRoot });
+      // File-output root config surface (28 Nov 2026, under Ninad's
+      // standing authorization): the Workspace panel's explicit control
+      // sets or clears the main-side file_output_root setting on the
+      // agent-state store. The renderer and the model can never set the
+      // root on their own: the only path is this panel's buttons through
+      // the dedicated IPC channels. Setting or clearing rebuilds the
+      // file-output tool instance so the change takes effect without a
+      // restart; an unset root keeps every file_write call refused
+      // (file_output_root_unconfigured), exactly as the enable shipped.
+      agentFileOutputConfig = createFileOutputRootConfig({
+        getSetting: (k, d) => agentDb.getSetting(k, d),
+        setSetting: (k, v) => agentDb.setSetting(k, v),
+      });
+      agentFileOutputRebuild = (root) => {
+        agentFileOutput = createFileOutputTool({ clock: () => Date.now(), io: fileOutputIo, audit: stack.durableAudit, root: root && root.trim() ? root : undefined });
+        return { ok: true };
+      };
       agentRegistry.define(FILE_OUTPUT_TOOL_DEFINITION);
       // Gate 2 run-driver Stage B enable (28 Nov 2026, under Ninad's
       // standing authorization): the calendar_upcoming tool is the fifth
@@ -1358,6 +1379,13 @@ app.whenReady().then(async () => {
   ipcMain.handle('workspace:connectorDisconnect', async (_e, id) => { const r = (typeof id === 'string' && id.length > 0 ? workspaceConnectorCatalog.disconnect(id, { userInitiated: true }) : { ok: false, reason: 'bad_request' }); if (r && r.ok) { saveConnectorState(); r.credentialRemoved = dropConnectorCredential(id); } return r; });
   ipcMain.handle('workspace:connectorRevoke', async (_e, id) => { const r = (typeof id === 'string' && id.length > 0 ? workspaceConnectorCatalog.revoke(id, { userInitiated: true }) : { ok: false, reason: 'bad_request' }); if (r && r.ok) { saveConnectorState(); r.credentialRemoved = dropConnectorCredential(id); } return r; });
   ipcMain.handle('workspace:connectorReadmit', async (_e, id) => { const r = (typeof id === 'string' && id.length > 0 ? workspaceConnectorCatalog.readmit(id, { userInitiated: true }) : { ok: false, reason: 'bad_request' }); if (r && r.ok) saveConnectorState(); return r; });
+  ipcMain.handle('workspace:fileOutputRoot', async () => (agentFileOutputConfig ? agentFileOutputConfig.get() : { ok: false, reason: 'unavailable' }));
+  ipcMain.handle('workspace:fileOutputRootSet', async (_e, payload) => {
+    if (!agentFileOutputConfig) return { ok: false, reason: 'unavailable' };
+    const r = agentFileOutputConfig.set(payload && typeof payload === 'object' ? payload.root : undefined);
+    if (r.ok && agentFileOutputRebuild) agentFileOutputRebuild(r.root);
+    return r;
+  });
   ipcMain.handle('workspace:connectorRequests', async () => workspaceConnectorRequests.list());
   ipcMain.handle('workspace:connectorRequestResolve', async (_e, requestId, decision) => {
     if (typeof requestId !== 'string' || requestId.length === 0) return { ok: false, reason: 'bad_request' };

@@ -33,6 +33,32 @@ gated, disabled, or unmeasured; every line matches the roadmap evidence.
   read agentRegistry before assigning it, so the first boot threw inside
   buildAgent and the agent runtime stayed blocked; the assignment now
   precedes the defines (pinned by the enable test).
+- Connector registry defect fixed (decision-sheet item 9, resolved under
+  Ninad's standing authorization of 28 Nov 2026): the connector_status
+  definition now registers on the strict registry (capability
+  reversible_write, description within the 400-character limit, the
+  object-typed params field validated inside the tool); the runtime
+  registry carries it as the third tool with its own consent gates
+  unchanged (write/send still come back approval_required).
+- Gate 2 run-driver Stage B enable (same authorization): calendar_upcoming
+  is registered as the fifth tool, a read-only projection of the
+  user-imported local calendars (uid/location dropped, 200-character
+  titles, 100 rows, 32 KiB envelope); the calendar service arrives by
+  dependency injection at the plan-forming site and the closed ICS
+  generator files stay untouched. Registration alone starts no run:
+  requestRun still has no caller.
+- File-output root config surface (same authorization):
+  src/file-output-config.js (pure validation/store policy: absolute
+  paths only, trimmed, at most 512 characters, no control characters;
+  empty clears back to the unset default) plus a dedicated Workspace
+  panel control wired through two new IPC channels; setting or clearing
+  rebuilds the file-output tool instance without a restart. The renderer
+  and the model can never set the root on their own; settings.js and the
+  row-store categories stay untouched.
+- In-place credential update: a connected connector's stored key can be
+  replaced without disconnecting (two explicit clicks; the secret never
+  renders, logs or persists anywhere but the OS vault; refusals surface
+  verbatim).
 - Flagged for an owner decision (connector band, untouched): the connector
   tool definition's registry define() returns ok:false against the strict
   registry (bad_description, bad_capability, bad_field_type:params), so

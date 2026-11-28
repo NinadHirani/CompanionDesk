@@ -118,6 +118,8 @@ const IPC_CHANNELS = [
   'workspace:connectorCredentialSet',
   'workspace:connectorCredentialRemove',
   'workspace:connectorRequests',
+  'workspace:fileOutputRoot',
+  'workspace:fileOutputRootSet',
   'workspace:connectorRequestResolve',
   // Real connector actions (27 Nov 2026 adapter batch): the action engine
   // and the OAuth setup helpers for adapters that run on a client the user

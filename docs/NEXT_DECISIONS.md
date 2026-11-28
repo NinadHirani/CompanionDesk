@@ -281,3 +281,13 @@ literal and the guardrail tests count source literals, but the runtime
 registry does not carry the tool. Fixing the definition is connector-band
 work awaiting Ninad's decision; nothing about connection state, scopes or
 credentials changes either way.
+
+RESOLVED (28 Nov 2026, under Ninad's standing authorization): the
+definition registers on the strict registry - capability reversible_write
+(list reads, request_connect writes a dismissible user-facing request
+row, run executes read-only actions behind the tool's own consent gate),
+the description within the 400-character limit, and the object-typed
+params field removed from the schema and validated inside the tool
+(plain object, at most 20 keys, as before). Nothing about connection
+state, scopes or credentials changed; the runtime registry carries the
+tool as the third of five.
