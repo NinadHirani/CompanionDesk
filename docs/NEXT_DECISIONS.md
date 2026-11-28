@@ -259,3 +259,25 @@ Microsoft OneDrive get_file_meta, Microsoft Outlook search_messages,
 Microsoft Calendar get_event). Suite 1457/1457, selftest pass. Still
 owner-gated: real credentials, own OAuth clients, per-service
 activation, device validation.
+
+Follow-on (28 Nov 2026, ~12:55 IST): the file-output ENABLE landed under
+Ninad's explicit authorization: file_write is the fourth registered tool
+with the real fs-backed io adapter and the root read only from the
+main-side file_output_root setting (unset by default, so every call
+refuses until the owner configures a folder on a product surface; the
+renderer and the model can never set or widen it). The enable also fixed a
+found boot-order defect: the registration block read agentRegistry before
+assigning it, so the first boot threw inside buildAgent and the agent
+runtime stayed blocked; the assignment now precedes the defines.
+
+## 9. Connector tool registration defect (found 28 Nov 2026)
+
+Found during the file-output enable's runtime check: the connector tool's
+definition (CONNECTORS_TOOL_DEFINITION, src/agent-tool-connectors.js)
+FAILS the strict registry's define() (bad_description, bad_capability,
+bad_field_type:params), so the connector status/request tool never
+actually joined the production registry - main.js carries the define
+literal and the guardrail tests count source literals, but the runtime
+registry does not carry the tool. Fixing the definition is connector-band
+work awaiting Ninad's decision; nothing about connection state, scopes or
+credentials changes either way.
