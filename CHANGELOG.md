@@ -1,5 +1,11 @@
 # Changelog
 
+## M8 batch 54 (28 Nov 2026) - uniform OAuth credential contract sweep
+
+- New tests/connector-oauth-contract.test.js pins the OAuth surface for all 11 oauth_json adapters (gmail, google-docs/sheets/drive/calendar, microsoft-excel/word/teams/onedrive/outlook/calendar): authorizeUrl, tokenRequest and refreshRequest exist on every adapter; token and refresh POSTs carry client_id/client_secret/refresh_token in the form body only (never in the URL); grant_type is exact; endpoints are the provider's own; Microsoft scopes include offline_access and Google authorize URLs ask for offline consent.
+- Least-privilege consent pinned exactly: the four read-only-only adapters (google-docs, google-sheets, microsoft-excel, microsoft-word) must request exactly their declared read scope and nothing wider. The adapter set itself is pinned, so a future OAuth adapter must join this contract.
+- All mocked: fake config values, no connection, no credential, no external request. No production code changed; this is a contract pin over the existing factories.
+
 ## M8 batch 53 (28 Nov 2026) - local adapter inference coverage
 
 - The two local model-server adapters (ollama, lm-studio) now implement the read-only `model.infer` scope their catalog rows already declared: `ollama.generate` (POST /api/generate) and `lm-studio.chat` (POST /v1/chat/completions, OpenAI-compatible shape).
