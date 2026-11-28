@@ -15,6 +15,31 @@ gated, disabled, or unmeasured; every line matches the roadmap evidence.
   governing definition lives in docs/IMPLEMENTATION_ROADMAP.md; signing
   spend, public distribution and any auto-update feed stay Ninad's
   explicit decisions, and no release exists yet.
+- Gate 2 file-output enable (approved by Ninad on 28 Nov 2026): the
+  file_write tool is registered as the fourth production tool, mirroring
+  the schedule_create enable step. Every call runs the pure policy core
+  first: one text file into one user-configured root directory (strict
+  basename, .ics/.txt/.md only), text only at most 64 KiB,
+  refuse-if-exists (overwrite is out of scope), a symlink escape guard,
+  and an atomic write (temp file + rename in the same directory, mode
+  0o600, no execute bit) through the real fs-backed io adapter. The
+  sensitive class demands a fresh one-time approval digest-bound to the
+  exact name and content for every call - a standing grant can never
+  authorize a write. The root is read only main-side from the
+  file_output_root setting and stays UNSET by default, so every call is
+  refused (file_output_root_unconfigured) until the owner configures a
+  folder on a product surface; the renderer and the model can never set
+  or widen it. Found and fixed in the same slice: the registration block
+  read agentRegistry before assigning it, so the first boot threw inside
+  buildAgent and the agent runtime stayed blocked; the assignment now
+  precedes the defines (pinned by the enable test).
+- Flagged for an owner decision (connector band, untouched): the connector
+  tool definition's registry define() returns ok:false against the strict
+  registry (bad_description, bad_capability, bad_field_type:params), so
+  the connector status/request tool never actually joined the production
+  registry; the guardrail tests still pass because they count source
+  literals. Fixing the definition is connector-band work awaiting Ninad's
+  go-ahead (docs/NEXT_DECISIONS.md item 9).
 
 ### 26 November 2026
 - Gate 2 run-driver Stage B: the first read-only tool, calendar_upcoming

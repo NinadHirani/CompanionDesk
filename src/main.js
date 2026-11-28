@@ -63,6 +63,7 @@ const { createRunEntry } = require('./agent-run-entry');
 const { SCHEDULING_TOOL_DEFINITION } = require('./agent-tool-scheduling');
 const { FILE_ACCESS_TOOL_DEFINITION, createFileAccessTool } = require('./agent-tool-file-access');
 const { CONNECTORS_TOOL_DEFINITION, createConnectorsTool } = require('./agent-tool-connectors');
+const { FILE_OUTPUT_TOOL_DEFINITION, createFileOutputTool } = require('./agent-tool-file-output');
 const fsPromises = require('fs').promises;
 // Gate 4 execution slice: the real io adapter the file-access executor runs
 // through. OS errors surface verbatim from these calls (code + message);
@@ -82,6 +83,27 @@ const workspaceFileIo = {
   writeFile: async (p, content) => { await fsPromises.writeFile(p, content, 'utf8'); return Buffer.byteLength(content, 'utf8'); },
   deletePath: async (p) => { await fsPromises.unlink(p); },
   mkdir: async (p) => { await fsPromises.mkdir(p); },
+};
+// Gate 2 file-output enable (28 Nov 2026, approved by Ninad): the io
+// adapter for the file_write tool, the narrow contract the pure policy
+// layer requires { exists, realpath, writeFileAtomic }. The atomic write
+// is temp file + rename in the SAME directory, mode 0o600 (no execute
+// bit); a failed write removes its temp file, so a refusal never leaves
+// partial content behind.
+const fileOutputIo = {
+  exists: async (p) => { try { await fsPromises.stat(p); return true; } catch { return false; } },
+  realpath: async (p) => { try { return await fsPromises.realpath(p); } catch (e) { if (e && e.code === 'ENOENT') return null; throw e; } },
+  writeFileAtomic: async (fullPath, content) => {
+    const dir = path.dirname(fullPath);
+    const tmp = path.join(dir, '.' + path.basename(fullPath) + '.tmp-' + Date.now() + '-' + Math.floor(Math.random() * 1e9));
+    try {
+      await fsPromises.writeFile(tmp, content, { encoding: 'utf8', mode: 0o600 });
+      await fsPromises.rename(tmp, fullPath);
+    } catch (err) {
+      try { await fsPromises.unlink(tmp); } catch { /* already gone */ }
+      throw err;
+    }
+  },
 };
 const { createReminderBook } = require('./agent-reminders');
 const { createAgentSurface } = require('./agent-surface');
@@ -208,6 +230,7 @@ let wakeEngine = null;
 let agentRegistry = null;
 let agentFileAccess = null;
 let agentConnectors = null;
+let agentFileOutput = null;
 let agentApprovals = null;
 let agentStop = null;
 let agentAudit = null;
@@ -448,9 +471,15 @@ async function init() {
       // persistence FIRST, then the orchestrator wired to the persistence
       // layer's durable audit wrapper (never the raw audit log).
       const stack = createAgentStack({ db: agentDb, clock: () => Date.now() });
+      // The defines below run on THIS build's registry, so the assignment
+      // must precede them. The previous order read agentRegistry before
+      // assigning it, so the first boot threw inside buildAgent and the
+      // agent runtime stayed blocked (found 28 Nov 2026 during the
+      // file-output enable; fixed as part of it).
+      agentRegistry = stack.registry;
       // Gate 2 enable step (approved by Ninad on 26 Nov 2026): the
-      // production registry carries EXACTLY ONE tool, the scheduling
-      // gate's definition (capability sensitive). Registration alone lets
+      // production registry carries the scheduling
+      // gate's definition (capability sensitive) as its first registered tool. Registration alone lets
       // no run start: requestRun still has no caller in this build, tools
       // execute only inside driver-driven runs, and the sensitive class
       // means a fresh one-time approval is required for every call - a
@@ -479,7 +508,31 @@ async function init() {
       // build.
       agentConnectors = createConnectorsTool({ clock: () => Date.now(), catalog: workspaceConnectorCatalog, requests: workspaceConnectorRequests, engine: getConnectorActionEngine(), adapters: connectorAdapters });
       agentRegistry.define(CONNECTORS_TOOL_DEFINITION);
-      agentRegistry = stack.registry;
+      // Gate 2 file-output enable (approved by Ninad on 28 Nov 2026): the
+      // fourth registered tool, mirroring the schedule_create enable step.
+      // Registration alone lets no run start: requestRun still has no
+      // caller in this build, tools execute only inside driver-driven
+      // runs, and the sensitive class means a fresh one-time approval
+      // digest-bound to the exact name AND content is required for every
+      // call - a standing grant can never authorize a write. Every call
+      // runs the pure policy core first: strict basename with an
+      // allowlisted extension (.ics/.txt/.md), text only, at most 64 KiB,
+      // refuse-if-exists (overwrite is out of scope entirely), a symlink
+      // escape guard, and the write itself is atomic (temp file + rename
+      // in the same directory, mode 0o600, no execute bit) through the
+      // fileOutputIo adapter above. The root comes ONLY from a main-side
+      // user setting (file_output_root) and defaults to UNSET, so every
+      // call is refused (file_output_root_unconfigured) until the owner
+      // configures a folder on the product surface; the renderer and the
+      // model can never set or widen the root, and no product surface
+      // sets it yet.
+      let fileOutputRoot;
+      try {
+        const configuredRoot = agentDb.getSetting('file_output_root', '');
+        if (typeof configuredRoot === 'string' && configuredRoot.trim()) fileOutputRoot = configuredRoot;
+      } catch (e) { fileOutputRoot = undefined; }
+      agentFileOutput = createFileOutputTool({ clock: () => Date.now(), io: fileOutputIo, audit: stack.durableAudit, root: fileOutputRoot });
+      agentRegistry.define(FILE_OUTPUT_TOOL_DEFINITION);
       agentApprovals = stack.approvals;
       agentStop = stack.emergencyStop;
       agentAudit = stack.audit;

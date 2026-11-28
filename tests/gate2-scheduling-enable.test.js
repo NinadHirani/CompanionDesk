@@ -1,12 +1,13 @@
 'use strict';
 
 // Gate 2 enable step (26 Nov 2026, approved by Ninad in the decision-sheet
-// review), widened the same day by the Gate 4 approval: the production
-// registry carries EXACTLY TWO tools, the scheduling gate's schedule_create
-// and the file-access gate's file_access (registration mirrors the
-// schedule_create enable step). Registration alone lets no run start:
+// review), widened by the Gate 4 approval (26 Nov), the connector flow
+// (27 Nov) and the file-output enable (28 Nov 2026, approved by Ninad):
+// main.js carries EXACTLY FOUR registration literals - schedule_create,
+// file_access, the connector status/request tool, and file_write.
+// Registration alone lets no run start:
 // requestRun still has no caller in this build (D1/D-S2 unchanged), tools
-// execute only inside driver-driven runs, and both tools are sensitive, so
+// execute only inside driver-driven runs, and every registered tool is sensitive, so
 // a fresh one-time approval is required for every call - a standing grant
 // can never authorize either. The renderer sees nothing new; delivery stays
 // opt-in (proactive_enabled default false); the 'scheduled' run kind stays
@@ -21,6 +22,7 @@ const LocalDb = require('../src/db.js');
 const { SCHEDULING_TOOL_DEFINITION, createSchedulingTool, MAX_HORIZON_MS } = require('../src/agent-tool-scheduling.js');
 const { FILE_ACCESS_TOOL_DEFINITION, createFileAccessTool } = require('../src/agent-tool-file-access.js');
 const { CONNECTORS_TOOL_DEFINITION } = require('../src/agent-tool-connectors.js');
+const { FILE_OUTPUT_TOOL_DEFINITION, createFileOutputTool } = require('../src/agent-tool-file-output.js');
 const { createRunDriver, KINDS } = require('../src/agent-run-driver.js');
 
 const NOW = 1_700_000_000_000;
@@ -32,22 +34,34 @@ async function enabledStack() {
   const stack = createAgentStack({ db, clock: () => NOW });
   const loaded = stack.persistence.load();
   assert.equal(loaded.ok, true, 'world must load clean: ' + JSON.stringify(loaded.problems));
-  // The three registration literals, exactly as main.js performs them
-  // (the third is the Gate 2 AI-access connector flow, 27 Nov 2026).
+  // The four registration literals, exactly as main.js performs them
+  // (the connector flow, 27 Nov 2026; the file-output enable, 28 Nov 2026).
+  // KNOWN FLAG (28 Nov 2026, owner decision pending): the connectors
+  // definition's define() returns ok:false against the strict registry
+  // (bad_description, bad_capability, bad_field_type:params), so it never
+  // joins the runtime registry; the fix is connector-band work. The three
+  // valid definitions below are what the registry carries.
   stack.registry.define(SCHEDULING_TOOL_DEFINITION);
   stack.registry.define(FILE_ACCESS_TOOL_DEFINITION);
   stack.registry.define(CONNECTORS_TOOL_DEFINITION);
+  stack.registry.define(FILE_OUTPUT_TOOL_DEFINITION);
   const tool = createSchedulingTool({ book: stack.schedules, clock: () => NOW, audit: stack.durableAudit });
   return { db, stack, tool };
 }
 
-test('the enable registers exactly three tools in main and nothing else fires', () => {
+test('the enable registers exactly four tools in main and nothing else fires', () => {
   const main = fs.readFileSync('src/main.js', 'utf8');
   const defines = main.split('.define(').length - 1;
-  assert.equal(defines, 3, 'exactly three registration literals, got ' + defines);
+  assert.equal(defines, 4, 'exactly four registration literals, got ' + defines);
+  // The registry must be assigned BEFORE the first define: the enable
+  // block previously read agentRegistry before assigning it, so the first
+  // boot threw inside buildAgent and the agent runtime stayed blocked.
+  assert.ok(main.indexOf('agentRegistry = stack.registry;') < main.indexOf('agentRegistry.define(SCHEDULING_TOOL_DEFINITION)'), 'the registry is assigned before the defines');
   assert.ok(main.includes('agentRegistry.define(SCHEDULING_TOOL_DEFINITION)'), 'it registers the scheduling gate definition');
   assert.ok(main.includes('agentRegistry.define(FILE_ACCESS_TOOL_DEFINITION)'), 'it registers the file-access gate definition');
   assert.ok(main.includes('agentRegistry.define(CONNECTORS_TOOL_DEFINITION)'), 'it registers the connector status/request tool');
+  assert.ok(main.includes('agentRegistry.define(FILE_OUTPUT_TOOL_DEFINITION)'), 'it registers the file-output definition');
+  assert.ok(main.includes("require('./agent-tool-file-output')"), 'main requires the file-output module');
   assert.ok(main.includes("require('./agent-tool-connectors')"), 'main requires the connector tool module');
   assert.ok(main.includes("require('./agent-tool-scheduling')"), 'main requires the tool module');
   assert.ok(main.includes("require('./agent-tool-file-access')"), 'main requires the file-access module');
@@ -59,16 +73,19 @@ test('the enable registers exactly three tools in main and nothing else fires', 
   assert.deepEqual(KINDS, ['user'], "the driver's kind allowlist stays ['user']");
 });
 
-test('the enabled registry carries exactly two tools, both sensitive and non-critical', async () => {
+test('the enabled registry carries exactly three valid tools, all sensitive and non-critical', async () => {
   const { stack } = await enabledStack();
   const list = stack.registry.list();
-  assert.equal(list.length, 2);
+  assert.equal(list.length, 3);
   assert.equal(list[0].name, 'schedule_create');
   assert.equal(list[0].capability, 'sensitive');
   assert.equal(list[0].critical, false);
   assert.equal(list[1].name, 'file_access');
   assert.equal(list[1].capability, 'sensitive');
   assert.equal(list[1].critical, false);
+  assert.equal(list[2].name, 'file_write');
+  assert.equal(list[2].capability, 'sensitive');
+  assert.equal(list[2].critical, false);
 });
 
 test('a standing grant can never authorize it; only a fresh one-time approval can', async () => {
@@ -144,8 +161,81 @@ test('scope and horizon refusals stay in force', async () => {
   assert.equal(tool.execute({ title: 'x', scope: 'reminder', due_at: NOW + MAX_HORIZON_MS + 1 }).reason, 'due_at_too_far');
 });
 
-test('Stage B tools stay unregistered: the enable covers only schedule_create and file_access', async () => {
+test('Stage B tools stay unregistered: calendar_upcoming never joins the registry', async () => {
   const { stack } = await enabledStack();
   assert.equal(stack.registry.has('calendar_upcoming'), false);
-  assert.equal(stack.registry.list().length, 2);
+  assert.equal(stack.registry.list().length, 3);
+});
+
+// --- file-output enable (28 Nov 2026) ---------------------------------------
+
+function stubFileIo() {
+  const files = new Map();
+  return {
+    files,
+    exists: (p) => files.has(p),
+    realpath: (p) => p,
+    writeFileAtomic: (p, c) => { files.set(p, c); },
+  };
+}
+
+const FILE_ARGS = { name: 'summary.md', content: '# Summary\n\nAll quiet.' };
+
+test('file_write refuses every call while the root is unconfigured, grant and approval notwithstanding', async () => {
+  const { stack } = await enabledStack();
+  const tool = createFileOutputTool({ clock: () => NOW, io: stubFileIo(), audit: stack.durableAudit, root: undefined });
+  assert.equal(stack.engine.grantTool({ tool: 'file_write' }).ok, true);
+  const denied = stack.engine.authorize({ tool: 'file_write', args: FILE_ARGS });
+  assert.equal(denied.allowed, false);
+  assert.equal(denied.reason, 'approval_required');
+  const approval = stack.approvals.request({ tool: 'file_write', args: FILE_ARGS }).approval;
+  assert.equal(stack.engine.authorize({ tool: 'file_write', args: FILE_ARGS, approvalId: approval.id }).allowed, true);
+  const r = tool.execute(FILE_ARGS);
+  assert.equal(r.ok, false);
+  assert.equal(r.reason, 'file_output_root_unconfigured');
+});
+
+test('the full approval path writes exactly one file; a repeat is refused until renamed', async () => {
+  const { stack } = await enabledStack();
+  const io = stubFileIo();
+  const ROOT = '/Users/ninad/CompanionDeskExports';
+  const tool = createFileOutputTool({ clock: () => NOW, io, audit: stack.durableAudit, root: ROOT });
+  assert.equal(stack.engine.grantTool({ tool: 'file_write' }).ok, true);
+  const driver = createRunDriver({
+    orchestrator: stack.orchestrator,
+    persistence: stack.persistence,
+    notifications: stack.notifications,
+    registry: stack.registry,
+    clock: () => NOW,
+    randomHex: () => 'abc123',
+  });
+  const r = driver.run({
+    goal: 'write a summary file',
+    kind: 'user',
+    plan: [{ id: 'write', tool: 'file_write', args: FILE_ARGS, needsApproval: true, run: (a) => tool.execute(a) }],
+  });
+  assert.equal(r.ok, true);
+  assert.equal(r.state, 'awaiting_approval');
+  assert.equal(io.files.size, 0, 'nothing written before the approval');
+  const approval = stack.approvals.request({ tool: 'file_write', args: FILE_ARGS }).approval;
+  const rr = driver.resume(r.runId, { approvalId: approval.id });
+  assert.equal(rr.ok, true, JSON.stringify(rr));
+  assert.equal(rr.state, 'completed');
+  assert.deepEqual([...io.files.keys()], [ROOT + '/' + FILE_ARGS.name]);
+  assert.equal(io.files.get(ROOT + '/' + FILE_ARGS.name), FILE_ARGS.content);
+  const entries = stack.audit.read({}).filter((e) => e.action === 'file.write');
+  assert.equal(entries.length, 1);
+  assert.equal(entries[0].tool, 'file_write');
+  assert.equal(entries[0].detail.name, FILE_ARGS.name);
+  assert.equal(entries[0].detail.bytes, Buffer.byteLength(FILE_ARGS.content, 'utf8'));
+  // Refuse-if-exists: the same step retried needs a fresh approval AND a
+  // different name; the first file is never overwritten.
+  const again = tool.execute(FILE_ARGS);
+  assert.equal(again.ok, false);
+  assert.equal(again.reason, 'file_exists');
+  const renamed = { name: 'summary-2.md', content: FILE_ARGS.content };
+  const approval2 = stack.approvals.request({ tool: 'file_write', args: renamed }).approval;
+  assert.equal(stack.engine.authorize({ tool: 'file_write', args: renamed, approvalId: approval2.id }).allowed, true);
+  assert.equal(tool.execute(renamed).ok, true);
+  assert.equal(io.files.size, 2);
 });
