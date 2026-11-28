@@ -28,6 +28,9 @@
     if (!panel) {
       panel = document.createElement('section');
       panel.id = 'schedules-panel';
+      // Accessibility sweep (28 Nov 2026): a self-mounted landmark section
+      // needs an accessible name (the agent and memory panels already do).
+      panel.setAttribute('aria-label', 'Schedules');
       document.body.appendChild(panel);
     }
     return panel;
@@ -46,8 +49,12 @@
     title.type = 'text';
     title.maxLength = 120;
     title.placeholder = 'What should I remind you about?';
+    // A placeholder is not a label (screen readers treat it
+    // inconsistently); every field gets a programmatic name.
+    title.setAttribute('aria-label', 'Schedule title');
     const scope = document.createElement('select');
     scope.id = 'schedules-scope';
+    scope.setAttribute('aria-label', 'Scope');
     for (const s of ['reminder', 'deadline']) {
       const o = document.createElement('option');
       o.value = s;
@@ -57,6 +64,7 @@
     const when = document.createElement('input');
     when.id = 'schedules-when';
     when.type = 'datetime-local';
+    when.setAttribute('aria-label', 'When');
     const create = document.createElement('button');
     create.id = 'schedules-create';
     create.textContent = 'Add schedule';
@@ -66,6 +74,9 @@
     cancelEdit.style.display = 'none';
     const msg = document.createElement('span');
     msg.id = 'schedules-msg';
+    // Status text ("Added.", "Saved.", refusals) must announce to
+    // assistive technology.
+    msg.setAttribute('aria-live', 'polite');
     form.dataset.editing = '';
     form.appendChild(title);
     form.appendChild(scope);
