@@ -752,3 +752,14 @@ Actions:
 The credentials are the user's own keys pasted into the app vault.
 
 Tests: adapter build (exact URLs, single-action shapes, read-only sweeps), engine gates (each refuses before connect and its credential rides the Authorization header). Catalog count pins: 97 still-definition-only expanded rows, 101 definition-only total.
+## Batch 43 (28 Nov 2026): Mixpanel, PostHog
+
+Upgraded two analytics connectors to key-bound READ-ONLY adapters (each `auth: api_key`, `authShape: token`).
+
+Actions:
+- Mixpanel (pinned `mixpanel.com/api/app`): `list_projects` (Bearer service-account token). No event queries in this build.
+- PostHog (pinned to the US cloud `us.posthog.com/api`): `get_current_project` (Bearer personal API key). EU cloud and self-hosted instances use their own URL and are outside the pinned host; noted in the catalog and docs. No event queries in this build.
+
+The credentials are the user's own keys pasted into the app vault.
+
+Tests: adapter build (exact URLs, single-action shapes, read-only sweeps), engine gates (each refuses before connect and its credential rides the Authorization header). Catalog count pins: 95 still-definition-only expanded rows, 99 definition-only total.

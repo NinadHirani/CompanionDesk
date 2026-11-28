@@ -12,7 +12,7 @@ const assert = require('node:assert');
 const adapters = require('../src/connector-adapters.js');
 const { createConnectorCatalog } = require('../src/connectors.js');
 
-const IMPLEMENTED = ['anthropic', 'brave-search', 'arxiv', 'airtable', 'coda', 'circleci', 'cloudflare', 'crossref', 'digitalocean', 'discord', 'docker-hub', 'github', 'gitlab', 'gmail', 'heroku', 'google-calendar', 'google-docs', 'google-sheets', 'google-drive', 'google-gemini', 'huggingface', 'internet-archive', 'jira', 'mailgun', 'postmark', 'sendgrid', 'linear', 'microsoft-calendar', 'microsoft-onedrive', 'microsoft-excel', 'microsoft-outlook', 'microsoft-teams', 'microsoft-word', 'musicbrainz', 'notion', 'npm', 'open-meteo', 'openai', 'openalex', 'openlibrary', 'openstreetmap', 'pypi', 'render', 'slack', 'supabase', 'sentry', 'pagerduty', 'tmdb', 'unsplash', 'new-relic', 'pinecone', 'pexels', 'kaggle', 'stripe', 'groq', 'cohere', 'xai', 'mistral', 'openrouter', 'replicate', 'together-ai', 'stability-ai', 'elevenlabs', 'google-maps', 'mapbox', 'deepgram', 'assemblyai', 'plausible', 'amplitude', 'tavily', 'telegram', 'trello', 'todoist', 'wikimedia'];
+const IMPLEMENTED = ['anthropic', 'brave-search', 'arxiv', 'airtable', 'coda', 'circleci', 'cloudflare', 'crossref', 'digitalocean', 'discord', 'docker-hub', 'github', 'gitlab', 'gmail', 'heroku', 'google-calendar', 'google-docs', 'google-sheets', 'google-drive', 'google-gemini', 'huggingface', 'internet-archive', 'jira', 'mailgun', 'postmark', 'sendgrid', 'linear', 'microsoft-calendar', 'microsoft-onedrive', 'microsoft-excel', 'microsoft-outlook', 'microsoft-teams', 'microsoft-word', 'musicbrainz', 'notion', 'npm', 'open-meteo', 'openai', 'openalex', 'openlibrary', 'openstreetmap', 'pypi', 'render', 'slack', 'supabase', 'sentry', 'pagerduty', 'tmdb', 'unsplash', 'new-relic', 'pinecone', 'pexels', 'kaggle', 'stripe', 'groq', 'cohere', 'xai', 'mistral', 'openrouter', 'replicate', 'together-ai', 'stability-ai', 'elevenlabs', 'google-maps', 'mapbox', 'deepgram', 'assemblyai', 'plausible', 'amplitude', 'mixpanel', 'posthog', 'tavily', 'telegram', 'trello', 'todoist', 'wikimedia'];
 const OAUTH = ['gmail', 'google-calendar', 'google-drive', 'microsoft-calendar', 'microsoft-onedrive', 'microsoft-outlook'];
 
 test('the adapter registry covers exactly the implemented catalog entries', () => {
@@ -1588,6 +1588,32 @@ test('amplitude builds bearer project reads and never queries events in this bui
   assert.equal(adapters.listActions('amplitude').length, 1, 'only the project listing is implemented');
   for (const a of adapters.listActions('amplitude')) {
     assert.equal(a.kind, 'read_only', 'amplitude is read-only');
+    assert.equal(a.scope, 'events.read');
+  }
+});
+
+// ---- batch 43 (28 Nov 2026): mixpanel + posthog bearer reads ----
+
+test('mixpanel builds bearer project reads and never queries events in this build', () => {
+  const r = adapters.buildRequest('mixpanel', 'list_projects', {}, 'mp-tok');
+  assert.equal(r.ok, true);
+  assert.equal(r.request.url, 'https://mixpanel.com/api/app/projects');
+  assert.equal(r.request.headers.Authorization, 'Bearer mp-tok');
+  assert.equal(adapters.listActions('mixpanel').length, 1, 'only the project listing is implemented');
+  for (const a of adapters.listActions('mixpanel')) {
+    assert.equal(a.kind, 'read_only', 'mixpanel is read-only');
+    assert.equal(a.scope, 'events.read');
+  }
+});
+
+test('posthog builds bearer current-project reads pinned to the US cloud and never queries events in this build', () => {
+  const r = adapters.buildRequest('posthog', 'get_current_project', {}, 'phx-key');
+  assert.equal(r.ok, true);
+  assert.equal(r.request.url, 'https://us.posthog.com/api/projects/@current/');
+  assert.equal(r.request.headers.Authorization, 'Bearer phx-key');
+  assert.equal(adapters.listActions('posthog').length, 1, 'only the current-project read is implemented');
+  for (const a of adapters.listActions('posthog')) {
+    assert.equal(a.kind, 'read_only', 'posthog is read-only');
     assert.equal(a.scope, 'events.read');
   }
 });

@@ -1039,3 +1039,22 @@ test('plausible and amplitude refuse before connect and ride their credentials o
     assert.ok(seen.headers.Authorization.indexOf('analytics-tok') >= 0, id + ' credential rides the Authorization header');
   }
 });
+
+// ---- batch 43 (28 Nov 2026): mixpanel + posthog credential gates ----
+
+test('mixpanel and posthog refuse before connect and ride their credentials on reads', async () => {
+  let seen = null;
+  const transport = async (req) => { seen = req; return { status: 200, body: JSON.stringify({}) }; };
+  const { catalog, engine } = makeEngine(transport, 'event-tok');
+  for (const [id, action, params, scope] of [
+    ['mixpanel', 'list_projects', {}, 'events.read'],
+    ['posthog', 'get_current_project', {}, 'events.read'],
+  ]) {
+    assert.equal((await engine.run(id, action, params)).reason, 'not_connected', id + ' refuses before connect');
+    const c = catalog.connect(id, { userInitiated: true, scopes: [scope], credentialRef: 'vault:' + id + '-cred' });
+    assert.equal(c.ok, true, id + ' connects');
+    const r = await engine.run(id, action, params);
+    assert.equal(r.ok, true, id + ' reads with a credential');
+    assert.ok(seen.headers.Authorization.indexOf('event-tok') >= 0, id + ' credential rides the Authorization header');
+  }
+});

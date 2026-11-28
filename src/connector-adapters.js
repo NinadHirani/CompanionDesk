@@ -157,6 +157,30 @@
     ],
   };
 
+  ADAPTERS.mixpanel = {
+    id: 'mixpanel', name: 'Mixpanel', authShape: 'token', setupRequired: false,
+    setupNote: 'paste a Mixpanel service-account access token; it is stored only in the app vault, never requested or shown in chat',
+    actions: [
+      { id: 'list_projects', label: 'List Mixpanel projects (capped)', scope: 'events.read', kind: 'read_only',
+        params: [],
+        build: function (p, token) {
+          return { method: 'GET', url: 'https://mixpanel.com/api/app/projects', headers: { Authorization: 'Bearer ' + token }, body: null, urlContainsSecret: false };
+        } },
+    ],
+  };
+
+  ADAPTERS.posthog = {
+    id: 'posthog', name: 'PostHog', authShape: 'token', setupRequired: false,
+    setupNote: 'paste a PostHog personal API key; it is stored only in the app vault, never requested or shown in chat',
+    actions: [
+      { id: 'get_current_project', label: 'Read the PostHog project the key belongs to (capped)', scope: 'events.read', kind: 'read_only',
+        params: [],
+        build: function (p, token) {
+          return { method: 'GET', url: 'https://us.posthog.com/api/projects/@current/', headers: { Authorization: 'Bearer ' + token }, body: null, urlContainsSecret: false };
+        } },
+    ],
+  };
+
   ADAPTERS.plausible = {
     id: 'plausible', name: 'Plausible', authShape: 'token', setupRequired: false,
     setupNote: 'paste a Plausible API key from your Plausible account settings; it is stored only in the app vault, never requested or shown in chat',
