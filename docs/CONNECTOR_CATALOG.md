@@ -284,3 +284,101 @@ surface (`list`/`describe`/`connector_status`) and can request a connection
 through the existing request center; approval still runs the same explicit
 connect gate. No real service is activated by any of this until the user
 chooses one, enters its credential and approves its scopes.
+
+## Final connector-section audit (28 Nov 2026)
+
+Scope: every catalog row in `src/connectors.js`, classified as implemented or definition-only with a concrete reason. Nothing was silently skipped.
+
+Inventory: 187 catalog rows; 90 implemented (59 api_key, 14 OAuth 2.0, 12 unauthenticated, 5 access-token); 97 definition-only (18 api_key, 47 OAuth 2.0, 18 access-token, 1 local, 1 unauthenticated self-hosted).
+
+The api_key lane is exhausted: batches 1-50 implemented 59 api_key connectors; the remaining 18 each carry a structural blocker below.
+
+Class reasons for the non-api_key definition-only rows: OAuth 2.0 rows need the user sign-in grant at the provider (and the standing rule is the user chooses each service manually); access-token rows need an account-issued token from the provider; the local row has no remote API; the unauthenticated self-hosted row has an instance-specific URL.
+
+| id | auth | hosting | reason |
+|---|---|---|---|
+| `dropbox` | oauth2 | cloud | requires the provider OAuth 2.0 account grant (user sign-in at the provider), outside the credential-paste lane |
+| `youtube` | oauth2 | cloud | requires the provider OAuth 2.0 account grant (user sign-in at the provider), outside the credential-paste lane |
+| `spotify` | oauth2 | cloud | requires the provider OAuth 2.0 account grant (user sign-in at the provider), outside the credential-paste lane |
+| `zoom` | oauth2 | cloud | requires the provider OAuth 2.0 account grant (user sign-in at the provider), outside the credential-paste lane |
+| `confluence` | oauth2 | cloud | requires the provider OAuth 2.0 account grant (user sign-in at the provider), outside the credential-paste lane |
+| `asana` | oauth2 | cloud | requires the provider OAuth 2.0 account grant (user sign-in at the provider), outside the credential-paste lane |
+| `clickup` | oauth2 | cloud | requires the provider OAuth 2.0 account grant (user sign-in at the provider), outside the credential-paste lane |
+| `monday-com` | oauth2 | cloud | requires the provider OAuth 2.0 account grant (user sign-in at the provider), outside the credential-paste lane |
+| `evernote` | oauth2 | cloud | requires the provider OAuth 2.0 account grant (user sign-in at the provider), outside the credential-paste lane |
+| `ticktick` | oauth2 | cloud | requires the provider OAuth 2.0 account grant (user sign-in at the provider), outside the credential-paste lane |
+| `zapier` | api_key | cloud | requires an OAuth 2.0 account grant in practice (NLA), not a plain pasted key |
+| `make` | access_token | cloud | requires an account-issued token from the provider (sign-in or app review); no self-serve pastable credential in this lane |
+| `ifttt` | api_key | cloud | keyed endpoints are send-class webhooks only; no read-only lane |
+| `cal-com` | oauth2 | self_hostable | requires the provider OAuth 2.0 account grant (user sign-in at the provider), outside the credential-paste lane |
+| `calendly` | oauth2 | cloud | requires the provider OAuth 2.0 account grant (user sign-in at the provider), outside the credential-paste lane |
+| `google-meet` | oauth2 | cloud | requires the provider OAuth 2.0 account grant (user sign-in at the provider), outside the credential-paste lane |
+| `whatsapp` | oauth2 | cloud | requires the provider OAuth 2.0 account grant (user sign-in at the provider), outside the credential-paste lane |
+| `signal` | access_token | self_hostable | requires an account-issued token from the provider (sign-in or app review); no self-serve pastable credential in this lane |
+| `google-chat` | oauth2 | cloud | requires the provider OAuth 2.0 account grant (user sign-in at the provider), outside the credential-paste lane |
+| `rocket-chat` | access_token | self_hostable | requires an account-issued token from the provider (sign-in or app review); no self-serve pastable credential in this lane |
+| `line` | access_token | cloud | requires an account-issued token from the provider (sign-in or app review); no self-serve pastable credential in this lane |
+| `proton-mail` | access_token | cloud | requires an account-issued token from the provider (sign-in or app review); no self-serve pastable credential in this lane |
+| `fastmail` | oauth2 | cloud | requires the provider OAuth 2.0 account grant (user sign-in at the provider), outside the credential-paste lane |
+| `zoho-mail` | oauth2 | cloud | requires the provider OAuth 2.0 account grant (user sign-in at the provider), outside the credential-paste lane |
+| `bitbucket` | oauth2 | cloud | requires the provider OAuth 2.0 account grant (user sign-in at the provider), outside the credential-paste lane |
+| `azure-devops` | access_token | cloud | requires an account-issued token from the provider (sign-in or app review); no self-serve pastable credential in this lane |
+| `jenkins` | api_key | self_hostable | self-hosted (instance-specific URL, cannot be pinned safely) |
+| `vercel` | access_token | cloud | requires an account-issued token from the provider (sign-in or app review); no self-serve pastable credential in this lane |
+| `netlify` | access_token | cloud | requires an account-issued token from the provider (sign-in or app review); no self-serve pastable credential in this lane |
+| `fly-io` | access_token | cloud | requires an account-issued token from the provider (sign-in or app review); no self-serve pastable credential in this lane |
+| `uptime-kuma` | api_key | self_hostable | self-hosted (instance-specific URL, cannot be pinned safely) |
+| `aws-s3` | api_key | cloud | signature-based auth (AWS SigV4 request signing), not safe to implement in the key-paste lane |
+| `google-cloud-storage` | oauth2 | cloud | requires the provider OAuth 2.0 account grant (user sign-in at the provider), outside the credential-paste lane |
+| `azure-blob` | access_token | cloud | requires an account-issued token from the provider (sign-in or app review); no self-serve pastable credential in this lane |
+| `wasabi` | api_key | cloud | signature-based auth (S3-compatible SigV4 request signing), not safe to implement |
+| `icloud` | access_token | cloud | requires an account-issued token from the provider (sign-in or app review); no self-serve pastable credential in this lane |
+| `perplexity` | api_key | cloud | no public read-only endpoint; the keyed API is send-class completions only |
+| `qdrant` | api_key | self_hostable | self-hosted or per-cluster cloud URL (instance-specific, cannot be pinned safely) |
+| `weaviate` | api_key | self_hostable | self-hosted or per-instance cloud URL (instance-specific, cannot be pinned safely) |
+| `lm-studio` | local | local | local-only integration surface, no remote API to call |
+| `hubspot` | oauth2 | cloud | requires the provider OAuth 2.0 account grant (user sign-in at the provider), outside the credential-paste lane |
+| `salesforce` | oauth2 | cloud | requires the provider OAuth 2.0 account grant (user sign-in at the provider), outside the credential-paste lane |
+| `zoho-crm` | oauth2 | cloud | requires the provider OAuth 2.0 account grant (user sign-in at the provider), outside the credential-paste lane |
+| `intercom` | access_token | cloud | requires an account-issued token from the provider (sign-in or app review); no self-serve pastable credential in this lane |
+| `freshdesk` | api_key | cloud | subdomain-specific base URL (https://<account>.freshdesk.com), cannot be pinned safely |
+| `zendesk` | api_key | cloud | subdomain-specific base URL (https://<account>.zendesk.com), cannot be pinned safely |
+| `mailchimp` | oauth2 | cloud | requires the provider OAuth 2.0 account grant (user sign-in at the provider), outside the credential-paste lane |
+| `shopify` | oauth2 | cloud | requires the provider OAuth 2.0 account grant (user sign-in at the provider), outside the credential-paste lane |
+| `square` | oauth2 | cloud | requires the provider OAuth 2.0 account grant (user sign-in at the provider), outside the credential-paste lane |
+| `woocommerce` | api_key | self_hostable | self-hosted store URL (instance-specific, cannot be pinned safely) |
+| `gumroad` | access_token | cloud | requires an account-issued token from the provider (sign-in or app review); no self-serve pastable credential in this lane |
+| `xero` | oauth2 | cloud | requires the provider OAuth 2.0 account grant (user sign-in at the provider), outside the credential-paste lane |
+| `quickbooks` | oauth2 | cloud | requires the provider OAuth 2.0 account grant (user sign-in at the provider), outside the credential-paste lane |
+| `coinbase` | oauth2 | cloud | requires the provider OAuth 2.0 account grant (user sign-in at the provider), outside the credential-paste lane |
+| `splitwise` | oauth2 | cloud | requires the provider OAuth 2.0 account grant (user sign-in at the provider), outside the credential-paste lane |
+| `google-analytics` | oauth2 | cloud | requires the provider OAuth 2.0 account grant (user sign-in at the provider), outside the credential-paste lane |
+| `matomo` | api_key | self_hostable | self-hosted instance URL (cannot be pinned safely) |
+| `metabase` | api_key | self_hostable | self-hosted or per-instance cloud URL (cannot be pinned safely) |
+| `google-photos` | oauth2 | cloud | requires the provider OAuth 2.0 account grant (user sign-in at the provider), outside the credential-paste lane |
+| `vimeo` | oauth2 | cloud | requires the provider OAuth 2.0 account grant (user sign-in at the provider), outside the credential-paste lane |
+| `twitch` | oauth2 | cloud | requires the provider OAuth 2.0 account grant (user sign-in at the provider), outside the credential-paste lane |
+| `soundcloud` | oauth2 | cloud | requires the provider OAuth 2.0 account grant (user sign-in at the provider), outside the credential-paste lane |
+| `deezer` | oauth2 | cloud | requires the provider OAuth 2.0 account grant (user sign-in at the provider), outside the credential-paste lane |
+| `anilist` | access_token | cloud | requires an account-issued token from the provider (sign-in or app review); no self-serve pastable credential in this lane |
+| `goodreads` | access_token | cloud | requires an account-issued token from the provider (sign-in or app review); no self-serve pastable credential in this lane |
+| `instagram` | oauth2 | cloud | requires the provider OAuth 2.0 account grant (user sign-in at the provider), outside the credential-paste lane |
+| `x-twitter` | oauth2 | cloud | requires the provider OAuth 2.0 account grant (user sign-in at the provider), outside the credential-paste lane |
+| `reddit` | oauth2 | cloud | requires the provider OAuth 2.0 account grant (user sign-in at the provider), outside the credential-paste lane |
+| `bluesky` | access_token | cloud | requires an account-issued token from the provider (sign-in or app review); no self-serve pastable credential in this lane |
+| `linkedin` | oauth2 | cloud | requires the provider OAuth 2.0 account grant (user sign-in at the provider), outside the credential-paste lane |
+| `pinterest` | oauth2 | cloud | requires the provider OAuth 2.0 account grant (user sign-in at the provider), outside the credential-paste lane |
+| `tiktok` | oauth2 | cloud | requires the provider OAuth 2.0 account grant (user sign-in at the provider), outside the credential-paste lane |
+| `threads` | oauth2 | cloud | requires the provider OAuth 2.0 account grant (user sign-in at the provider), outside the credential-paste lane |
+| `canvas-lms` | oauth2 | self_hostable | requires the provider OAuth 2.0 account grant (user sign-in at the provider), outside the credential-paste lane |
+| `moodle` | api_key | self_hostable | self-hosted site URL (instance-specific, cannot be pinned safely) |
+| `google-classroom` | oauth2 | cloud | requires the provider OAuth 2.0 account grant (user sign-in at the provider), outside the credential-paste lane |
+| `amadeus` | api_key | cloud | requires an OAuth 2.0 client-credentials token exchange before any call |
+| `booking-com` | api_key | cloud | partner-gateway access (RapidAPI partner approval), not self-serve keys |
+| `uber` | oauth2 | cloud | requires the provider OAuth 2.0 account grant (user sign-in at the provider), outside the credential-paste lane |
+| `philips-hue` | access_token | local | requires an account-issued token from the provider (sign-in or app review); no self-serve pastable credential in this lane |
+| `tuya` | api_key | cloud | requires an OAuth 2.0 flow plus region-specific endpoints |
+| `smartthings` | access_token | cloud | requires an account-issued token from the provider (sign-in or app review); no self-serve pastable credential in this lane |
+| `nest` | oauth2 | cloud | requires the provider OAuth 2.0 account grant (user sign-in at the provider), outside the credential-paste lane |
+| `ring` | oauth2 | cloud | requires the provider OAuth 2.0 account grant (user sign-in at the provider), outside the credential-paste lane |
+| `esphome` | none | self_hostable | self-hosted instance URL, cannot be pinned safely |
