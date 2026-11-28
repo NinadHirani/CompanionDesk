@@ -423,7 +423,7 @@ else
   bad "results validator --dir"; cat "$TMP/v.dir"
 fi
 
-SYNCOUT=$(python3 - "$S/validate_results.py" "$SAND/results/schema.md" <<'SYNC'
+if python3 - "$S/validate_results.py" "$SAND/results/schema.md" > "$TMP/sync.out" 2>&1 <<'SYNC'
 import re, sys
 src = open(sys.argv[1]).read()
 schema_fields = []
@@ -440,11 +440,10 @@ assert not missing, f'schema.md fields missing from the validator: {missing}'
 assert not extra, f'validator fields absent from schema.md: {extra}'
 print('both directions in sync over', len(schema_fields), 'fields')
 SYNC
-)
-if [ $? -eq 0 ]; then
+then
   ok "schema sync guard: validator table and results/schema.md match both ways"
 else
-  bad "schema sync guard"; echo "$SYNCOUT"
+  bad "schema sync guard"; cat "$TMP/sync.out"
 fi
 
 if grep -nE "import (requests|urllib|socket|http)\b|from (requests|urllib|socket|http)\b" "$S/validate_results.py" > /dev/null 2>&1; then
