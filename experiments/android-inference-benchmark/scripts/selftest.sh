@@ -331,5 +331,127 @@ else
   ok "comparison assembler: no network libraries"
 fi
 
+echo "== results validator (repo-only, no adb, no network) =="
+cat > "$TMP/valid-record.json" <<'VJSON'
+{
+  "run_id": "llamacpp-20261128-101500-1",
+  "timestamp_utc": "2026-11-28T10:15:00Z",
+  "runtime": "llamacpp",
+  "runtime_version": "b4600",
+  "runtime_license": "MIT (verified 2026-11-28)",
+  "model_id": "Qwen/Qwen2.5-0.5B-Instruct-GGUF",
+  "model_artifact": "qwen2.5-0.5b-instruct-q4_k_m.gguf",
+  "model_artifact_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "model_quant": "q4_K_M",
+  "model_license": "Apache-2.0 (verified 2026-11-28)",
+  "device_model": "OnePlus 12R",
+  "device_manufacturer": "OnePlus",
+  "android_api": 33,
+  "abi_list": "arm64-v8a,armeabi-v7a",
+  "soc_model": "SM8550",
+  "soc_manufacturer": "QTI",
+  "threads": 4,
+  "context_tokens": 2048,
+  "repeats": 3,
+  "cold_start_ms": 1234.5,
+  "warm_start_ms": 987.5,
+  "ttft_ms": null,
+  "prompt_tokens_per_s": 12.3,
+  "prompt_eval_ms": 456.7,
+  "gen_tokens_per_s": 8.9,
+  "peak_rss_kb": 123456,
+  "peak_pss_kb": null,
+  "thermal_before_c": 41.25,
+  "thermal_after_c": 44.1,
+  "thermal_units": "celsius, converted from millidegrees raw/1000",
+  "thermal_raw_max": 44120,
+  "thermal_source_zone": "/sys/class/thermal/thermal_zone1|gpu",
+  "battery_before_pct": 85,
+  "battery_after_pct": 84,
+  "battery_charge_counter_before": 4820000,
+  "battery_charge_counter_after": 4800000,
+  "crash": false,
+  "crash_excerpt": null,
+  "screen_state": "on, fixed brightness, off charger",
+  "raw_output_path": "results/llamacpp/llamacpp-20261128-101500-1.raw.txt",
+  "notes": "ttft_ms null: llama-bench CLI run, never estimated. peak_pss_kb null: CLI run, dumpsys not sampled. crash_excerpt null: no crash occurred."
+}
+VJSON
+if "$S/validate_results.py" "$TMP/valid-record.json" > "$TMP/v.ok" 2>&1; then
+  ok "results validator: complete, well-typed record passes"
+else
+  bad "results validator: valid record rejected"; cat "$TMP/v.ok"
+fi
+
+record_mutant() { python3 -c "
+import json, sys
+d = json.load(open('$TMP/valid-record.json'))
+exec(sys.argv[1])
+json.dump(d, open('$TMP/mutant.json', 'w'))
+" "$1"; }
+
+expect_violation() {
+  local name="$1" needle="$2"
+  shift 2
+  if "$S/validate_results.py" "$@" > "$TMP/v.bad" 2>&1; then
+    bad "$name: exited 0, expected a violation"
+  elif grep -q -- "$needle" "$TMP/v.bad"; then
+    ok "$name refused with the field named"
+  else
+    bad "$name: expected '$needle' in the output"; cat "$TMP/v.bad"
+  fi
+}
+
+record_mutant "del d['model_id']"
+expect_violation "missing required field" "model_id" "$TMP/mutant.json"
+record_mutant "d['notes'] = ''"
+expect_violation "null without a notes explanation" "without an explanation" "$TMP/mutant.json"
+record_mutant "d['android_api'] = '13'"
+expect_violation "string where integer required" "android_api" "$TMP/mutant.json"
+record_mutant "d['battery_before_pct'] = None"
+expect_violation "null in a non-nullable field" "battery_before_pct" "$TMP/mutant.json"
+record_mutant "d['runtime'] = 'vllm'"
+expect_violation "unknown runtime enum" "must be one of" "$TMP/mutant.json"
+record_mutant "d['extra_field'] = 'x'"
+expect_violation "unknown record field" "extra_field" "$TMP/mutant.json"
+
+mkdir -p "$TMP/dirres/llamacpp"
+cp "$TMP/valid-record.json" "$TMP/dirres/llamacpp/a.json"
+if "$S/validate_results.py" --dir "$TMP/dirres" > "$TMP/v.dir" 2>&1; then
+  ok "results validator: --dir walk accepts the valid record"
+else
+  bad "results validator --dir"; cat "$TMP/v.dir"
+fi
+
+SYNCOUT=$(python3 - "$S/validate_results.py" "$SAND/results/schema.md" <<'SYNC'
+import re, sys
+src = open(sys.argv[1]).read()
+schema_fields = []
+for line in open(sys.argv[2]).read().splitlines():
+    if line.startswith('|') and not line.startswith('| Field') and not line.startswith('|---'):
+        name = line.split('|')[1].strip()
+        if name:
+            schema_fields.append(name)
+assert len(schema_fields) >= 30, f'suspicious schema parse: {len(schema_fields)} fields'
+validator_fields = set(re.findall(r"'([a-z][a-z0-9_]*)': \(", src))
+missing = [f for f in schema_fields if f not in validator_fields]
+extra = sorted(f for f in validator_fields if f not in schema_fields)
+assert not missing, f'schema.md fields missing from the validator: {missing}'
+assert not extra, f'validator fields absent from schema.md: {extra}'
+print('both directions in sync over', len(schema_fields), 'fields')
+SYNC
+)
+if [ $? -eq 0 ]; then
+  ok "schema sync guard: validator table and results/schema.md match both ways"
+else
+  bad "schema sync guard"; echo "$SYNCOUT"
+fi
+
+if grep -nE "import (requests|urllib|socket|http)\b|from (requests|urllib|socket|http)\b" "$S/validate_results.py" > /dev/null 2>&1; then
+  bad "results validator must not use network libraries"
+else
+  ok "results validator: no network libraries"
+fi
+
 echo "== result =="
 if [ "$FAIL" -eq 0 ]; then echo "SELFTEST PASS"; exit 0; else echo "SELFTEST FAIL"; exit 1; fi

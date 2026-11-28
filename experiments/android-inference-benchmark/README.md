@@ -110,6 +110,23 @@ carried verbatim from the run's own log, and missing values stay null. It
 makes no adb calls and no network calls (the selftest proves both, and
 asserts it imports no network libraries).
 
+## Results validation (repo-only, runs anywhere)
+
+`scripts/validate_results.py` checks collected result records against
+`results/schema.md` before they can enter a Gate 1 decision: every documented
+field must be present (a field is never omitted), types are enforced strictly
+(integers are integers, booleans are booleans, never 0/1 standing in for
+true/false), `runtime` is the documented enum, `run_id` and `timestamp_utc`
+must match their documented shapes, a nullable field may be `null` only when
+`notes` explains why (the schema's own rule), and unknown fields are refused.
+Usage: `python3 scripts/validate_results.py FILE [FILE...]` or
+`python3 scripts/validate_results.py --dir results/`. It reads only the files
+it is given, writes nothing, and makes no adb or network calls. The selftest
+covers a valid record, six refusal cases each naming the offending field,
+directory mode, and a two-way sync guard asserting the validator's field
+table and `results/schema.md` stay identical, so the schema cannot drift
+silently.
+
 ## Acceptance criteria (Gate 1 data is valid only when ALL hold)
 
 1. Both runtimes measured on the OnePlus 12R with full device metadata, OR a
