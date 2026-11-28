@@ -1058,3 +1058,22 @@ test('mixpanel and posthog refuse before connect and ride their credentials on r
     assert.ok(seen.headers.Authorization.indexOf('event-tok') >= 0, id + ' credential rides the Authorization header');
   }
 });
+
+// ---- batch 44 (28 Nov 2026): flickr + pipedrive credential gates ----
+
+test('flickr and pipedrive refuse before connect and ride their credentials on reads', async () => {
+  let seen = null;
+  const transport = async (req) => { seen = req; return { status: 200, body: JSON.stringify({}) }; };
+  const { catalog, engine } = makeEngine(transport, 'url-key-tok');
+  for (const [id, action, params, scope] of [
+    ['flickr', 'search_photos', { query: 'rajkot' }, 'photos.read'],
+    ['pipedrive', 'list_deals', { limit: '50' }, 'deals.read'],
+  ]) {
+    assert.equal((await engine.run(id, action, params)).reason, 'not_connected', id + ' refuses before connect');
+    const c = catalog.connect(id, { userInitiated: true, scopes: [scope], credentialRef: 'vault:' + id + '-cred' });
+    assert.equal(c.ok, true, id + ' connects');
+    const r = await engine.run(id, action, params);
+    assert.equal(r.ok, true, id + ' reads with a credential');
+    assert.ok(seen.url.indexOf('url-key-tok') >= 0, id + ' credential rides the URL');
+  }
+});

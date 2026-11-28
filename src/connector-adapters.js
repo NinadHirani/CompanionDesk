@@ -157,6 +157,42 @@
     ],
   };
 
+  ADAPTERS.flickr = {
+    id: 'flickr', name: 'Flickr', authShape: 'token', setupRequired: false,
+    setupNote: 'paste a Flickr API key from the App Garden; it is stored only in the app vault, never requested or shown in chat',
+    actions: [
+      { id: 'search_photos', label: 'Search Flickr photos (capped)', scope: 'photos.read', kind: 'read_only',
+        params: [{ name: 'query', required: true, maxLength: 100 }, { name: 'per_page', required: false, maxLength: 2 }],
+        build: function (p, token) {
+          if (!p.query) return { error: 'param_missing' };
+          if (p.query.length > 100) return { error: 'param_invalid' };
+          let n = '10';
+          if (p.per_page !== undefined && p.per_page !== '') {
+            if (!/^\d+$/.test(String(p.per_page)) || parseInt(p.per_page, 10) < 1 || parseInt(p.per_page, 10) > 10) return { error: 'param_invalid' };
+            n = String(p.per_page);
+          }
+          return { method: 'GET', url: 'https://api.flickr.com/services/rest/?method=flickr.photos.search&api_key=' + encodeURIComponent(token) + '&text=' + encodeURIComponent(p.query) + '&per_page=' + n + '&format=json&nojsoncallback=1', body: null, urlContainsSecret: false };
+        } },
+    ],
+  };
+
+  ADAPTERS.pipedrive = {
+    id: 'pipedrive', name: 'Pipedrive', authShape: 'token', setupRequired: false,
+    setupNote: 'paste a Pipedrive API token from Settings > Personal > API; it is stored only in the app vault, never requested or shown in chat',
+    actions: [
+      { id: 'list_deals', label: 'List Pipedrive deals (capped)', scope: 'deals.read', kind: 'read_only',
+        params: [{ name: 'limit', required: false, maxLength: 3 }],
+        build: function (p, token) {
+          let n = '25';
+          if (p.limit !== undefined && p.limit !== '') {
+            if (!/^\d+$/.test(String(p.limit)) || parseInt(p.limit, 10) < 1 || parseInt(p.limit, 10) > 100) return { error: 'param_invalid' };
+            n = String(p.limit);
+          }
+          return { method: 'GET', url: 'https://api.pipedrive.com/v1/deals?api_token=' + encodeURIComponent(token) + '&limit=' + n, body: null, urlContainsSecret: false };
+        } },
+    ],
+  };
+
   ADAPTERS.mixpanel = {
     id: 'mixpanel', name: 'Mixpanel', authShape: 'token', setupRequired: false,
     setupNote: 'paste a Mixpanel service-account access token; it is stored only in the app vault, never requested or shown in chat',

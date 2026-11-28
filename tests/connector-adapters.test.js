@@ -12,7 +12,7 @@ const assert = require('node:assert');
 const adapters = require('../src/connector-adapters.js');
 const { createConnectorCatalog } = require('../src/connectors.js');
 
-const IMPLEMENTED = ['anthropic', 'brave-search', 'arxiv', 'airtable', 'coda', 'circleci', 'cloudflare', 'crossref', 'digitalocean', 'discord', 'docker-hub', 'github', 'gitlab', 'gmail', 'heroku', 'google-calendar', 'google-docs', 'google-sheets', 'google-drive', 'google-gemini', 'huggingface', 'internet-archive', 'jira', 'mailgun', 'postmark', 'sendgrid', 'linear', 'microsoft-calendar', 'microsoft-onedrive', 'microsoft-excel', 'microsoft-outlook', 'microsoft-teams', 'microsoft-word', 'musicbrainz', 'notion', 'npm', 'open-meteo', 'openai', 'openalex', 'openlibrary', 'openstreetmap', 'pypi', 'render', 'slack', 'supabase', 'sentry', 'pagerduty', 'tmdb', 'unsplash', 'new-relic', 'pinecone', 'pexels', 'kaggle', 'stripe', 'groq', 'cohere', 'xai', 'mistral', 'openrouter', 'replicate', 'together-ai', 'stability-ai', 'elevenlabs', 'google-maps', 'mapbox', 'deepgram', 'assemblyai', 'plausible', 'amplitude', 'mixpanel', 'posthog', 'tavily', 'telegram', 'trello', 'todoist', 'wikimedia'];
+const IMPLEMENTED = ['anthropic', 'brave-search', 'arxiv', 'airtable', 'coda', 'circleci', 'cloudflare', 'crossref', 'digitalocean', 'discord', 'docker-hub', 'github', 'gitlab', 'gmail', 'heroku', 'google-calendar', 'google-docs', 'google-sheets', 'google-drive', 'google-gemini', 'huggingface', 'internet-archive', 'jira', 'mailgun', 'postmark', 'sendgrid', 'linear', 'microsoft-calendar', 'microsoft-onedrive', 'microsoft-excel', 'microsoft-outlook', 'microsoft-teams', 'microsoft-word', 'musicbrainz', 'notion', 'npm', 'open-meteo', 'openai', 'openalex', 'openlibrary', 'openstreetmap', 'pypi', 'render', 'slack', 'supabase', 'sentry', 'pagerduty', 'tmdb', 'unsplash', 'new-relic', 'pinecone', 'pexels', 'kaggle', 'stripe', 'groq', 'cohere', 'xai', 'mistral', 'openrouter', 'replicate', 'together-ai', 'stability-ai', 'elevenlabs', 'google-maps', 'mapbox', 'deepgram', 'assemblyai', 'plausible', 'amplitude', 'mixpanel', 'posthog', 'flickr', 'pipedrive', 'tavily', 'telegram', 'trello', 'todoist', 'wikimedia'];
 const OAUTH = ['gmail', 'google-calendar', 'google-drive', 'microsoft-calendar', 'microsoft-onedrive', 'microsoft-outlook'];
 
 test('the adapter registry covers exactly the implemented catalog entries', () => {
@@ -1615,5 +1615,39 @@ test('posthog builds bearer current-project reads pinned to the US cloud and nev
   for (const a of adapters.listActions('posthog')) {
     assert.equal(a.kind, 'read_only', 'posthog is read-only');
     assert.equal(a.scope, 'events.read');
+  }
+});
+
+// ---- batch 44 (28 Nov 2026): flickr + pipedrive key-in-URL reads ----
+
+test('flickr builds keyed photo-search reads with strict validation and no writes', () => {
+  const r = adapters.buildRequest('flickr', 'search_photos', { query: 'rajkot' }, 'fl-key');
+  assert.equal(r.ok, true);
+  assert.equal(r.request.url, 'https://api.flickr.com/services/rest/?method=flickr.photos.search&api_key=fl-key&text=rajkot&per_page=10&format=json&nojsoncallback=1');
+  const capped = adapters.buildRequest('flickr', 'search_photos', { query: 'rajkot', per_page: '5' }, 'fl-key');
+  assert.equal(capped.ok, true);
+  assert.ok(capped.request.url.indexOf('per_page=5') >= 0, 'per_page rides the URL');
+  assert.equal(adapters.buildRequest('flickr', 'search_photos', {}, 'fl-key').reason, 'param_missing', 'query required');
+  assert.equal(adapters.buildRequest('flickr', 'search_photos', { query: 'x'.repeat(101) }, 'fl-key').reason, 'param_invalid', 'query above the cap');
+  assert.equal(adapters.buildRequest('flickr', 'search_photos', { query: 'rajkot', per_page: '11' }, 'fl-key').reason, 'param_invalid', 'per_page above the cap');
+  for (const a of adapters.listActions('flickr')) {
+    assert.equal(a.kind, 'read_only', 'flickr is read-only');
+    assert.equal(a.scope, 'photos.read');
+  }
+});
+
+test('pipedrive builds keyed deal-list reads with strict limit validation and no writes', () => {
+  const r = adapters.buildRequest('pipedrive', 'list_deals', {}, 'pd-tok');
+  assert.equal(r.ok, true);
+  assert.equal(r.request.url, 'https://api.pipedrive.com/v1/deals?api_token=pd-tok&limit=25');
+  const capped = adapters.buildRequest('pipedrive', 'list_deals', { limit: '50' }, 'pd-tok');
+  assert.equal(capped.ok, true);
+  assert.ok(capped.request.url.indexOf('limit=50') >= 0, 'limit rides the URL');
+  assert.equal(adapters.buildRequest('pipedrive', 'list_deals', { limit: '101' }, 'pd-tok').reason, 'param_invalid', 'limit above the cap');
+  assert.equal(adapters.buildRequest('pipedrive', 'list_deals', { limit: '0' }, 'pd-tok').reason, 'param_invalid', 'limit below 1');
+  assert.equal(adapters.buildRequest('pipedrive', 'list_deals', { limit: 'abc' }, 'pd-tok').reason, 'param_invalid', 'limit must be numeric');
+  for (const a of adapters.listActions('pipedrive')) {
+    assert.equal(a.kind, 'read_only', 'pipedrive is read-only');
+    assert.equal(a.scope, 'deals.read');
   }
 });

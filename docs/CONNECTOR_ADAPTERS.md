@@ -763,3 +763,14 @@ Actions:
 The credentials are the user's own keys pasted into the app vault.
 
 Tests: adapter build (exact URLs, single-action shapes, read-only sweeps), engine gates (each refuses before connect and its credential rides the Authorization header). Catalog count pins: 95 still-definition-only expanded rows, 99 definition-only total.
+## Batch 44 (28 Nov 2026): Flickr, Pipedrive
+
+Upgraded two connectors to key-bound READ-ONLY adapters (each `auth: api_key`, `authShape: token`). Both ride the key in the request URL (the providers' GET shape).
+
+Actions:
+- Flickr (pinned `api.flickr.com/services`): `search_photos` (query required maxLength 100, per_page capped 1-10 default 10, key as the `api_key` query param, JSON format). No uploads, favorites or writes.
+- Pipedrive (pinned `api.pipedrive.com/v1`): `list_deals` (limit capped 1-100 default 25, token as the `api_token` query param). No deal writes.
+
+The credentials are the user's own keys pasted into the app vault.
+
+Tests: adapter build/validation (required params, caps, exact built URLs, read-only sweeps), engine gates (each refuses before connect and its credential rides the request URL). Catalog count pins: 93 still-definition-only expanded rows, 97 definition-only total.
