@@ -34,6 +34,9 @@
     if (!panel) {
       panel = document.createElement('section');
       panel.id = 'agent-status';
+      // Landmark name: a labelled section is a region screen readers can
+      // navigate to. Rendering and channel rules are untouched.
+      panel.setAttribute('aria-label', 'Agent status');
       document.body.appendChild(panel);
     }
     return panel;
