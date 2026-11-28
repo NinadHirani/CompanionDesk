@@ -8,7 +8,9 @@
  *   - consent is strictly per call and auto-resets to off after every
  *     capture attempt (the retrieval-consent rule, applied to capture);
  *   - a sensitive source is refused without explicit consent;
- *   - every decision, refusal included, writes an audit entry.
+ *   - every decision, refusal included, writes an audit entry, held in a
+ *     bounded window (most recent auditCap entries, oldest dropped); the
+ *     processed/captured/refused totals stay exact forever.
  * The real capture engine and its permission flows stay excluded.
  */
 (function (root, factory) {
@@ -18,11 +20,13 @@
   'use strict';
 
   function createCaptureSimulator(opts) {
-    const o = Object.assign({ enabled: false, autoResetConsent: true }, opts || {});
+    const o = Object.assign({ enabled: false, autoResetConsent: true, auditCap: 1000 }, opts || {});
     let enabled = o.enabled === true;
     const audit = [];
+    const auditCap = o.auditCap;
     let captured = 0;
     let refused = 0;
+    let processedTotal = 0;
 
     function isEnabled() { return enabled; }
 
@@ -57,12 +61,14 @@
         ts: event.ts, source: event.source, kind: event.kind,
         sensitive: event.sensitive, decision: decision, reason: reason,
       });
+      if (audit.length > auditCap) audit.splice(0, audit.length - auditCap);
       if (decision === 'captured') captured++; else refused++;
+      processedTotal++;
       return { decision: decision, reason: reason };
     }
 
     function auditEntries() { return audit.slice(); }
-    function stats() { return { processed: audit.length, captured: captured, refused: refused }; }
+    function stats() { return { processed: processedTotal, captured: captured, refused: refused }; }
 
     return { isEnabled: isEnabled, setPolicy: setPolicy, process: process, audit: auditEntries, stats: stats };
   }

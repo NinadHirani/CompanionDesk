@@ -1,5 +1,11 @@
 # Changelog
 
+## M8 batch 56 (28 Nov 2026) - offline-simulation hardening: bounded audit on the capture simulator
+
+- Red-first hardening of the M7 capture simulator (owner-directed offline-safe scope, pure module, no screen capture or device API): the red test exposed a real defect beyond the unbounded log - stats().processed read audit.length, so under any audit cap the totals would silently understate the number of processed attempts.
+- Fixed both: the audit log now holds a bounded window (most recent auditCap entries, default 1000, oldest dropped) and the processed/captured/refused totals are tracked explicitly and stay exact forever; a dropped audit entry never changes a decision or a counter (consent auto-reset still applies after the window slides).
+- Three new pinned tests in tests/capture-simulation-hardening.test.js; the original six capture-simulation contract tests pass unchanged. Offline test-only: no device, no permission flow, no external action.
+
 ## M8 batch 55 (28 Nov 2026) - release-prep config coherence pin
 
 - New tests/release-config-coherence.test.js hardens the static release config without building, publishing or releasing anything: package.json version is semver the STABLE_TAG format can carry; every icon path the build config references exists on disk; the build targets (mac dmg arm64+x64, win nsis x64, linux AppImage x64) match scripts/build-dist.js's target table; the linux artifact name is pinned; docs/DISTRIBUTION.md only names npm scripts and node scripts that exist and only names publish modes build-dist accepts; publish defaults to never in code as the doc promises; and a bogus platform flag exits 1 with the usage line, building nothing.
