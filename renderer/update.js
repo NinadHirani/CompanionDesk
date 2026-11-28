@@ -12,6 +12,10 @@
 
   const bar = document.getElementById('update-bar');
   const text = document.getElementById('update-text');
+  // Pushed state changes (update available, progress, errors) must reach
+  // screen readers without focus: role="status" gives the text implicit
+  // polite-live semantics, so a text change is announced where focus sits.
+  text.setAttribute('role', 'status');
   const actions = document.getElementById('update-actions');
   let hideTimer = null;
 
