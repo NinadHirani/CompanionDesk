@@ -30,7 +30,7 @@ test('the gate chain runs in order and each step refuses honestly', async () => 
   const { catalog, engine } = makeEngine(async () => { throw new Error('must not be called'); }, 'xoxb-tok');
   assert.equal((await engine.run('no-such', 'x', {})).reason, 'unknown_connector');
   assert.equal((await engine.run('spotify', 'x', {})).reason, 'no_adapter', 'definition-only entries have no adapter');
-  assert.equal((await engine.run('rss', 'feed.read', {})).reason, 'no_adapter', 'legacy tier has no fake execution');
+  assert.equal((await engine.run('rss', 'feed.read', {})).reason, 'not_connected', 'the real rss adapter runs only after an explicit connect (28 Nov 2026 M8 slice); empty params never reach the network either way');
   assert.equal((await engine.run('slack', 'auth_test', {})).reason, 'not_connected');
   catalog.connect('slack', { userInitiated: true, scopes: ['channels.read'], credentialRef: 'vault:slack-cred' });
   assert.equal((await engine.run('slack', 'nope', {})).reason, 'unknown_action');

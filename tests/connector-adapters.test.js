@@ -12,7 +12,7 @@ const assert = require('node:assert');
 const adapters = require('../src/connector-adapters.js');
 const { createConnectorCatalog } = require('../src/connectors.js');
 
-const IMPLEMENTED = ['anthropic', 'brave-search', 'arxiv', 'airtable', 'coda', 'circleci', 'cloudflare', 'crossref', 'digitalocean', 'discord', 'docker-hub', 'github', 'gitlab', 'gmail', 'heroku', 'google-calendar', 'google-docs', 'google-sheets', 'google-drive', 'google-gemini', 'huggingface', 'internet-archive', 'jira', 'mailgun', 'postmark', 'sendgrid', 'linear', 'microsoft-calendar', 'microsoft-onedrive', 'microsoft-excel', 'microsoft-outlook', 'microsoft-teams', 'microsoft-word', 'musicbrainz', 'notion', 'npm', 'open-meteo', 'openai', 'openalex', 'openlibrary', 'openstreetmap', 'pypi', 'render', 'slack', 'supabase', 'sentry', 'pagerduty', 'tmdb', 'unsplash', 'new-relic', 'pinecone', 'pexels', 'kaggle', 'stripe', 'groq', 'cohere', 'xai', 'mistral', 'openrouter', 'replicate', 'together-ai', 'stability-ai', 'elevenlabs', 'google-maps', 'mapbox', 'deepgram', 'assemblyai', 'plausible', 'amplitude', 'mixpanel', 'posthog', 'flickr', 'pipedrive', 'razorpay', 'zerodha-kite', 'upstox', 'udemy', 'trakt', 'hetzner', 'better-stack', 'backblaze-b2', 'tripadvisor', 'datadog', 'plaid', 'railway', 'twilio', 'tavily', 'telegram', 'trello', 'todoist', 'wikimedia'];
+const IMPLEMENTED = ['anthropic', 'brave-search', 'arxiv', 'airtable', 'coda', 'circleci', 'cloudflare', 'crossref', 'digitalocean', 'discord', 'docker-hub', 'github', 'gitlab', 'gmail', 'heroku', 'google-calendar', 'google-docs', 'google-sheets', 'google-drive', 'google-gemini', 'huggingface', 'internet-archive', 'jira', 'mailgun', 'postmark', 'sendgrid', 'linear', 'microsoft-calendar', 'microsoft-onedrive', 'microsoft-excel', 'microsoft-outlook', 'microsoft-teams', 'microsoft-word', 'musicbrainz', 'notion', 'npm', 'open-meteo', 'openai', 'openalex', 'openlibrary', 'openstreetmap', 'pypi', 'render', 'slack', 'supabase', 'sentry', 'pagerduty', 'tmdb', 'unsplash', 'new-relic', 'pinecone', 'pexels', 'kaggle', 'stripe', 'groq', 'cohere', 'xai', 'mistral', 'openrouter', 'replicate', 'together-ai', 'stability-ai', 'elevenlabs', 'google-maps', 'mapbox', 'deepgram', 'assemblyai', 'plausible', 'amplitude', 'mixpanel', 'posthog', 'flickr', 'pipedrive', 'razorpay', 'zerodha-kite', 'upstox', 'udemy', 'trakt', 'hetzner', 'better-stack', 'backblaze-b2', 'tripadvisor', 'datadog', 'plaid', 'railway', 'twilio', 'tavily', 'telegram', 'trello', 'todoist', 'wikimedia', 'rss'];
 const OAUTH = ['gmail', 'google-calendar', 'google-drive', 'microsoft-calendar', 'microsoft-onedrive', 'microsoft-outlook'];
 
 test('the adapter registry covers exactly the implemented catalog entries', () => {
@@ -132,7 +132,7 @@ test('definition-only and unknown entries get no adapter at all', () => {
   assert.equal(adapters.listActions('spotify'), null);
   assert.equal(adapters.buildRequest('spotify', 'anything', {}, 'tok').reason, 'no_adapter');
   assert.equal(adapters.buildRequest('no-such-connector', 'x', {}, 'tok').reason, 'no_adapter');
-  assert.equal(adapters.buildRequest('rss', 'feed.read', {}, 'tok').reason, 'no_adapter', 'legacy tier stays honest: no adapter, no fake execution');
+  assert.equal(adapters.buildRequest('rss', 'feed.read', {}, 'tok').reason, 'unknown_action', 'rss has a real adapter now (28 Nov 2026 M8 slice); feed.read is a scope, not an action id, so the wrong id refuses honestly');
 });
 
 // ---- batch 2 (27 Nov 2026): provider-specific read actions --------------

@@ -1667,6 +1667,46 @@
     ],
   };
 
+  // M8 slice (28 Nov 2026): the keyless RSS feed read, the catalog's
+  // last remaining keyless definition-only entry. The feed URL is a
+  // user-supplied parameter rather than a pinned host, so the guard is
+  // strict: https only, a public hostname (at least one dot, never
+  // localhost or an IP literal), no userinfo, no explicit port. This
+  // adapter only ever BUILDS a request; execution sits behind the full
+  // gate chain (connect with feed.read granted, then the consent chain).
+  function validFeedUrl(raw) {
+    if (typeof raw !== 'string') return null;
+    const u = raw.trim();
+    if (u.length === 0 || u.length > 500) return null;
+    if (CONTROL_RE.test(u) || u.indexOf('@') !== -1) return null;
+    let parsed = null;
+    try { parsed = new URL(u); } catch (e) { return null; }
+    if (parsed.protocol !== 'https:') return null;
+    if (parsed.port !== '') return null;
+    const h = parsed.hostname;
+    if (!h || h === 'localhost') return null;
+    if (/^\d{1,3}(\.\d{1,3}){3}$/.test(h)) return null; // IPv4 literal
+    if (h.indexOf(':') !== -1) return null;              // IPv6 literal
+    if (h.indexOf('.') === -1) return null;              // single-label host
+    if (!parsed.pathname) return null;
+    return parsed.toString();
+  }
+
+  ADAPTERS.rss = {
+    id: 'rss', name: 'RSS feeds', authShape: 'public', setupRequired: false,
+    setupNote: 'no key or account needed: RSS feeds are public by design; you paste the feed URL you want read. The URL guard allows https public hostnames only (no localhost, no IP literals, no ports, no embedded credentials)',
+    buildHeaders: function () { return { 'User-Agent': 'CompanionDesk/1.0 (https://github.com/NinadHirani/CompanionDesk)', Accept: 'application/rss+xml, application/atom+xml, application/xml;q=0.9, text/xml;q=0.8, */*;q=0.5' }; },
+    actions: [
+      { id: 'read_feed', label: 'Read one public RSS or Atom feed', scope: 'feed.read', kind: 'read_only',
+        params: [{ name: 'url', required: true, maxLength: 500 }],
+        build: function (p) {
+          const url = validFeedUrl(p.url);
+          if (url === null) return { error: 'param_invalid' };
+          return { method: 'GET', url: url, headers: this.buildHeaders(), body: null };
+        } },
+    ],
+  };
+
   ADAPTERS['open-meteo'] = {
     id: 'open-meteo', name: 'Open-Meteo', authShape: 'public', setupRequired: false,
     setupNote: 'no account or key needed: the Open-Meteo API is public and free for non-commercial use; keep within its fair-use daily quota',

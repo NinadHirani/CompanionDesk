@@ -39,7 +39,7 @@ Nothing auto-connects. The module constant AUTO_CONNECT is false, the catalog is
 | `plausible` | Plausible | Plausible | analytics | self_hostable | free_open_source | Free, open-source; the hosted tier is paid | Self-hosted: your hardware | api_key | stats.read | adapter implemented: read-only site listing after connect with your own API key pasted into the app vault (Bearer, pinned to the hosted API plausible.io/api/v1; self-hosted instances use their own URL and are not covered by the pinned host); no stats queries or writes in this build |
 | `posthog` | PostHog | PostHog | analytics | self_hostable | free_open_source | Free, open-source; the cloud tier is free up to a monthly event allowance | Cloud event quota; self-hosted: your hardware | api_key | events.read | adapter implemented: read-only current-project read after connect with your own personal API key pasted into the app vault (Bearer, pinned to the US cloud us.posthog.com/api; EU cloud and self-hosted instances use their own URL and are not covered by the pinned host); no event queries or writes in this build |
 | `qdrant` | Qdrant | Qdrant | ai_cloud | self_hostable | free_open_source | Free, open-source vector database; cloud tier is paid | Self-hosted: your hardware; cloud: plan quotas | api_key | vectors.read, vectors.write | definition only: no integration actions are implemented for Qdrant in this build |
-| `rss` | RSS feeds | open standard | feeds | local | free_open_source | Free; RSS feeds are open by design | Bound by each feed publisher | none | feed.read | - |
+| `rss` | RSS feeds | open standard | feeds | local | free_open_source | Free; RSS feeds are open by design | Bound by each feed publisher | none | feed.read | read_feed (keyless; you paste the public https feed URL, guard refuses localhost, IP literals, ports and embedded credentials) |
 | `rocket-chat` | Rocket.Chat | Rocket.Chat | messaging | self_hostable | free_open_source | Free, open-source; hosted tiers are paid | Self-hosted: your hardware; cloud: plan quotas | access_token | channels.read, message.send | definition only: no integration actions are implemented for Rocket.Chat in this build |
 | `signal` | Signal | Signal Foundation | messaging | self_hostable | free_open_source | Free, open-source messenger | Bound by the bot or bridge setup used | access_token | chats.read, message.send | definition only: no integration actions are implemented for Signal in this build |
 | `uptime-kuma` | Uptime Kuma | Uptime Kuma | monitoring | self_hostable | free_open_source | Free, open-source uptime monitor | Bound by your own hardware | api_key | status.read | definition only: no integration actions are implemented for Uptime Kuma in this build |
@@ -289,7 +289,7 @@ chooses one, enters its credential and approves its scopes.
 
 Scope: every catalog row in `src/connectors.js`, classified as implemented or definition-only with a concrete reason. Nothing was silently skipped.
 
-Inventory: 187 catalog rows; 91 implemented (60 api_key, plus OAuth 2.0, unauthenticated and access-token adapters); 96 definition-only (23 api_key). 11 rows carried no integrationImplemented flag in the catalog and no adapter; the audit classifies them below, and the audit itself produced batch 51 (twilio), which was previously unflagged and unimplemented.
+Inventory: 187 catalog rows; 92 implemented (60 api_key, plus OAuth 2.0, unauthenticated and access-token adapters); 95 definition-only (23 api_key). 10 rows carried no integrationImplemented flag in the catalog and no adapter; the audit classifies them below, and the audit itself produced batch 51 (twilio), which was previously unflagged and unimplemented.
 
 The api_key lane is exhausted: batches 1-51 implemented 60 api_key connectors; the remaining 23 each carry a structural blocker below.
 
@@ -297,7 +297,6 @@ Class reasons for the non-api_key definition-only rows: OAuth 2.0 rows need the 
 
 | id | auth | hosting | reason |
 |---|---|---|---|
-| `rss` | none | local | self-hosted instance URL, cannot be pinned safely (catalog row carries no integrationImplemented flag; no adapter exists) |
 | `ollama` | local | local | local-only integration surface, no remote API to call (catalog row carries no integrationImplemented flag; no adapter exists) |
 | `matrix` | access_token | self_hostable | requires an account-issued token from the provider (sign-in or app review); no self-serve pastable credential in this lane (catalog row carries no integrationImplemented flag; no adapter exists) |
 | `mastodon` | oauth2 | self_hostable | requires the provider OAuth 2.0 account grant (user sign-in at the provider), outside the credential-paste lane (catalog row carries no integrationImplemented flag; no adapter exists) |
