@@ -45,7 +45,12 @@ function createWorkspaceStore(opts) {
 
   function add(row) {
     if (!isPlainObject(row)) return { ok: false, reason: 'row_invalid' };
-    for (var k in row) {
+    // Own enumerable keys only: a row is judged on the data it owns,
+    // never on inherited properties (house convention across the repo's
+    // validators; for...in would also visit inherited enumerable keys).
+    var ownKeys = Object.keys(row);
+    for (var ki = 0; ki < ownKeys.length; ki++) {
+      var k = ownKeys[ki];
       if (!fieldSet[k]) return { ok: false, reason: 'unknown_field:' + k };
       var v = row[k];
       if (v === null || v === undefined) continue;
