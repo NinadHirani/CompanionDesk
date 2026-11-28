@@ -168,7 +168,9 @@
       if (typeof scope !== 'string' || scope === '*') return { allowed: false, reason: 'bad_scope' };
       if (!g.scopes.includes(scope)) return { allowed: false, reason: 'scope_not_granted' };
       const def = CATALOG[cap];
-      if (APPROVAL_CLASSES.includes(def.class) && typeof approvalDigest !== 'string') {
+      // Fail closed on the presence check itself: an empty string is no
+      // digest, so only a non-empty digest satisfies the approval requirement.
+      if (APPROVAL_CLASSES.includes(def.class) && (typeof approvalDigest !== 'string' || approvalDigest.length === 0)) {
         return { allowed: false, reason: 'approval_required' };
       }
       return { allowed: true, class: def.class, indicator: def.indicator };
